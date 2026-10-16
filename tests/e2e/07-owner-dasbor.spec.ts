@@ -7,6 +7,7 @@ import {
   OWNER_PASSWORD,
   getServiceClient,
   loginAsOwner,
+  cleanupAllTestData,
 } from './helpers';
 
 test.describe('B. FUNGSI OWNER - Read-Only Guard, Agregasi Dasbor, & Batas Bulan WIB', () => {
@@ -135,6 +136,7 @@ test.describe('B. FUNGSI OWNER - Read-Only Guard, Agregasi Dasbor, & Batas Bulan
     if (testLeadId) {
       await service.from('leads').delete().eq('id', testLeadId);
     }
+    await cleanupAllTestData();
   });
 
   test('1. Seluruh halaman admin dialihkan dan API tulis / AI ditolak (403) untuk role OWNER', async ({ request, page }) => {

@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, cleanupAllTestData } from './helpers';
 
 test.describe('Verifikasi Form Penawaran Awal Kosong & Transfer Data Balas Chat', () => {
+  test.afterAll(async () => {
+    await cleanupAllTestData();
+  });
+
   test('1. Buka kalkulator /penawaran/baru saat pertama login -> SEMUA field kosong (nama, kota, zona unset, ongkir Rp0)', async ({
     page,
   }) => {

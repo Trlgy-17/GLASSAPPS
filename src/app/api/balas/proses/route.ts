@@ -112,8 +112,81 @@ export async function POST(req: NextRequest) {
     });
     const durasiModel = Date.now() - tModel0;
     const durasiTotal = Date.now() - tTotalStart;
+    // 4. Cek apakah nama klien atau nomor PG-Q cocok dengan penawaran 30 hari terakhir (jika belum memakai klien_lanjutan)
+    let matchedPenawaran: Record<string, unknown> | null = null;
+    if (!klien_lanjutan) {
+      try {
+        const extractedName = (unifiedRes.extraction?.nama_klien || '').trim();
+        const pgqMatch = sanitizedPastedText.match(/PG-Q-\d{4}-[A-Z0-9-]+/i);
+        const pgqNomor = pgqMatch ? pgqMatch[0].toUpperCase() : null;
 
-    // 4. Server-Timing Header per Tahap
+        if (
+          (extractedName &&
+            extractedName.length >= 2 &&
+            !/^(klien|kak|kakak|ibu|bapak|pak|bu|admin)$/i.test(extractedName)) ||
+          pgqNomor
+        ) {
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+          const { data: recentQuotes } = await adminClient
+            .from('penawaran')
+            .select(
+              'id, nomor, total_nilai, created_at, status, kanal, items_json, ringkasan_json, leads!inner(id, nama, kota, zona, segmen)'
+            )
+            .gte('created_at', thirtyDaysAgo)
+            .order('created_at', { ascending: false })
+            .limit(40);
+
+          if (recentQuotes && recentQuotes.length > 0) {
+            const normTargetName = extractedName.replace(/^\[TES\]\s*/i, '').trim().toLowerCase();
+            const matchingRows = (recentQuotes as Array<Record<string, unknown>>).filter((q) => {
+              if (pgqNomor && String(q.nomor || '').toUpperCase() === pgqNomor) return true;
+              if (!normTargetName) return false;
+              const leads = (q.leads || {}) as Record<string, unknown>;
+              const leadName = String(leads.nama || '')
+                .replace(/^\[TES\]\s*/i, '')
+                .trim()
+                .toLowerCase();
+              return leadName === normTargetName || (leadName.length >= 3 && leadName.includes(normTargetName));
+            });
+
+            if (matchingRows.length > 0) {
+              const latest = matchingRows[0];
+              const leads = (latest.leads || {}) as Record<string, unknown>;
+              const ringkasan = (latest.ringkasan_json || {}) as Record<string, unknown>;
+              const items = Array.isArray(latest.items_json)
+                ? (latest.items_json as Array<Record<string, unknown>>)
+                : [];
+              const createdMs = new Date(latest.created_at as string).getTime();
+              const diffDays = Math.floor((Date.now() - createdMs) / 86400000);
+              const waktuLalu =
+                diffDays <= 0 ? 'hari ini' : diffDays === 1 ? '1 hari lalu' : `${diffDays} hari lalu`;
+
+              matchedPenawaran = {
+                id: latest.id as string,
+                nomor: latest.nomor as string,
+                nama_klien: (leads.nama as string) || 'Klien',
+                kota: (leads.kota as string) || (ringkasan.kota_klien as string) || '',
+                zona: (leads.zona as string) || 'luar_kota',
+                segmen: (leads.segmen as string) || 'B2C',
+                total_nilai: Number(latest.total_nilai || ringkasan.total || 0),
+                tanggal: new Date(latest.created_at as string).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'short',
+                }),
+                waktu_lalu: waktuLalu,
+                other_quotes_count: Math.max(0, matchingRows.length - 1),
+                status: latest.status as string,
+                spesifikasi: items[0] || null,
+              };
+            }
+          }
+        }
+      } catch (matchErr) {
+        console.warn('Gagal memeriksa kecocokan penawaran lama:', matchErr);
+      }
+    }
+
+    // 5. Server-Timing Header per Tahap
     const serverTiming = [
       `auth;dur=${durasiAuth}`,
       `db_read;dur=${durasiDbRead}`,
@@ -128,6 +201,7 @@ export async function POST(req: NextRequest) {
       success: true,
       extraction: unifiedRes.extraction,
       draf: unifiedRes.draf,
+      matched_penawaran: matchedPenawaran,
       model_used: unifiedRes.modelUsed,
       durasi: {
         ttft_ms: unifiedRes.ttftMs,
@@ -135,7 +209,6 @@ export async function POST(req: NextRequest) {
         total_ms: durasiTotal,
       },
     };
-
     const response = NextResponse.json(responsePayload, {
       headers: {
         'Server-Timing': serverTiming,

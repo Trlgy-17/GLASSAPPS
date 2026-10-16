@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
   const priceBookId = pbRow?.id || '00000000-0000-0000-0000-000000000001';
 
   const body = await req.json();
-  const { lead_id, penawaran_input, nama_klien, kota_klien, kode_wilayah, kanal, is_unduh_pdf } = body;
+  const { lead_id, penawaran_input, nama_klien, kota_klien, kode_wilayah, kanal, is_unduh_pdf, is_test } = body;
+  const isTestQuote = Boolean(is_test || (nama_klien && String(nama_klien).startsWith('[TES]')));
   const initialStatus = is_unduh_pdf ? 'terkirim' : 'draf';
   const terkirimAt = is_unduh_pdf ? new Date().toISOString() : null;
 
@@ -171,6 +172,7 @@ export async function POST(req: NextRequest) {
         pelunasan: kalkulasi.pelunasan,
         kota_klien: (kota_klien || 'Bandung').trim(),
         kode_wilayah: kode_wilayah || penawaran_input?.kode_wilayah || null,
+        ...(isTestQuote ? { is_test: true } : {}),
       },
       status: initialStatus,
       kanal: kanal || 'whatsapp',
@@ -253,13 +255,18 @@ export async function GET(req: NextRequest) {
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '25', 10)));
   const search = searchParams.get('search')?.trim() || '';
   const status = searchParams.get('status')?.trim() || '';
+  const includeTest = searchParams.get('include_test') === 'true';
 
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
   let query = adminClient
     .from('penawaran')
-    .select('*, leads(nama, kota, no_wa)', { count: 'exact' });
+    .select('*, leads!inner(nama, kota, no_wa)', { count: 'exact' });
+
+  if (!includeTest) {
+    query = query.not('leads.nama', 'ilike', '[TES]%').not('nomor', 'ilike', '%TEST%');
+  }
 
   if (status && status !== 'all') {
     query = query.eq('status', status);
@@ -272,7 +279,6 @@ export async function GET(req: NextRequest) {
   const { data: list, count, error } = await query
     .order('created_at', { ascending: false })
     .range(from, to);
-
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

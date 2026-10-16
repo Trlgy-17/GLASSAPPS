@@ -54,6 +54,8 @@ interface KasusTerakhirItem {
   segmen: 'B2C' | 'B2B';
   total_nilai: number;
   tanggal: string;
+  waktu_lalu?: string;
+  other_quotes_count?: number;
   status: string;
   spesifikasi?: any;
 }
@@ -103,8 +105,12 @@ export default function BalasChatPage() {
   const [browserTtftSeconds, setBrowserTtftSeconds] = useState<number | null>(null);
   const [browserTotalSeconds, setBrowserTotalSeconds] = useState<number | null>(null);
 
-  // Kasus Terakhir
-  const [kasusTerakhirList, setKasusTerakhirList] = useState<KasusTerakhirItem[]>([]);
+  // Penawaran Lama (Pencarian & Match 30 Hari Terakhir)
+  const [matchedPenawaran, setMatchedPenawaran] = useState<KasusTerakhirItem | null>(null);
+  const [showManualSearch, setShowManualSearch] = useState(false);
+  const [manualSearchQuery, setManualSearchQuery] = useState('');
+  const [manualSearchResults, setManualSearchResults] = useState<KasusTerakhirItem[]>([]);
+  const [isSearchingQuotes, setIsSearchingQuotes] = useState(false);
 
   // UI Interactive States
   const [isEditingExtraction, setIsEditingExtraction] = useState(false);
@@ -115,11 +121,10 @@ export default function BalasChatPage() {
   const [isMarkingSent, setIsMarkingSent] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
   const [cityCandidates, setCityCandidates] = useState<WilayahKota[]>([]);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Muat 5 Kasus Terakhir & Pulihkan draf input admin dari sessionStorage jika ada
+  // Pulihkan draf input admin dari sessionStorage jika ada
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem('balas_chat_draft_input');
@@ -131,22 +136,27 @@ export default function BalasChatPage() {
     } catch (e) {
       console.warn('Gagal memulihkan draf input:', e);
     }
+  }, []);
 
-    async function loadKasusTerakhir() {
+  // Pencarian manual penawaran lama saat admin mengetik di kotak cari
+  useEffect(() => {
+    if (!showManualSearch) return;
+    const timer = setTimeout(async () => {
+      setIsSearchingQuotes(true);
       try {
-        const res = await fetch('/api/balas/kasus-terakhir');
+        const res = await fetch(`/api/balas/kasus-terakhir?q=${encodeURIComponent(manualSearchQuery.trim())}`);
         if (res.ok) {
           const json = await res.json();
-          if (json.kasus_terakhir) {
-            setKasusTerakhirList(json.kasus_terakhir);
-          }
+          setManualSearchResults(json.kasus_terakhir || []);
         }
       } catch (err) {
-        console.warn('Gagal memuat kasus terakhir:', err);
+        console.warn('Gagal mencari penawaran lama:', err);
+      } finally {
+        setIsSearchingQuotes(false);
       }
-    }
-    loadKasusTerakhir();
-  }, []);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [showManualSearch, manualSearchQuery]);
 
   // Simpan input admin ke sessionStorage secara otomatis agar tidak hilang saat refresh
   useEffect(() => {
@@ -208,11 +218,12 @@ export default function BalasChatPage() {
       overrideImages?: ScreenshotItem[],
       overrideText?: string,
       customArahan?: string,
-      editedExtraction?: ExtractionOutput
+      editedExtraction?: ExtractionOutput,
+      overrideKlienLanjutan?: { nomor: string; total: number; tanggal: string; nama: string } | null
     ) => {
       const targetImages = overrideImages || images;
       const targetText = overrideText !== undefined ? overrideText : pastedText;
-
+      const activeKlienLanjutan = overrideKlienLanjutan !== undefined ? overrideKlienLanjutan : klienLanjutan;
       if (targetImages.length === 0 && !targetText.trim() && !editedExtraction) {
         return;
       }
@@ -245,7 +256,7 @@ export default function BalasChatPage() {
             arahan_admin: customArahan,
             mode_teliti: modeTeliti,
             override_extraction: editedExtraction,
-            klien_lanjutan: klienLanjutan,
+            klien_lanjutan: activeKlienLanjutan,
           }),
         });
 
@@ -268,7 +279,14 @@ export default function BalasChatPage() {
           setExtraction(json.extraction);
           setDraftResult(json.draf);
           setActiveDraftIdx(0);
-          setKlienLanjutan(json.klien_lanjutan);
+          if (overrideKlienLanjutan !== undefined) {
+            setKlienLanjutan(overrideKlienLanjutan);
+            setMatchedPenawaran(null);
+          } else if (json.matched_penawaran && !activeKlienLanjutan) {
+            setMatchedPenawaran(json.matched_penawaran);
+          } else {
+            setMatchedPenawaran(null);
+          }
           setDurasiPipeline(json.durasi);
           setActualModel(json.model_used || json.draf?.model_used || null);
           if (json.extraction?.platform) {
@@ -306,7 +324,7 @@ export default function BalasChatPage() {
         setCurrentStep('idle');
       }
     },
-    [images, pastedText, kanal, modeTeliti]
+    [images, pastedText, kanal, modeTeliti, klienLanjutan]
   );
 
   // Eksekusi Revisi Kilat 1-Panggilan
@@ -591,44 +609,24 @@ export default function BalasChatPage() {
     setRevisiElapsed(null);
     setBrowserTtftSeconds(null);
     setBrowserTotalSeconds(null);
+    setKlienLanjutan(null);
+    setMatchedPenawaran(null);
+    setShowManualSearch(false);
   };
 
-  const handlePilihKasusLanjutan = (k: KasusTerakhirItem) => {
-    setPastedText(`Lanjutkan pembicaraan dengan ${k.nama_klien} (${k.nomor})`);
-    setKlienLanjutan({
+  const handlePakaiMatchedContext = (k: KasusTerakhirItem) => {
+    const contextPayload = {
       nomor: k.nomor,
       total: k.total_nilai,
       tanggal: k.tanggal,
       nama: k.nama_klien,
-    });
-    setKanal(k.spesifikasi?.kanal || 'whatsapp');
-    if (k.spesifikasi) {
-      setExtraction({
-        nama_klien: k.nama_klien,
-        platform: k.spesifikasi.kanal || 'whatsapp',
-        pesan: [],
-        waktu_pesan_terakhir_klien: null,
-        kota: k.kota,
-        zona: k.zona,
-        items: [
-          {
-            bentuk: k.spesifikasi.bentuk || 'rectangle',
-            ukuran_1_cm: k.spesifikasi.panjang_cm || 60,
-            ukuran_2_cm: k.spesifikasi.lebar_cm || 80,
-            satuan_tidak_jelas: false,
-            lampu: k.spesifikasi.lampu || '3_warna',
-            kontrol: k.spesifikasi.kontrol || 'touchscreen',
-            frame: k.spesifikasi.frame || 'tanpa',
-            antifog: Boolean(k.spesifikasi.antifog),
-            sandblast: { pakai: Boolean(k.spesifikasi.sandblast?.pakai), lebar_cm: 3, jarak_tepi_cm: 2 },
-            qty: k.spesifikasi.qty || 1,
-          },
-        ],
-        perlu_pasang: false,
-        indikasi_b2b: null,
-        bagian_tidak_terbaca: [],
-        catatan: `Penawaran sebelumnya: ${k.nomor}`,
-      });
+    };
+    setKlienLanjutan(contextPayload);
+    setMatchedPenawaran(null);
+    setShowManualSearch(false);
+    // Jika sudah ada input atau draf, buat ulang draf memakai angka penawaran itu
+    if (images.length > 0 || pastedText.trim() || extraction) {
+      runPipeline(undefined, undefined, undefined, extraction || undefined, contextPayload);
     }
   };
 
@@ -715,27 +713,7 @@ export default function BalasChatPage() {
         </div>
       )}
 
-      {/* Rekomendasi Kasus Lanjutan */}
-      {kasusTerakhirList.length > 0 && !extraction && images.length === 0 && !pastedText && (
-        <div className="p-4 bg-surface border border-line rounded-[18px] space-y-2.5 shadow-none">
-          <span className="text-xs font-bold text-muted block">
-            Lanjutkan percakapan dari penawaran terakhir:
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {kasusTerakhirList.map((k) => (
-              <button
-                key={k.id}
-                type="button"
-                onClick={() => handlePilihKasusLanjutan(k)}
-                className="min-h-[44px] px-3.5 py-2 bg-raised hover:bg-tint text-ink border border-line rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
-              >
-                <span>{k.nama_klien}</span>
-                <span className="text-muted">({k.nomor} · {formatRupiah(k.total_nilai)})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Indikator Progres Bertahap + Stopwatch Timer */}
       {isProcessing && (
@@ -875,6 +853,74 @@ export default function BalasChatPage() {
               {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               <span>Buat Draf</span>
             </button>
+
+            {/* Link kecil: Cari penawaran lama */}
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                id="btn-cari-penawaran-lama"
+                onClick={() => setShowManualSearch((prev) => !prev)}
+                className="text-xs font-semibold text-muted hover:text-accent underline underline-offset-4 cursor-pointer transition"
+              >
+                {showManualSearch ? 'Tutup pencarian penawaran lama' : 'Cari penawaran lama'}
+              </button>
+            </div>
+
+            {/* Kotak Pencarian Manual Penawaran Lama (Maks 5, urut terbaru) */}
+            {showManualSearch && (
+              <div
+                id="box-cari-penawaran-lama"
+                className="p-3.5 bg-raised border border-line rounded-xl space-y-2.5 text-xs animate-in fade-in duration-150"
+              >
+                <input
+                  type="text"
+                  id="input-cari-penawaran-lama"
+                  value={manualSearchQuery}
+                  onChange={(e) => setManualSearchQuery(e.target.value)}
+                  placeholder="Cari nama klien / nomor PG-Q / kota..."
+                  className="w-full px-3 py-2 min-h-[40px] bg-surface border border-line rounded-lg text-ink font-medium focus:outline-none focus:border-accent"
+                />
+                {isSearchingQuotes ? (
+                  <div className="py-3 text-center text-muted flex items-center justify-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                    <span>Mencari penawaran...</span>
+                  </div>
+                ) : manualSearchResults.length === 0 ? (
+                  <div className="py-2 text-center text-muted">
+                    Tidak ada penawaran yang cocok dalam 30 hari terakhir.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {manualSearchResults.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        data-testid="manual-quote-item"
+                        onClick={() => handlePakaiMatchedContext(item)}
+                        className="w-full p-2.5 bg-surface hover:bg-tint border border-line rounded-lg text-left flex items-center justify-between gap-2 transition cursor-pointer"
+                      >
+                        <div className="truncate">
+                          <div className="font-bold text-ink truncate">
+                            {item.nama_klien}{' '}
+                            {item.other_quotes_count && item.other_quotes_count > 0 ? (
+                              <span className="text-[11px] font-normal text-muted">
+                                (+{item.other_quotes_count} penawaran lain)
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-[11px] text-muted truncate">
+                            {item.nomor} · {item.kota || 'Kota -'} · {item.waktu_lalu || item.tanggal}
+                          </div>
+                        </div>
+                        <span className="font-bold text-accent tabular-nums shrink-0">
+                          {formatRupiah(item.total_nilai)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -941,6 +987,46 @@ export default function BalasChatPage() {
                   ) : null}
                 </div>
               </div>
+
+              {/* Banner Kecocokan Penawaran 30 Hari Terakhir (Tampil 1 Banner di atas Draf) */}
+              {matchedPenawaran && !klienLanjutan && (
+                <div
+                  id="banner-matched-penawaran"
+                  className="p-4 bg-tint/70 border border-accent/40 rounded-[18px] text-sm text-ink flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none"
+                >
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <Clock className="w-4 h-4 text-accent shrink-0 mt-0.5 sm:mt-0" />
+                    <span>
+                      Klien ini pernah dapat penawaran{' '}
+                      <strong className="font-bold text-accent">{matchedPenawaran.nomor}</strong> (
+                      {formatRupiah(matchedPenawaran.total_nilai)},{' '}
+                      {matchedPenawaran.waktu_lalu || matchedPenawaran.tanggal})
+                      {matchedPenawaran.other_quotes_count && matchedPenawaran.other_quotes_count > 0
+                        ? ` (+${matchedPenawaran.other_quotes_count} penawaran lain)`
+                        : ''}
+                      .
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      id="btn-pakai-sebagai-konteks"
+                      onClick={() => handlePakaiMatchedContext(matchedPenawaran)}
+                      className="min-h-[38px] px-3.5 py-1.5 bg-accent text-accent-ink rounded-xl text-xs font-bold hover:opacity-95 transition cursor-pointer"
+                    >
+                      Pakai sebagai konteks
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-bukan-klien-baru"
+                      onClick={() => setMatchedPenawaran(null)}
+                      className="min-h-[38px] px-3 py-1.5 bg-surface border border-line text-muted hover:text-ink rounded-xl text-xs font-semibold transition cursor-pointer"
+                    >
+                      Bukan, klien baru
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Kotak Data Hasil Baca (Klien, Kota, Kebutuhan, Kanal + Ubah data) */}
               {extraction && (

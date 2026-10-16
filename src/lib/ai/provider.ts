@@ -800,6 +800,16 @@ ATURAN HARGA MUTLAK:
 `;
 
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+  if (params.klienLanjutan && params.klienLanjutan.total > 0) {
+    parts.push({
+      text: `KONTEKS PENAWARAN KLIEN SEBELUMNYA:
+Nomor Penawaran: ${params.klienLanjutan.nomor}
+Nama Klien: ${params.klienLanjutan.nama}
+Total Penawaran: [[TOTAL]] (DP 50%: [[DP]], Pelunasan: [[PELUNASAN]])
+Tanggal: ${params.klienLanjutan.tanggal}
+Petunjuk Khusus: Ini adalah lanjutan percakapan untuk penawaran ${params.klienLanjutan.nomor}. Klien sudah memiliki penawaran resmi. Gunakan penanda [[TOTAL]] dan [[DP]] untuk menyebutkan total pembayaran dan nominal DP 50%.`,
+    });
+  }
   if (params.pastedText && params.pastedText.trim()) {
     parts.push({ text: `CHAT KLIEN:\n${params.pastedText}` });
   }
@@ -952,6 +962,7 @@ ATURAN HARGA MUTLAK:
     totalStr = `*${formatRupiah(snapTotal)}*`;
     dpStr = `*${formatRupiah(snapDp)}*`;
     pelunasanStr = `*${formatRupiah(snapPelunasan)}*`;
+    harga1Str = `*${formatRupiah(snapTotal)}*`;
     calculatedNumbers.push(snapTotal, snapDp, snapPelunasan);
 
     // Deteksi perbedaan jika chat menyebut nominal berbeda dari snapshot

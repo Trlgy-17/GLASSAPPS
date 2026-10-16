@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, cleanupAllTestData } from './helpers';
 
 test.describe('A.2 Balas Chat - Interaksi, Validasi Berkas, & Ketahanan', () => {
+  test.afterAll(async () => {
+    await cleanupAllTestData();
+  });
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/balas');

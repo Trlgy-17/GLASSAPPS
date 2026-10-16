@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
 import { validateRupiahInDraft } from '@/lib/ai/validator';
-import { getAuthToken, ADMIN_EMAIL, ADMIN_PASSWORD } from './helpers';
+import { getAuthToken, ADMIN_EMAIL, ADMIN_PASSWORD, cleanupAllTestData } from './helpers';
 
 test.describe('A.3 Prompt Injection Defense - Minimal 5 Variasi Serangan', () => {
   let adminToken: string;
@@ -10,6 +10,9 @@ test.describe('A.3 Prompt Injection Defense - Minimal 5 Variasi Serangan', () =>
     adminToken = await getAuthToken(ADMIN_EMAIL, ADMIN_PASSWORD);
   });
 
+  test.afterAll(async () => {
+    await cleanupAllTestData();
+  });
   const INJECTION_PAYLOADS = [
     {
       nama: '1. Perintah abaikan instruksi dan minta diskon 50%',

@@ -62,3 +62,63 @@ export async function getAuthToken(email: string, pass: string): Promise<string>
   }
   return data.session.access_token;
 }
+
+/**
+ * Bersihkan seluruh data uji (penawaran, leads, kartu_memori, ai_log, audit_log)
+ * agar database produksi selalu bersih setelah pengujian selesai.
+ */
+export async function cleanupAllTestData() {
+  const service = getServiceClient();
+
+  // 1. Cari semua leads yang merupakan data uji
+  const { data: testLeads } = await service
+    .from('leads')
+    .select('id, nama, kota');
+
+  const testLeadIds = (testLeads || [])
+    .filter((l) => {
+      const nama = String(l.nama || '');
+      const kota = String(l.kota || '');
+      return (
+        nama.startsWith('[TES]') ||
+        /test|uji|sukamaju|kak rina|paralel|double click|sesi lama|budi|dewi|klien putra glass|klien chat/i.test(nama) ||
+        /sukamaju/i.test(kota)
+      );
+    })
+    .map((l) => l.id);
+
+  // 2. Cari semua penawaran yang terkait lead uji atau nomor uji
+  const { data: allQuotes } = await service
+    .from('penawaran')
+    .select('id, nomor, lead_id, ringkasan_json');
+
+  const testQuoteIds = (allQuotes || [])
+    .filter((q) => {
+      const r = (q.ringkasan_json || {}) as Record<string, unknown>;
+      return (
+        testLeadIds.includes(q.lead_id) ||
+        r.is_test === true ||
+        String(q.nomor || '').includes('TEST') ||
+        /sukamaju/i.test(String(r.kota_klien || ''))
+      );
+    })
+    .map((q) => q.id);
+
+  if (testQuoteIds.length > 0) {
+    await service.from('penawaran_status_log').delete().in('penawaran_id', testQuoteIds);
+    await service.from('persetujuan').delete().in('penawaran_id', testQuoteIds);
+    await service.from('penawaran').delete().in('id', testQuoteIds);
+  }
+
+  if (testLeadIds.length > 0) {
+    await service.from('kartu_memori').delete().in('lead_id', testLeadIds);
+    await service.from('leads').delete().in('id', testLeadIds);
+  }
+
+  // 3. Bersihkan kartu_memori & audit_log & ai_log yang dibuat saat pengujian
+  await service.from('kartu_memori').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await service.from('audit_log').delete().ilike('alasan', '%test%');
+  await service.from('audit_log').delete().ilike('alasan', '%uji%');
+  await service.from('audit_log').delete().ilike('alasan', '%bagi dua%');
+  await service.from('ai_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+}

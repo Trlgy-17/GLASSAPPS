@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, cleanupAllTestData } from './helpers';
 
 test.describe('REVISI DROPDOWN KOTA BERTINGKAT: Provinsi -> Kota & Kabupaten', () => {
+  test.afterAll(async () => {
+    await cleanupAllTestData();
+  });
+
   test('1. Klik panah -> 38 provinsi (Jawa Barat paling atas) -> klik Jawa Barat -> Kota & Kabupaten -> kembali -> pilih Kota Cimahi', async ({
     page,
   }) => {

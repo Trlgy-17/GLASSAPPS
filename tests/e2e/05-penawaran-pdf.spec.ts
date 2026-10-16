@@ -10,6 +10,7 @@ import {
   ADMIN_PASSWORD,
   getServiceClient,
   loginAsAdmin,
+  cleanupAllTestData,
 } from './helpers';
 
 test.describe('A.5 Penawaran & Dokumen PDF', () => {
@@ -26,7 +27,7 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
       .from('leads')
       .insert({
         brand_id: 'putraglass',
-        nama: 'Klien Uji Penawaran E2E',
+        nama: '[TES] Klien Uji Penawaran E2E',
         kota: 'Bandung',
         zona: 'dalam_kota',
         segmen: 'B2C',
@@ -48,6 +49,7 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
     if (testLeadId) {
       await service.from('leads').delete().eq('id', testLeadId);
     }
+    await cleanupAllTestData();
   });
 
   test('1. Nomor PG-Q-YYMM-#### TIDAK DOBEL saat 20 request paralel serentak', async ({ request }) => {
@@ -60,8 +62,9 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
         },
         data: {
           lead_id: testLeadId,
-          nama_klien: `Klien Paralel #${i + 1}`,
+          nama_klien: `[TES] Klien Paralel #${i + 1}`,
           kota_klien: 'Bandung',
+          is_test: true,
           penawaran_input: {
             items: [{ bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 }],
             zona: 'dalam_kota',
@@ -93,8 +96,8 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
     await loginAsAdmin(page);
     await page.goto('/penawaran/baru');
 
-    await page.fill('#input-nama-klien', 'Klien Double Click Test');
-
+    await page.fill('#input-nama-klien', '[TES] Klien Double Click Test');
+    await page.locator('#select-zona-pengiriman').selectOption('dalam_kota');
     const btnSimpan = page.locator('#btn-simpan-penawaran');
     await expect(btnSimpan).toBeEnabled();
 
@@ -126,8 +129,9 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
       },
       data: {
         lead_id: testLeadId,
-        nama_klien: 'Klien Status Validation',
+        nama_klien: '[TES] Klien Status Validation',
         kota_klien: 'Bandung',
+        is_test: true,
         penawaran_input: {
           items: [{ bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 }],
           zona: 'dalam_kota',
