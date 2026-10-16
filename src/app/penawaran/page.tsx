@@ -209,9 +209,23 @@ export default function PenawaranListPage() {
       {/* Tabel Penawaran */}
       {isLoading ? (
         <div className="text-center py-16 text-muted text-sm">Memuat data penawaran...</div>
-      ) : filteredQuotes.length === 0 ? (
+      ) : quotes.length === 0 ? (
         <div className="bg-surface p-16 text-center rounded-[20px] border border-line text-muted text-sm">
-          Tidak ada penawaran yang cocok dengan pencarian.
+          Belum ada penawaran. Penawaran muncul di sini setelah admin membuatnya.
+        </div>
+      ) : filteredQuotes.length === 0 ? (
+        <div className="bg-surface p-16 text-center rounded-[20px] border border-line text-muted text-sm space-y-3">
+          <p>Tidak ada penawaran yang cocok.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('');
+              setStatusFilter('all');
+            }}
+            className="px-4 py-2 bg-raised hover:bg-tint text-accent border border-line rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Hapus filter
+          </button>
         </div>
       ) : (
         <div className="bg-surface rounded-[20px] border border-line shadow-none overflow-hidden">

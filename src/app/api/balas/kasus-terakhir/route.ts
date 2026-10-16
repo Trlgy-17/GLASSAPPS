@@ -19,6 +19,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { data: userData } = await adminClient
+    .from('users')
+    .select('peran')
+    .eq('id', user.id)
+    .single();
+
+  if (userData?.peran !== 'admin') {
+    return NextResponse.json({ error: 'Hanya admin yang boleh mengakses riwayat kasus balas chat' }, { status: 403 });
+  }
+
   try {
     const { data: quotes, error } = await adminClient
       .from('penawaran')

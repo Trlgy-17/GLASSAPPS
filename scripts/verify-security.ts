@@ -260,9 +260,124 @@ async function runSecurityTests() {
     } else {
       throw new Error(`Tes 8 GAGAL: OWNER tidak ditolak mengubah buku harga! (Status: ${resOwnerPriceBook.status})`);
     }
+    // 9. OWNER memanggil API AI /api/balas/proses -> DITOLAK (403)
+    const { count: initialAiLogCount } = await serviceClient.from('ai_log').select('*', { count: 'exact', head: true });
+
+    const resOwnerProses = await fetch('http://localhost:3000/api/balas/proses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`,
+      },
+      body: JSON.stringify({
+        pasted_text: 'Halo mau pesan cermin oval 60x80',
+      }),
+    });
+
+    if (resOwnerProses.status === 403) {
+      console.log('✅ Tes 9 LULUS: OWNER ditolak saat POST /api/balas/proses (403 Forbidden).');
+    } else {
+      throw new Error(`Tes 9 GAGAL: OWNER tidak ditolak di /api/balas/proses! (Status: ${resOwnerProses.status})`);
+    }
+
+    // 10. OWNER memanggil API AI /api/balas/revisi -> DITOLAK (403)
+    const resOwnerRevisi = await fetch('http://localhost:3000/api/balas/revisi', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`,
+      },
+      body: JSON.stringify({
+        previous_draft_text: 'Draf sebelumnya',
+        instruksi_revisi: 'Dorong DP',
+      }),
+    });
+
+    if (resOwnerRevisi.status === 403) {
+      console.log('✅ Tes 10 LULUS: OWNER ditolak saat POST /api/balas/revisi (403 Forbidden).');
+    } else {
+      throw new Error(`Tes 10 GAGAL: OWNER tidak ditolak di /api/balas/revisi! (Status: ${resOwnerRevisi.status})`);
+    }
+
+    // 11. OWNER memanggil API AI /api/balas/ekstrak -> DITOLAK (403)
+    const resOwnerEkstrak = await fetch('http://localhost:3000/api/balas/ekstrak', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`,
+      },
+      body: JSON.stringify({
+        screenshots: [],
+        pasted_text: 'Halo cermin bulat 60 cm',
+      }),
+    });
+
+    if (resOwnerEkstrak.status === 403) {
+      console.log('✅ Tes 11 LULUS: OWNER ditolak saat POST /api/balas/ekstrak (403 Forbidden).');
+    } else {
+      throw new Error(`Tes 11 GAGAL: OWNER tidak ditolak di /api/balas/ekstrak! (Status: ${resOwnerEkstrak.status})`);
+    }
+
+    // 12. OWNER memanggil API AI /api/balas/draf -> DITOLAK (403)
+    const resOwnerDraf = await fetch('http://localhost:3000/api/balas/draf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`,
+      },
+      body: JSON.stringify({
+        transkrip_messages: [],
+      }),
+    });
+
+    if (resOwnerDraf.status === 403) {
+      console.log('✅ Tes 12 LULUS: OWNER ditolak saat POST /api/balas/draf (403 Forbidden).');
+    } else {
+      throw new Error(`Tes 12 GAGAL: OWNER tidak ditolak di /api/balas/draf! (Status: ${resOwnerDraf.status})`);
+    }
+
+    // 13. OWNER memanggil API AI /api/balas/terkirim -> DITOLAK (403)
+    const resOwnerTerkirim = await fetch('http://localhost:3000/api/balas/terkirim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`,
+      },
+      body: JSON.stringify({
+        transkrip_text: 'Halo',
+        balasan_final_text: 'Halo juga',
+      }),
+    });
+
+    if (resOwnerTerkirim.status === 403) {
+      console.log('✅ Tes 13 LULUS: OWNER ditolak saat POST /api/balas/terkirim (403 Forbidden).');
+    } else {
+      throw new Error(`Tes 13 GAGAL: OWNER tidak ditolak di /api/balas/terkirim! (Status: ${resOwnerTerkirim.status})`);
+    }
+
+    // 14. Verifikasi ai_log TIDAK bertambah saat owner mencoba memanggil API AI
+    const { count: finalAiLogCount } = await serviceClient.from('ai_log').select('*', { count: 'exact', head: true });
+    if ((finalAiLogCount || 0) === (initialAiLogCount || 0)) {
+      console.log('✅ Tes 14 LULUS: ai_log tidak bertambah saat OWNER mencoba memanggil API AI.');
+    } else {
+      throw new Error(`Tes 14 GAGAL: ai_log bertambah! (Awal: ${initialAiLogCount}, Akhir: ${finalAiLogCount})`);
+    }
+
+    // 15. Verifikasi ADMIN tetap bisa mengakses API /api/buku-harga secara normal
+    const resAdminPb = await fetch('http://localhost:3000/api/buku-harga', {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
+    const adminPbJson = await resAdminPb.json();
+    if (resAdminPb.status === 200 && adminPbJson.price_book && !adminPbJson.price_book.tarif_m2?.premium_b2b_net_owner) {
+      console.log('✅ Tes 15 LULUS: ADMIN tetap bisa mengakses API /api/buku-harga dengan field rahasia disaring.');
+    } else {
+      throw new Error(`Tes 15 GAGAL: ADMIN gagal mengakses /api/buku-harga! (Status: ${resAdminPb.status})`);
+    }
 
     console.log('\n================================================================');
-    console.log('🎉 SELURUH 8 PENGUJIAN KEAMANAN RLS & SERVER GUARD LULUS 100%');
+    console.log('🎉 SELURUH 15 PENGUJIAN KEAMANAN RLS & SERVER GUARD LULUS 100%');
     console.log('================================================================\n');
   } finally {
     // TEARDOWN DATA UJI

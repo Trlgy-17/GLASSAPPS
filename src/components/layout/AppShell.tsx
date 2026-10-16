@@ -9,9 +9,7 @@ import {
   Calculator,
   FileText,
   LayoutDashboard,
-  Settings,
   LogOut,
-  User,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -39,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           .eq('id', user.id)
           .single();
         setUserRole(profile?.peran || 'admin');
-        setUserName(profile?.nama || user.email?.split('@')[0] || 'Admin');
+        setUserName(profile?.nama || user.email?.split('@')[0] || 'Pengguna');
       }
     }
     loadUser();
@@ -65,35 +63,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const navItems = [
-    { label: 'Balas Chat', href: '/balas', icon: MessageSquare },
-    { label: 'Kalkulator', href: '/penawaran/baru', icon: Calculator },
-    { label: 'Penawaran', href: '/penawaran', icon: FileText },
-    ...(userRole === 'owner'
-      ? [{ label: 'Dasbor Owner', href: '/dasbor', icon: LayoutDashboard }]
-      : []),
-    ...(userRole === 'owner'
-      ? [{ label: 'Pengaturan', href: '/pengaturan/buku-harga', icon: Settings }]
-      : []),
-  ];
+  // Menu navigasi berdasarkan peran:
+  // Owner HANYA melihat 2 menu: "Dasbor" (/dasbor) dan "Daftar penawaran" (/penawaran, baca saja)
+  const navItems =
+    userRole === 'owner'
+      ? [
+          { label: 'Dasbor', href: '/dasbor', icon: LayoutDashboard },
+          { label: 'Daftar Penawaran', href: '/penawaran', icon: FileText },
+        ]
+      : [
+          { label: 'Balas Chat', href: '/balas', icon: MessageSquare },
+          { label: 'Kalkulator', href: '/penawaran/baru', icon: Calculator },
+          { label: 'Penawaran', href: '/penawaran', icon: FileText },
+        ];
 
   const quotaPercent = Math.min(100, Math.round((aiUsageCount / maxAiQuota) * 100));
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col md:flex-row antialiased">
       {/* 1. Desktop Left Sidebar (232px) */}
-      <aside className="hidden md:flex w-[232px] shrink-0 bg-rail text-rail-ink flex-col justify-between p-4 border-r border-line/20 z-40 select-none">
-        <div className="space-y-6">
-          {/* Logo dalam kotak putih */}
+      <aside className="hidden md:flex w-[232px] h-screen sticky top-0 shrink-0 bg-rail text-rail-ink flex-col justify-between p-4 border-r border-line/20 z-40 select-none overflow-hidden">
+        {/* Bagian atas bisa di-scroll jika layar pendek (±900px) */}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pr-1">
+          {/* Logo asli Putra Glass dalam kotak putih 40x40 */}
           <div className="flex items-center gap-3 px-2 pt-2">
-            <div className="w-9 h-9 bg-surface rounded-xl flex items-center justify-center shadow-sm shrink-0">
-              <span className="font-extrabold text-accent text-sm tracking-tight">PG</span>
+            <div className="w-10 h-10 min-w-[40px] min-h-[40px] bg-white rounded-xl flex items-center justify-center p-1.5 shadow-sm shrink-0">
+              <img
+                src="/logo-mark.png"
+                alt="Putra Glass Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="font-bold text-sm tracking-wide text-white leading-none">
                 Putra Glass
               </h1>
-              <span className="text-[11px] text-rail-ink/70 leading-tight">CS Assistant</span>
+              <span className="text-[11px] text-rail-ink/70 leading-tight">
+                {userRole === 'owner' ? 'Pemantauan Owner' : 'CS Assistant'}
+              </span>
             </div>
           </div>
 
@@ -121,7 +128,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <span>{item.label}</span>
                   </div>
 
-                  {/* Titik LED bercahaya kecil untuk menu aktif */}
                   {isActive && (
                     <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_8px_var(--led)] shrink-0" />
                   )}
@@ -131,23 +137,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        {/* Bagian Bawah: Meter Kuota AI + User Profile + Keluar */}
-        <div className="space-y-4 pt-6 border-t border-surface/10">
-          {/* Meter Kuota AI Hari Ini */}
-          <div className="p-3 bg-surface/10 rounded-xl space-y-2 border border-surface/10">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-rail-ink/80 font-medium">Kuota AI hari ini</span>
-              <span className="tabular-nums font-semibold text-white">
-                {aiUsageCount} / {maxAiQuota}
+        {/* Bagian Bawah: Selalu terlihat utuh (shrink-0) */}
+        <div className="shrink-0 space-y-4 pt-4 border-t border-surface/10">
+          {/* Untuk Owner: Tampilkan "Owner — hanya bisa melihat" (sembunyikan meter kuota) */}
+          {userRole === 'owner' ? (
+            <div className="p-3 bg-surface/10 rounded-xl text-center border border-surface/10">
+              <span className="text-xs font-semibold text-rail-ink">
+                Owner — hanya bisa melihat
               </span>
             </div>
-            <div className="w-full h-1.5 bg-surface/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-led rounded-full transition-all duration-300 shadow-[0_0_6px_var(--led)]"
-                style={{ width: `${quotaPercent}%` }}
-              />
+          ) : (
+            /* Untuk Admin: Tampilkan meter kuota AI hari ini */
+            <div className="p-3 bg-surface/10 rounded-xl space-y-2 border border-surface/10">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-rail-ink/80 font-medium">Kuota AI hari ini</span>
+                <span className="tabular-nums font-semibold text-white">
+                  {aiUsageCount} / {maxAiQuota}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-surface/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-led rounded-full transition-all duration-300 shadow-[0_0_6px_var(--led)]"
+                  style={{ width: `${quotaPercent}%` }}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* User Info & Keluar */}
           <div className="flex items-center justify-between px-1">
@@ -156,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {userName ? userName[0].toUpperCase() : 'U'}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-white truncate">{userName || 'Admin'}</p>
+                <p className="text-xs font-semibold text-white truncate">{userName || 'Pengguna'}</p>
                 <p className="text-[11px] text-rail-ink/70 capitalize leading-none">
                   {userRole || 'admin'}
                 </p>
@@ -181,15 +196,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top Header Bar */}
         <header className="h-16 px-6 bg-surface border-b border-line flex items-center justify-between shrink-0 sticky top-0 z-30">
           {/* Mobile Brand */}
-          <div className="flex items-center gap-2.5 md:hidden">
-            <div className="w-8 h-8 bg-rail text-white rounded-lg flex items-center justify-center font-bold text-xs">
-              PG
+          <div className="flex items-center gap-3 md:hidden">
+            <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 shadow-xs border border-line">
+              <img
+                src="/logo-mark.png"
+                alt="Putra Glass Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="font-bold text-sm text-ink">Putra Glass</span>
           </div>
 
           <div className="hidden md:block">
-            {/* Breadcrumb / Title spacer */}
+            {/* Spacer */}
           </div>
 
           {/* Right Header: Theme Toggle */}
@@ -202,9 +221,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
       </div>
 
-      {/* 3. Mobile Bottom Tab Bar (<768px) dengan 4 Ikon */}
+      {/* 3. Mobile Bottom Tab Bar (<768px): Owner hanya 2 tab, Admin 3 tab */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-rail text-rail-ink border-t border-line/20 flex items-center justify-around z-50 px-2">
-        {navItems.slice(0, 4).map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             item.href === '/penawaran'
