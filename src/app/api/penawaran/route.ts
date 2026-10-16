@@ -178,23 +178,57 @@ export async function POST(req: NextRequest) {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const adminClient = createAdminClient();
+  let user = (await supabase.auth.getUser()).data.user;
+  if (!user) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: tokenUser } = await adminClient.auth.getUser(token);
+      user = tokenUser.user;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const adminClient = createAdminClient();
-  const { data: list, error } = await adminClient
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '25', 10)));
+  const search = searchParams.get('search')?.trim() || '';
+  const status = searchParams.get('status')?.trim() || '';
+
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = adminClient
     .from('penawaran')
-    .select('*, leads(nama, kota, no_wa)')
-    .order('created_at', { ascending: false });
+    .select('*, leads(nama, kota, no_wa)', { count: 'exact' });
+
+  if (status && status !== 'all') {
+    query = query.eq('status', status);
+  }
+
+  if (search) {
+    query = query.ilike('nomor', `%${search}%`);
+  }
+
+  const { data: list, count, error } = await query
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ penawaran: list });
+  return NextResponse.json({
+    penawaran: list || [],
+    total: count || 0,
+    page,
+    limit,
+    total_pages: Math.ceil((count || 0) / limit),
+  });
 }

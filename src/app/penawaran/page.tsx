@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { formatRupiah } from '@/lib/pricing/format-rupiah';
@@ -36,11 +36,12 @@ export default function PenawaranListPage() {
   const [quotes, setQuotes] = useState<PenawaranRow[]>([]);
   const [userRole, setUserRole] = useState<'owner' | 'admin'>('admin');
   const [isLoading, setIsLoading] = useState(true);
-
-  // Filters
+  // Filters & Pagination
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   // Modal Dialogs for Deal & Batal
   const [dealModalQuoteId, setDealModalQuoteId] = useState<string | null>(null);
   const [dealDateInput, setDealDateInput] = useState(new Date().toISOString().split('T')[0]);
@@ -48,7 +49,7 @@ export default function PenawaranListPage() {
   const [batalModalQuoteId, setBatalModalQuoteId] = useState<string | null>(null);
   const [alasanBatalInput, setAlasanBatalInput] = useState('harga');
 
-  const loadQuotes = async () => {
+  const loadQuotes = useCallback(async () => {
     setIsLoading(true);
     const supabase = createClient();
     const {
@@ -60,27 +61,37 @@ export default function PenawaranListPage() {
       setUserRole(profile?.peran || 'admin');
     }
 
-    const { data, error } = await supabase
-      .from('penawaran')
-      .select('*, leads(nama, kota, no_wa)')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      const nowStr = new Date().toISOString().split('T')[0];
-      const normalized = (data as unknown as PenawaranRow[]).map((q) => {
-        if (['draf', 'terkirim', 'nego'].includes(q.status) && q.valid_until < nowStr) {
-          return { ...q, status: 'kadaluwarsa' as const };
-        }
-        return q;
+    try {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: '25',
+        search: searchQuery,
+        status: statusFilter,
       });
-      setQuotes(normalized);
+      const res = await fetch(`/api/penawaran?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        const nowStr = new Date().toISOString().split('T')[0];
+        const normalized = (json.penawaran || []).map((q: PenawaranRow) => {
+          if (['draf', 'terkirim', 'nego'].includes(q.status) && q.valid_until < nowStr) {
+            return { ...q, status: 'kadaluwarsa' as const };
+          }
+          return q;
+        });
+        setQuotes(normalized);
+        setTotalPages(json.total_pages || 1);
+        setTotalCount(json.total || 0);
+      }
+    } catch (e) {
+      console.warn('Gagal memuat penawaran:', e);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  };
+  }, [currentPage, searchQuery, statusFilter]);
 
   useEffect(() => {
     loadQuotes();
-  }, []);
+  }, [loadQuotes]);
 
   const handleUpdateStatus = async (
     quoteId: string,
@@ -120,15 +131,7 @@ export default function PenawaranListPage() {
     }
   };
 
-  const filteredQuotes = quotes.filter((q) => {
-    const matchesSearch =
-      (q.leads?.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (q.leads?.kota || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      q.nomor.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || q.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredQuotes = quotes;
 
   const getStatusBadge = (status: PenawaranRow['status']) => {
     switch (status) {
@@ -317,6 +320,32 @@ export default function PenawaranListPage() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between border-t border-line px-5 py-3 gap-3 bg-surface">
+              <span className="text-xs text-muted">
+                Halaman {currentPage} dari {totalPages} ({totalCount} total penawaran)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg border border-line bg-raised hover:bg-surface disabled:opacity-40 cursor-pointer"
+                >
+                  Sebelumnya
+                </button>
+                <span className="text-xs font-bold text-ink px-2 tabular-nums">{currentPage} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg border border-line bg-raised hover:bg-surface disabled:opacity-40 cursor-pointer"
+                >
+                  Selanjutnya
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
