@@ -6,12 +6,12 @@ import { hitungPenawaran } from '../pricing/pricing';
 import { formatRupiah } from '../pricing/format-rupiah';
 import { PriceBookData } from '@/types/pricing';
 import { buildPrompts, BuildPromptParams } from './prompt-builder';
-import { validateRupiahInDraft, validateMarketplaceGuards, validateForbiddenPhrases } from './validator';
+import { validateRupiahInDraft, validateMarketplaceGuards, validateForbiddenPhrases, extractAllRupiahNumbers } from './validator';
 import { createAdminClient } from '../supabase/server';
 
 // 1. Model Configuration dari Environment
 export const MODEL_FAST = process.env.GEMINI_MODEL_FAST || 'gemini-3.5-flash-lite';
-export const MODEL_MAIN = process.env.GEMINI_MODEL_MAIN || 'gemini-3.8-flash';
+export const MODEL_MAIN = process.env.GEMINI_MODEL_MAIN || 'gemini-3.6-flash';
 export const MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-4-argon';
 export const MODEL_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.6-flash';
 export const MODEL_EMBEDDING = 'gemini-embedding-001';
@@ -320,6 +320,7 @@ export interface DraftReplyOutput {
   error_validasi_angka?: string[];
   pelanggaran_marketplace?: string[];
   frasa_terlarang_ditemukan?: string[];
+  discrepancy_warning?: string | null;
   model_used?: string;
   is_fallback?: boolean;
   ms_ttft?: number;
@@ -658,6 +659,7 @@ export interface UnifiedDraftParams {
   priceBook: PriceBookData;
   modelName?: string;
   thinkingLevel?: ThinkingLevel;
+  klienLanjutan?: { nomor: string; total: number; tanggal: string; nama: string };
   onStreamChunk?: (chunk: string) => void;
 }
 
@@ -680,7 +682,7 @@ export async function executeUnifiedDraft(params: UnifiedDraftParams): Promise<U
   if (candidateModels.length === 0) {
     candidateModels.push(MODEL_FAST);
   }
-  const thinkingLvl = params.thinkingLevel ?? ThinkingLevel.MINIMAL;
+  const thinkingLvl = params.thinkingLevel ?? ThinkingLevel.LOW;
   const unifiedSystemPrompt = `
 Kamu adalah Senior Sales & CS Putra Glass (cermin LED custom premium di Bandung).
 Tugasmu:
@@ -898,43 +900,84 @@ ATURAN HARGA MUTLAK:
   let dpStr = '(50% setelah total fix)';
   let pelunasanStr = '(50% saat cermin siap kirim)';
   const calculatedNumbers: number[] = [];
+  let discrepancyWarning: string | null = null;
 
-  const hasDimensions = it && (it.panjang_cm || it.ukuran_1_cm) && (it.lebar_cm || it.ukuran_2_cm);
-  if (hasDimensions) {
-    try {
-      const pCm = it.panjang_cm || it.ukuran_1_cm;
-      const lCm = it.lebar_cm || it.ukuran_2_cm;
-      const hitung = hitungPenawaran(
-        {
-          items: [
-            {
-              bentuk_kode: it.bentuk || 'rectangle',
-              panjang_mm: Math.round(pCm * 10),
-              lebar_mm: Math.round(lCm * 10),
-              lampu: it.lampu === '1_warna' ? '1_warna' : '3_warna',
-              kontrol: typeof it.kontrol === 'string' ? (it.kontrol as any) : 'touchscreen',
-              frame: typeof it.frame === 'string' ? (it.frame as any) : 'tanpa',
-              antifog: Boolean(it.antifog),
-              sandblast: { pakai: Boolean(it.sandblast) },
-              qty: it.qty || 1,
-            },
-          ],
-          zona: extractedSpec.kota && /bandung|cimahi/i.test(extractedSpec.kota) ? 'dalam_kota' : 'luar_kota',
-          perlu_pasang: Boolean(extractedSpec.perlu_pasang),
-          segmen: extractedSpec.segmen === 'B2B' ? 'B2B' : 'B2C',
-        },
-        params.priceBook
-      );
+  // 1. KASUS TERHUBUNG PENAWARAN TERSIMPAN: Pakai snapshot harga, JANGAN hitung ulang!
+  if (params.klienLanjutan && params.klienLanjutan.total > 0) {
+    const snapTotal = params.klienLanjutan.total;
+    const snapDp = Math.ceil(snapTotal / 2000) * 1000;
+    const snapPelunasan = snapTotal - snapDp;
+    totalStr = `*${formatRupiah(snapTotal)}*`;
+    dpStr = `*${formatRupiah(snapDp)}*`;
+    pelunasanStr = `*${formatRupiah(snapPelunasan)}*`;
+    calculatedNumbers.push(snapTotal, snapDp, snapPelunasan);
 
-      harga1Str = `*${formatRupiah(hitung.subtotal_cermin)}*`;
-      ongkirStr = `*${formatRupiah(hitung.ongkir.list)}*`;
-      totalStr = `*${formatRupiah(hitung.total)}*`;
-      dpStr = `*${formatRupiah(hitung.dp_50)}*`;
-      pelunasanStr = `*${formatRupiah(hitung.pelunasan)}*`;
+    // Deteksi perbedaan jika chat menyebut nominal berbeda dari snapshot
+    if (params.pastedText) {
+      const numbersInChat = extractAllRupiahNumbers(params.pastedText);
+      const diffNumber = numbersInChat.find((num: number) => num !== snapTotal && num !== snapDp && num !== snapPelunasan && num > 100000);
+      if (diffNumber) {
+        discrepancyWarning = `Peringatan: Angka di percakapan (${formatRupiah(diffNumber)}) berbeda dengan snapshot penawaran tersimpan (${params.klienLanjutan.nomor}: ${formatRupiah(snapTotal)})!`;
+      }
+    }
+  } else {
+    const hasDimensions = it && (it.panjang_cm || it.ukuran_1_cm) && (it.lebar_cm || it.ukuran_2_cm);
+    if (hasDimensions) {
+      try {
+        const pCm = it.panjang_cm || it.ukuran_1_cm;
+        const lCm = it.lebar_cm || it.ukuran_2_cm;
 
-      calculatedNumbers.push(hitung.subtotal_cermin, hitung.ongkir.list, hitung.total, hitung.dp_50, hitung.pelunasan);
-    } catch (calcErr) {
-      console.warn('Gagal hitung pricing.ts:', calcErr);
+        // Aturan Zona Ongkir: hanya sebut nominal jika kota cocok dengan zona di buku harga
+        const rawKota = (extractedSpec.kota || '').toLowerCase();
+        const isBandungRaya = /bandung|cimahi/.test(rawKota);
+        const isKnownLuarKota = /surabaya|jakarta|semarang|yogyakarta|jogja|malang|solo|bekasi|tangerang|depok|bogor|bali|denpasar|medan|balikpapan|makassar|palembang|lampung/.test(rawKota);
+
+        const zonaKirim = isBandungRaya ? 'dalam_kota' : 'luar_kota';
+        const sebutOngkir = isBandungRaya || isKnownLuarKota;
+
+        const hitung = hitungPenawaran(
+          {
+            items: [
+              {
+                bentuk_kode: it.bentuk || 'rectangle',
+                panjang_mm: Math.round(pCm * 10),
+                lebar_mm: Math.round(lCm * 10),
+                lampu: it.lampu === '1_warna' ? '1_warna' : '3_warna',
+                kontrol: typeof it.kontrol === 'string' ? (it.kontrol as 'touchscreen' | 'sensor' | 'baterai') : 'touchscreen',
+                frame: typeof it.frame === 'string' ? (it.frame as 'tanpa' | 'hpl' | 'aluminium') : 'tanpa',
+                antifog: Boolean(it.antifog),
+                sandblast: { pakai: Boolean(it.sandblast) },
+                qty: it.qty || 1,
+              },
+            ],
+            zona: zonaKirim,
+            perlu_pasang: Boolean(extractedSpec.perlu_pasang),
+            segmen: extractedSpec.segmen === 'B2B' ? 'B2B' : 'B2C',
+          },
+          params.priceBook
+        );
+
+        harga1Str = `*${formatRupiah(hitung.subtotal_cermin)}*`;
+        calculatedNumbers.push(hitung.subtotal_cermin);
+
+        if (sebutOngkir) {
+          ongkirStr = `*${formatRupiah(hitung.ongkir.list)}*${isBandungRaya ? '' : ' (include packing kayu aman)'}`;
+          totalStr = `*${formatRupiah(hitung.total)}*`;
+          dpStr = `*${formatRupiah(hitung.dp_50)}*`;
+          pelunasanStr = `*${formatRupiah(hitung.pelunasan)}*`;
+          calculatedNumbers.push(hitung.ongkir.list, hitung.total, hitung.dp_50, hitung.pelunasan);
+        } else {
+          ongkirStr = extractedSpec.kota
+            ? `akan dicek dan dihitung oleh admin kargo kami untuk area ${extractedSpec.kota}`
+            : 'sesuai lokasi tujuan';
+          totalStr = `*${formatRupiah(hitung.subtotal_cermin)}* (belum termasuk ongkir)`;
+          dpStr = `*${formatRupiah(hitung.dp_50)}*`;
+          pelunasanStr = `*${formatRupiah(hitung.pelunasan)}*`;
+          calculatedNumbers.push(hitung.dp_50, hitung.pelunasan);
+        }
+      } catch (calcErr) {
+        console.warn('Gagal hitung pricing.ts:', calcErr);
+      }
     }
   }
 
@@ -1007,6 +1050,7 @@ ATURAN HARGA MUTLAK:
     error_validasi_angka: rupiahValidation.errors,
     pelanggaran_marketplace: marketplaceValidation.errors,
     frasa_terlarang_ditemukan: forbiddenValidation.errors,
+    discrepancy_warning: discrepancyWarning,
   };
 
   const finalExtraction: ExtractionOutput = {

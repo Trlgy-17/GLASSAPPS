@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { screenshots, pasted_text, override_kanal, arahan_admin, model_name, thinking_level } = body;
+    const { screenshots, pasted_text, override_kanal, arahan_admin, model_name, thinking_level, klien_lanjutan } = body;
     const sanitizedPastedText = pasted_text ? sanitizePII(pasted_text) : '';
 
     // Validasi screenshot di server (tipe file MIME & ukuran)
@@ -94,11 +94,11 @@ export async function POST(req: NextRequest) {
     // 3. SATU PANGGILAN TERPADU DRAF PERTAMA (Multimodal SPEC + DRAFT)
     const tModel0 = Date.now();
     const resolvedThinkingLevel =
-      thinking_level === 'low'
-        ? ThinkingLevel.LOW
+      thinking_level === 'minimal'
+        ? ThinkingLevel.MINIMAL
         : thinking_level === 'medium'
         ? ThinkingLevel.MEDIUM
-        : ThinkingLevel.MINIMAL;
+        : ThinkingLevel.LOW;
 
     const unifiedRes = await executeUnifiedDraft({
       screenshots: sanitizedScreenshots,
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
       priceBook,
       modelName: model_name,
       thinkingLevel: resolvedThinkingLevel,
+      klienLanjutan: klien_lanjutan,
     });
     const durasiModel = Date.now() - tModel0;
     const durasiTotal = Date.now() - tTotalStart;

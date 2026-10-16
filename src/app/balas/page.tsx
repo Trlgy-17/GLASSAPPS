@@ -228,6 +228,7 @@ export default function BalasChatPage() {
             arahan_admin: customArahan,
             mode_teliti: modeTeliti,
             override_extraction: editedExtraction,
+            klien_lanjutan: klienLanjutan,
           }),
         });
 
@@ -959,6 +960,40 @@ export default function BalasChatPage() {
                 </div>
               )}
 
+              {/* Peringatan Merah: Angka Berbeda dari Snapshot Penawaran Tersimpan */}
+              {draftResult.discrepancy_warning && (
+                <div className="p-4 bg-warn-bg border border-warn text-warn rounded-[18px] text-sm flex items-center gap-2.5 font-bold shadow-none">
+                  <AlertTriangle className="w-5 h-5 text-warn shrink-0" />
+                  <span>{draftResult.discrepancy_warning}</span>
+                </div>
+              )}
+
+              {/* Peringatan Kuning: Permintaan Memerlukan Persetujuan Owner */}
+              {draftResult.perlu_owner && (
+                <div className="p-4 bg-[#FFF9E6] dark:bg-[#2A2312] border border-[#E3A857] text-[#9A6700] dark:text-[#F3C474] rounded-[18px] text-sm flex items-center justify-between gap-3 shadow-none">
+                  <div className="flex items-center gap-2.5">
+                    <ShieldAlert className="w-5 h-5 text-[#E3A857] shrink-0" />
+                    <div>
+                      <span className="font-bold block">Perlu Persetujuan Owner</span>
+                      <span className="text-xs opacity-90">{draftResult.alasan_perlu_owner || 'Permintaan potongan harga / bagi ongkir'}</span>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-1 bg-[#E3A857]/20 rounded-lg shrink-0">
+                    Status Terkunci
+                  </span>
+                </div>
+              )}
+
+              {/* Peringatan Merah: Angka Tidak Terverifikasi / Frasa Terlarang */}
+              {draftResult.angka_tidak_terverifikasi && (
+                <div className="p-4 bg-warn-bg border border-warn text-warn rounded-[18px] text-sm flex items-center gap-2.5 font-semibold shadow-none">
+                  <ShieldAlert className="w-5 h-5 text-warn shrink-0" />
+                  <div>
+                    <span className="font-bold block">Draf Memuat Angka Tidak Terverifikasi / Frasa Terlarang</span>
+                    <span className="text-xs">Tombol salin dinonaktifkan demi kepatuhan aturan harga dan SOP resmi.</span>
+                  </div>
+                </div>
+              )}
               {/* Kutipan Pesan Terakhir Klien */}
               {lastClientMessage && (
                 <div className="p-3.5 bg-tint/50 border border-line rounded-xl text-xs text-muted italic flex items-start gap-2">

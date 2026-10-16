@@ -144,20 +144,52 @@ export function validateForbiddenPhrases(bubbles: string[]): ValidationResult {
   const errors: string[] = [];
   const fullText = bubbles.join(' ').toLowerCase();
 
-  const forbiddenList = [
+  // 1. Merek pabrikan kaca terlarang (harus sebut spesifikasi, bukan merek)
+  const forbiddenBrands = ['asahi', 'mulia', 'agc', 'guardian', 'saint-gobain'];
+  for (const brand of forbiddenBrands) {
+    if (new RegExp(`\\b${brand}\\b`, 'i').test(fullText)) {
+      errors.push(`Draf memuat merek kaca yang dilarang disebut: "${brand}"`);
+    }
+  }
+
+  // 2. Bentuk kaca salah (cembung)
+  if (/\bcembung\b/i.test(fullText)) {
+    errors.push('Draf memuat kata "cembung" (Putra Glass hanya memproduksi cermin datar)');
+  }
+
+  // 3. Frasa klaim over-promising, diskon, & janji tidak sah
+  const forbiddenClaims = [
+    'diskon',
+    'potongan',
+    'promo',
+    'khusus hari ini',
+    'ganti baru tanpa ribet',
+    'dijamin',
     '100%',
-    'dijamin pasti',
     'tidak akan rusak',
+  ];
+  for (const claim of forbiddenClaims) {
+    if (fullText.includes(claim)) {
+      errors.push(`Draf memuat frasa klaim/promo terlarang: "${claim}"`);
+    }
+  }
+
+  // 4. Kata gratis di luar ketentuan garansi resmi
+  if (/\bgratis\b/i.test(fullText) && !/gratis biaya|part gratis|penggantian.*gratis|secara gratis/i.test(fullText)) {
+    errors.push('Draf memuat kata "gratis" di luar ketentuan garansi resmi');
+  }
+
+  // 5. Template CS kaku
+  const csTemplates = [
     'terima kasih telah menghubungi kami',
     'kami sangat senang',
     'jangan ragu untuk',
     'solusi terbaik untuk kebutuhan anda',
     'berkualitas tinggi dan terpercaya',
   ];
-
-  for (const phrase of forbiddenList) {
-    if (fullText.includes(phrase)) {
-      errors.push(`Draf memuat frasa terlarang: "${phrase}"`);
+  for (const t of csTemplates) {
+    if (fullText.includes(t)) {
+      errors.push(`Draf memuat frasa template CS kaku: "${t}"`);
     }
   }
 
