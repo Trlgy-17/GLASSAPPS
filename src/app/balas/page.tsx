@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { matchKotaFromText, WilayahKota } from '@/lib/wilayah/kota';
-
+import { formatModelDisplayName } from '@/lib/ai/anthropic-provider';
 // Lazy load CityCombobox agar bundle JS awal tetap kecil
 const CityCombobox = dynamic(
   () => import('@/components/ui/city-combobox').then((mod) => mod.CityCombobox),
@@ -111,7 +111,14 @@ export default function BalasChatPage() {
   const [manualSearchQuery, setManualSearchQuery] = useState('');
   const [manualSearchResults, setManualSearchResults] = useState<KasusTerakhirItem[]>([]);
   const [isSearchingQuotes, setIsSearchingQuotes] = useState(false);
-
+  const [claudeWarning, setClaudeWarning] = useState<string | null>(null);
+  const [aiDailySummary, setAiDailySummary] = useState<{
+    tanggal: string;
+    total_draf: number;
+    total_biaya_rp: number;
+    gemini: { draf_count: number; biaya_rp: number };
+    anthropic: { draf_count: number; biaya_rp: number };
+  } | null>(null);
   // UI Interactive States
   const [isEditingExtraction, setIsEditingExtraction] = useState(false);
   const [editingBubbleIdx, setEditingBubbleIdx] = useState<number | null>(null);
@@ -136,8 +143,23 @@ export default function BalasChatPage() {
     } catch (e) {
       console.warn('Gagal memulihkan draf input:', e);
     }
-  }, []);
 
+    async function loadDailyAiUsage() {
+      try {
+        const res = await fetch('/api/admin/pemakaian-ai');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.ringkasan_harian) {
+            setAiDailySummary(json.ringkasan_harian);
+            if (json.ringkasan_harian.anthropic?.status?.message) {
+              setClaudeWarning(json.ringkasan_harian.anthropic.status.message);
+            }
+          }
+        }
+      } catch {}
+    }
+    loadDailyAiUsage();
+  }, []);
   // Pencarian manual penawaran lama saat admin mengetik di kotak cari
   useEffect(() => {
     if (!showManualSearch) return;
@@ -286,6 +308,9 @@ export default function BalasChatPage() {
             setMatchedPenawaran(json.matched_penawaran);
           } else {
             setMatchedPenawaran(null);
+          }
+          if (json.claude_warning) {
+            setClaudeWarning(json.claude_warning);
           }
           setDurasiPipeline(json.durasi);
           setActualModel(json.model_used || json.draf?.model_used || null);
@@ -682,6 +707,47 @@ export default function BalasChatPage() {
         </div>
       </div>
 
+      {/* Banner AI Cadangan Claude Tidak Aktif (Saldo / Key Salah) */}
+      {claudeWarning && (
+        <div
+          id="banner-claude-warning"
+          className="p-3.5 bg-amber-500/10 border border-amber-500/40 text-amber-900 dark:text-amber-200 rounded-[18px] text-xs flex items-center justify-between gap-3 shadow-none animate-in fade-in duration-200"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-warn shrink-0" />
+            <span className="font-semibold">{claudeWarning}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setClaudeWarning(null)}
+            className="px-2.5 py-1 bg-surface border border-line rounded-lg text-xs font-semibold hover:bg-raised transition cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {/* Ringkasan Harian Pemakaian AI Admin (Berapa draf per penyedia + Biaya) */}
+      {aiDailySummary && (
+        <div
+          id="box-admin-daily-ai-usage"
+          className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-raised/80 border border-line rounded-[18px] text-xs text-ink"
+        >
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="font-bold text-accent">Pemakaian AI Hari Ini:</span>
+            <span className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
+              Gemini: <strong>{aiDailySummary.gemini.draf_count}</strong> draf (Rp{aiDailySummary.gemini.biaya_rp.toLocaleString('id-ID')})
+            </span>
+            <span className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
+              Claude: <strong>{aiDailySummary.anthropic.draf_count}</strong> draf (Rp{aiDailySummary.anthropic.biaya_rp.toLocaleString('id-ID')})
+            </span>
+          </div>
+          <div className="font-semibold text-muted">
+            Total Biaya: <strong className="text-ink">Rp{aiDailySummary.total_biaya_rp.toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
+          </div>
+        </div>
+      )}
+
       {/* Banner Pesan Error Ramah (Jika AI Sibuk) */}
       {friendlyError && (
         <div className="p-4 bg-warn-bg border border-warn/30 rounded-[18px] text-warn text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none">
@@ -968,8 +1034,8 @@ export default function BalasChatPage() {
                     </button>
                   )}
 
-                  <span className="text-xs text-muted font-medium">
-                    {draftResult.model_used || actualModel || 'gemini-3.5-flash-lite'}
+                  <span className="text-xs text-muted font-medium px-2 py-0.5 bg-raised rounded-md border border-line">
+                    {formatModelDisplayName(draftResult.model_used || actualModel)}
                   </span>
 
                   {revisiElapsed !== null ? (

@@ -203,6 +203,10 @@ export async function POST(req: NextRequest) {
       draf: unifiedRes.draf,
       matched_penawaran: matchedPenawaran,
       model_used: unifiedRes.modelUsed,
+      provider: unifiedRes.provider,
+      claude_warning: unifiedRes.claudeWarning || null,
+      alasan_pindah: unifiedRes.alasanPindah || null,
+      biaya_perkiraan: unifiedRes.biayaPerkiraan || 0,
       durasi: {
         ttft_ms: unifiedRes.ttftMs,
         model_total_ms: durasiModel,
@@ -220,6 +224,11 @@ export async function POST(req: NextRequest) {
       try {
         await logAICall({
           model: unifiedRes.modelUsed,
+          provider: unifiedRes.provider,
+          alasan_pindah: unifiedRes.alasanPindah || null,
+          biaya_perkiraan: unifiedRes.biayaPerkiraan || 0,
+          token_in: unifiedRes.inputTokens || 0,
+          token_out: unifiedRes.outputTokens || 0,
           endpoint: 'processUnifiedDraft',
           langkah: 'draf',
           durasi_ms: unifiedRes.durasiMs,
@@ -231,6 +240,7 @@ export async function POST(req: NextRequest) {
             durasi_model_ms: durasiModel,
             durasi_total_ms: durasiTotal,
             kanal: unifiedRes.extraction.platform,
+            alasan_pindah: unifiedRes.alasanPindah,
           },
         });
       } catch (logErr) {

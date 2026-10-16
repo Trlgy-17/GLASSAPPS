@@ -54,14 +54,19 @@ async function runLeakAudit() {
     { url: `${baseUrl}/api/buku-harga`, desc: 'API JSON /api/buku-harga' },
     { url: `${baseUrl}/api/dasbor?periode=bulan_ini`, desc: 'API JSON /api/dasbor' },
     { url: `${baseUrl}/api/penawaran?page=1&limit=25`, desc: 'API JSON /api/penawaran' },
+    { url: `${baseUrl}/api/admin/pemakaian-ai`, desc: 'API JSON /api/admin/pemakaian-ai' },
   ];
 
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
   const FORBIDDEN_PATTERNS = [
     { name: 'batas_owner', regex: /batas_owner/i },
     { name: 'net B2B (1350000)', regex: /1350000|1\.350\.000/ },
     { name: 'floor ongkir rahasia owner (375000)', regex: /375000|375\.000/ },
     { name: 'net ongkir luar kota rahasia (1150000)', regex: /1150000|1\.150\.000/ },
     { name: 'net ongkir dalam kota rahasia (500000)', regex: /500000|500\.000/ },
+    ...(anthropicKey && anthropicKey.length > 8
+      ? [{ name: 'ANTHROPIC_API_KEY', regex: new RegExp(anthropicKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }]
+      : []),
   ];
   let totalViolations = 0;
 
