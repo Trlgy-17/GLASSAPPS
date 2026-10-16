@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><title>Penawaran Putra Glass</title>
+<style>
+@font-face{font-family:PJS;src:url(fonts/plus-jakarta-sans-latin-400-normal.woff);font-weight:400}
+@font-face{font-family:PJS;src:url(fonts/plus-jakarta-sans-latin-500-normal.woff);font-weight:500}
+@font-face{font-family:PJS;src:url(fonts/plus-jakarta-sans-latin-600-normal.woff);font-weight:600}
+@font-face{font-family:PJS;src:url(fonts/plus-jakarta-sans-latin-700-normal.woff);font-weight:700}
+@font-face{font-family:PJS;src:url(fonts/plus-jakarta-sans-latin-800-normal.woff);font-weight:800}
+@page{size:A4;margin:0}
+:root{
+  --navy:#253254;--blue:#275087;--steel:#BFCBD9;--grey:#A6A6A6;
+  --ink:#1B2233;--muted:#6B7385;--faint:#98A0B0;--line:#E3E7EE;--tint:#F2F5F9;--tint2:#E8EEF5;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:210mm;height:297mm;font-family:PJS,Helvetica,Arial,sans-serif;color:var(--ink);font-size:8.4pt;line-height:1.45;position:relative;background:#fff;font-feature-settings:"tnum" 1}
+.stripe{height:2.2mm;display:flex}.stripe i{flex:1}.stripe i:nth-child(1){background:var(--grey)}.stripe i:nth-child(2){background:var(--navy)}.stripe i:nth-child(3){background:var(--steel)}
+.stripe.b{position:absolute;bottom:0;left:0;right:0;height:1.4mm}
+.page{padding:11mm 16mm 0}
+.label{font-size:6.6pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+
+/* header */
+.top{display:flex;justify-content:space-between;align-items:flex-start}
+.brand{display:flex;align-items:center;gap:3.6mm}
+.brand img{height:12.5mm}
+.brand .name{font-size:15.5pt;font-weight:800;letter-spacing:.07em;color:var(--blue);line-height:1}
+.brand .tag{font-size:7.2pt;color:var(--muted);margin-top:1.6mm;letter-spacing:.02em}
+.doc{text-align:right}
+.doc .title{font-size:19pt;font-weight:300;font-weight:400;color:var(--navy);letter-spacing:-.01em;line-height:1}
+.doc .no{margin-top:2.2mm;font-size:8.4pt;font-weight:700;color:var(--blue)}
+
+/* meta band */
+.meta{margin-top:8mm;display:grid;grid-template-columns:1.25fr 1fr 1fr;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.meta>div{padding:4mm 0 4mm 0}
+.meta>div+div{padding-left:6mm;border-left:1px solid var(--line)}
+.meta .v{margin-top:1.4mm;font-weight:600;font-size:9pt}
+.meta .s{color:var(--muted);font-size:7.8pt}
+
+/* table */
+table{width:100%;border-collapse:collapse;margin-top:7mm}
+th{text-align:left;padding:0 0 2.4mm;border-bottom:1.4px solid var(--navy)}
+th.r,td.r{text-align:right}
+td{padding:3.6mm 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{width:8mm;color:var(--faint);font-weight:600}
+td.item b{font-weight:700;font-size:9pt}
+.chips{margin-top:1.8mm;display:flex;flex-wrap:wrap;gap:1.2mm}
+.chips span{background:var(--tint);color:#3B4560;border-radius:5mm;padding:.5mm 2.2mm;font-size:6.8pt;font-weight:500}
+td.calc{width:52mm;color:var(--muted)}
+td.amt{width:30mm;font-weight:700;font-size:9pt}
+
+/* summary */
+.sumwrap{display:grid;grid-template-columns:1fr 82mm;gap:10mm;margin-top:6mm}
+.pay{background:var(--tint);border-radius:3mm;padding:4.5mm 5mm;align-self:start}
+.pay .bank{margin-top:2mm;font-size:9.4pt;font-weight:700;color:var(--navy)}
+.pay .an{color:var(--muted);font-size:7.8pt}
+.pay .note{margin-top:3mm;padding-top:3mm;border-top:1px solid var(--tint2);font-size:7.4pt;color:var(--muted)}
+.rows .r{display:flex;justify-content:space-between;padding:1.3mm 0;color:var(--muted)}
+.rows .r b{color:var(--ink);font-weight:600}
+.rows .tot{margin-top:2mm;padding-top:3mm;border-top:1.4px solid var(--navy);display:flex;justify-content:space-between;align-items:baseline}
+.rows .tot span{font-weight:700;color:var(--navy);font-size:8.4pt;letter-spacing:.04em}
+.rows .tot b{font-size:17pt;font-weight:800;color:var(--navy);letter-spacing:-.01em}
+.split{margin-top:3.5mm;display:grid;grid-template-columns:1fr 1fr;border-radius:2.6mm;overflow:hidden;border:1px solid var(--line)}
+.split>div{padding:3mm 3.6mm}
+.split .dp{background:var(--navy);color:#fff}
+.split .dp .label{color:var(--steel)}
+.split .v{margin-top:1mm;font-size:10.5pt;font-weight:800}
+.split .lunas .v{color:var(--navy)}.split .sub{font-size:6.9pt;margin-top:.4mm;color:var(--muted)}.split .dp .sub{color:var(--steel)}
+
+/* process */
+.sec{margin-top:8mm}
+.steps{margin-top:3.5mm;display:grid;grid-template-columns:repeat(4,1fr);position:relative}
+.steps:before{content:"";position:absolute;left:3.2mm;right:calc(25% - 3.2mm);top:3.2mm;height:1px;background:var(--steel)}
+.step{position:relative;padding-right:4mm}
+.dot{width:6.4mm;height:6.4mm;border-radius:50%;background:#fff;border:1.4px solid var(--navy);color:var(--navy);font-weight:800;font-size:7.6pt;display:flex;align-items:center;justify-content:center;position:relative}
+.step.on .dot{background:var(--navy);color:#fff}
+.step h5{margin-top:2.6mm;font-size:8.4pt;font-weight:700}
+.step p{margin-top:.8mm;font-size:7.3pt;color:var(--muted);line-height:1.4}
+
+/* warranty */
+.war{margin-top:7mm;display:grid;grid-template-columns:1fr auto;gap:6mm;align-items:center;border:1px solid var(--line);border-left:1.4mm solid var(--blue);border-radius:2.6mm;padding:4mm 5mm}
+.war h5{font-size:9pt;font-weight:700;color:var(--navy)}
+.war p{margin-top:1mm;font-size:7.5pt;color:var(--muted)}
+.req{display:flex;flex-direction:column;gap:1.4mm}
+.req span{font-size:7.2pt;font-weight:600;color:#3B4560;background:var(--tint);border-radius:1.6mm;padding:1mm 2.6mm;white-space:nowrap}
+.req span:before{content:"";display:inline-block;width:1.4mm;height:1.4mm;border-radius:50%;background:var(--blue);margin-right:1.8mm;vertical-align:middle}
+
+/* footer */
+.foot{position:absolute;left:16mm;right:16mm;bottom:7mm;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid var(--line);padding-top:3mm;font-size:7.2pt;color:var(--muted)}
+.foot b{color:var(--ink);font-weight:700}
+</style></head><body>
+<div class="stripe"><i></i><i></i><i></i></div>
+<div class="page">
+
+  <div class="top">
+    <div class="brand">
+      <img src="logo-mark.png" alt="">
+      <div><div class="name">PUTRA GLASS</div><div class="tag">Elegan Berkualitas dan Teruji · Cermin LED Custom, Bandung</div></div>
+    </div>
+    <div class="doc"><div class="title">Penawaran Harga</div><div class="no">PG-Q-2610-0001</div></div>
+  </div>
+
+  <div class="meta">
+    <div><div class="label">Ditujukan kepada</div><div class="v">[Nama Klien]</div><div class="s">Surabaya · Luar kota</div></div>
+    <div><div class="label">Tanggal</div><div class="v">16 Oktober 2026</div><div class="s">Berlaku hingga 23 Okt 2026</div></div>
+    <div><div class="label">Produksi</div><div class="v">1–5 hari kerja</div><div class="s">1 unit · setelah DP diterima</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th class="label">#</th><th class="label">Item &amp; spesifikasi</th><th class="label">Perhitungan</th><th class="label r">Jumlah</th></tr></thead>
+    <tbody>
+      <tr><td class="n">01</td><td class="item"><b>Cermin LED Premium · Rectangle 60 × 80 cm</b>
+        <div class="chips"><span>LED 3 warna</span><span>Touchscreen</span><span>Bevel 10 mm</span><span>Kaca 5 mm</span></div></td>
+        <td class="calc">0,48 m² × Rp1.750.000</td><td class="amt r">Rp840.000</td></tr>
+      <tr><td class="n">02</td><td class="item"><b>Sensor Tangan + Baterai</b>
+        <div class="chips"><span>Pengganti touchscreen kabel</span><span>Cas Type-C</span></div></td>
+        <td class="calc">1 unit × Rp250.000</td><td class="amt r">Rp250.000</td></tr>
+      <tr><td class="n">03</td><td class="item"><b>Antifog</b>
+        <div class="chips"><span>Tidak berembun setelah mandi</span></div></td>
+        <td class="calc">1 unit × Rp200.000</td><td class="amt r">Rp200.000</td></tr>
+    </tbody>
+  </table>
+
+  <div class="sumwrap">
+    <div class="pay">
+      <div class="label">Pembayaran ke</div>
+      <div class="bank">[Bank] · [No. Rekening]</div>
+      <div class="an">a.n. [Nama Penerima]</div>
+      <div class="note">Kirim bukti transfer DP ke WhatsApp [nomor resmi]. Pesanan masuk antrean produksi setelah DP diterima.</div>
+    </div>
+    <div>
+      <div class="rows">
+        <div class="r"><span>Subtotal produksi</span><b>Rp1.290.000</b></div>
+        <div class="r"><span>Ongkos kirim · luar kota, packing kayu</span><b>Rp1.300.000</b></div>
+        <div class="r"><span>Jasa pemasangan</span><span>Tidak termasuk</span></div>
+        <div class="tot"><span>TOTAL</span><b>Rp2.590.000</b></div>
+      </div>
+      <div class="split">
+        <div class="dp"><div class="label">DP 50%</div><div class="v">Rp1.295.000</div><div class="sub">untuk mulai produksi</div></div>
+        <div class="lunas"><div class="label">Pelunasan</div><div class="v">Rp1.295.000</div><div class="sub">sebelum barang dikirim</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="label">Alur pemesanan</div>
+    <div class="steps">
+      <div class="step on"><div class="dot">1</div><h5>DP 50%</h5><p>Tanda jadi. Pesanan masuk antrean produksi.</p></div>
+      <div class="step"><div class="dot">2</div><h5>Produksi 1–5 hari</h5><p>Foto &amp; video dikirim saat cermin dikerjakan.</p></div>
+      <div class="step"><div class="dot">3</div><h5>Pelunasan &amp; kirim</h5><p>Foto produk + packing kayu, lunas, lalu foto resi.</p></div>
+      <div class="step"><div class="dot">4</div><h5>Garansi 7 hari</h5><p>Berlaku sejak barang sampai.</p></div>
+    </div>
+  </div>
+
+  <div class="war">
+    <div><h5>Garansi 7 hari: refund atau buat ulang gratis</h5>
+      <p>Untuk cermin pecah/retak di perjalanan, LED atau touchscreen mati, dan produk tidak sesuai pesanan. Ongkir ditanggung pembeli.</p></div>
+    <div class="req"><span>Video unboxing utuh tanpa potong</span><span>Foto resi pengiriman</span><span>Lapor maks. 7 hari setelah sampai</span></div>
+  </div>
+
+</div>
+<div class="foot">
+  <div><b>Putra Glass</b> · Bandung · IG @putraglass.id · WA [nomor resmi]<br>Disiapkan oleh [Nama Admin]</div>
+  <div style="text-align:right">Penawaran berlaku hingga <b>23 Oktober 2026</b><br>Hal. 1 / 1</div>
+</div>
+<div class="stripe b"><i></i><i></i><i></i></div>
+</body></html>

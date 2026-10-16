@@ -1,0 +1,452 @@
+[
+  {
+    "id": 1,
+    "input": "Halo Min, saya Rina di Bandung. Mau custom cermin oval ukuran 60x90 cm dengan lampu LED 3 warna touch screen. Mau dipasang di kamar mandi. Total berapa ya?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 3629,
+    "durasiMs": 4978,
+    "draf": "Halo Kak Rina, terima kasih sudah menghubungi Putra Glass.\n\nUntuk cermin oval ukuran 60x90 cm dengan LED 3 warna dan touchscreen, harganya *Rp945.000*.\n\nBiaya kirim ke area Bandung *Rp750.000*, sehingga totalnya *Rp1.695.000*. Untuk proses cetak custom, kami memerlukan DP sebesar *Rp848.000* dan sisa *Rp847.000* dibayarkan saat barang siap kirim.\n\nPengerjaan sekitar 3-5 hari kerja. Ada tambahan spesifikasi lain seperti anti-fog atau bingkai aluminium, Kak?",
+    "spec": {
+      "nama_klien": "Rina",
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Halo Min, saya Rina di Bandung. Mau custom cermin oval ukuran 60x90 cm dengan lampu LED 3 warna touch screen. Mau dipasang di kamar mandi. Total berapa ya?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": "Bandung",
+      "zona": "dalam_kota",
+      "items": [
+        {
+          "bentuk": "oval",
+          "ukuran_1_cm": 60,
+          "ukuran_2_cm": 90,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Cermin oval 60x90 cm, LED 3 warna, touchscreen, untuk kamar mandi di Bandung."
+    }
+  },
+  {
+    "id": 2,
+    "input": "Siang Putra Glass, saya Budi dari Surabaya. Mau tanya cermin kotak 100 x 80 cm pakai frame aluminium hitam dan antifog. Berapa harganya ya kak dan ongkir ke Surabaya?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 4630,
+    "durasiMs": 5966,
+    "draf": "Siang Kak Budi. Untuk cermin LED custom ukuran 100x80 cm bentuk kotak dengan frame aluminium hitam dan fitur antifog, harganya *Rp2.000.000*.\n\nUntuk pengiriman ke Surabaya, estimasi ongkirnya *Rp1.300.000*.\n\nTotal keseluruhan menjadi *Rp3.300.000*, dengan ketentuan DP 50% sebesar *Rp1.650.000* dan pelunasan *Rp1.650.000* saat barang siap kirim.\n\nKami berikan garansi resmi 7 hari untuk keamanan pengiriman dan 3 bulan untuk fungsi kelistrikan serta touchscreen.\n\nAda detail tambahan yang ingin didiskusikan Kak Budi?",
+    "spec": {
+      "nama_klien": "Budi",
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Siang Putra Glass, saya Budi dari Surabaya. Mau tanya cermin kotak 100 x 80 cm pakai frame aluminium hitam dan antifog. Berapa harganya ya kak dan ongkir ke Surabaya?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": "Surabaya",
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 100,
+          "ukuran_2_cm": 80,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "aluminium",
+          "antifog": true,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Cermin kotak 100x80 cm, frame aluminium hitam, pakai antifog. Kirim ke Surabaya."
+    }
+  },
+  {
+    "id": 3,
+    "input": "Halo, ukuran katalog 30x45 cm itu ready stock gak? Saya mau ambil langsung ke workshop Bandung hari ini bisa?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 66112,
+    "durasiMs": 67233,
+    "draf": "Halo Kak! Untuk ukuran 30x45 cm kebetulan untuk spesifikasi lampu dan framenya mau dibuat seperti apa Kak? Atau mau cek model yang ada di katalog?\n\nUntuk pengambilan langsung ke workshop Bandung hari ini bisa, namun kami cek ketersediaan stok atau estimasi pengerjaannya dulu ya Kak.",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Halo, ukuran katalog 30x45 cm itu ready stock gak? Saya mau ambil langsung ke workshop Bandung hari ini bisa?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": "Bandung",
+      "zona": "dalam_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 30,
+          "ukuran_2_cm": 45,
+          "satuan_tidak_jelas": false,
+          "lampu": "1_warna",
+          "kontrol": "touchscreen",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien menanyakan ketersediaan ukuran 30x45 cm untuk diambil langsung ke workshop hari ini."
+    }
+  },
+  {
+    "id": 4,
+    "input": "Min, cermin bulat diameter 70 cm sensor tangan dan ada garansi gak ya kalau pecah di jalan?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 2979,
+    "durasiMs": 4111,
+    "draf": "Halo Kak, untuk cermin bulat diameter 70 cm dengan kontrol sensor tangan harganya *Rp960.000*.\n\nTerkait garansi, kami berikan garansi resmi 7 hari untuk pecah/retak di perjalanan atau tidak sesuai, serta 3 bulan untuk fungsi kelistrikan LED & sensor.\n\nBoleh dibantu info Kakak berlokasi di area mana agar kami bisa hitungkan estimasi pengirimannya?",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Min, cermin bulat diameter 70 cm sensor tangan dan ada garansi gak ya kalau pecah di jalan?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": null,
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "round",
+          "ukuran_1_cm": 70,
+          "ukuran_2_cm": 70,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "sensor",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien menanyakan cermin bulat diameter 70 cm dengan kontrol sensor tangan dan garansi pecah di jalan."
+    }
+  },
+  {
+    "id": 5,
+    "input": "Halo kak, untuk villa di Lembang mau pesan 3 unit cermin 50x80 cm LED 1 warna saja pakai saklar biasa. Apakah dapat potongan harga?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 3847,
+    "durasiMs": 5072,
+    "draf": "Halo Kak! Untuk pemesanan 3 unit cermin ukuran 50x80 cm dengan LED 1 warna dan saklar biasa, total harganya *Rp1.950.000*.\n\nUntuk pengiriman ke Lembang, biaya ongkirnya *Rp1.300.000*, sehingga total keseluruhan menjadi *Rp3.250.000*.\n\nDP 50% sebesar *Rp1.625.000* untuk lanjut proses produksi ya Kak.",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Halo kak, untuk villa di Lembang mau pesan 3 unit cermin 50x80 cm LED 1 warna saja pakai saklar biasa. Apakah dapat potongan harga?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": "Lembang",
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 50,
+          "ukuran_2_cm": 80,
+          "satuan_tidak_jelas": false,
+          "lampu": "1_warna",
+          "kontrol": "saklar",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 3
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Pemesanan 3 unit cermin 50x80 cm untuk villa di Lembang, LED 1 warna dengan saklar biasa, menanyakan diskon."
+    }
+  },
+  {
+    "id": 6,
+    "input": "Halo, saya arsitek di Jakarta butuh 5 unit cermin LED 60x100 cm untuk proyek apartemen. Minta penawaran resmi B2B ya.",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 20967,
+    "durasiMs": 22607,
+    "draf": "Halo Kak, terima kasih sudah menghubungi Putra Glass. Baik Kak, untuk kebutuhan 5 unit cermin LED ukuran 60x100 cm proyek apartemen di Jakarta, akan kami buatkan penawaran resminya.\n\nSebelumnya, untuk spesifikasi detailnya apakah menggunakan lampu 3 warna (touchscreen), frame aluminium/HPL, atau ada tambahan fitur seperti anti-fog?\n\nUntuk estimasi investasi proyek ini sebesar *Rp5.250.000* untuk total 5 unit, belum termasuk biaya kirim ke Jakarta sebesar *Rp1.300.000*, sehingga totalnya *Rp6.550.000* (DP *Rp3.275.000*, pelunasan *Rp3.275.000*).\n\nGaransi resmi kami mencakup 7 hari untuk kondisi fisik saat diterima dan 3 bulan untuk fungsi kelistrikan LED & touchscreen.",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Halo, saya arsitek di Jakarta butuh 5 unit cermin LED 60x100 cm untuk proyek apartemen. Minta penawaran resmi B2B ya."
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": "Jakarta",
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 60,
+          "ukuran_2_cm": 100,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 5
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": "B2B",
+      "bagian_tidak_terbaca": [],
+      "catatan": "Arsitek di Jakarta butuh 5 unit cermin LED 60x100 cm untuk proyek apartemen, minta penawaran resmi B2B."
+    }
+  },
+  {
+    "id": 7,
+    "input": "Kak, kalau cermin arch 70x120 cm pakai frame aluminium bisa gak ya?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 3321,
+    "durasiMs": 4555,
+    "draf": "Halo Kak, tentu bisa! Untuk cermin bentuk arch ukuran 70x120 cm dengan frame aluminium harganya (belum bisa kami hitung karena ukuran belum ada, boleh infokan rencana ukuran berapa cm Kak?).\n\nSpesifikasinya sudah termasuk lampu LED (bisa 3 warna), tombol touchscreen, kaca cermin tebal 5mm anti bintik hitam, dan garansi fungsi kelistrikan 3 bulan serta garansi pecah saat pengiriman selama 7 hari.\n\nBoleh infokan pengiriman ke area mana Kak? Biar kami bantu hitungkan estimasi ongkirnya.",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Kak, kalau cermin arch 70x120 cm pakai frame aluminium bisa gak ya?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": null,
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "arch",
+          "ukuran_1_cm": 70,
+          "ukuran_2_cm": 120,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "aluminium",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien menanyakan cermin bentuk arch ukuran 70x120 cm dengan frame aluminium."
+    }
+  },
+  {
+    "id": 8,
+    "input": "Mau tanya kak, kalau sandblast custom lebar 3 cm jarak dari tepi 2 cm di cermin 80x120 cm kena biaya tambahan berapa?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 4558,
+    "durasiMs": 5899,
+    "draf": "Halo Kak, untuk custom sandblast pinggir lebar 3 cm dengan jarak 2 cm dari tepi pada cermin ukuran 80x120 cm bisa kami kerjakan.\n\nBiaya dasar cermin ukuran tersebut adalah *Rp1.680.000*. Untuk detail tambahan biaya sandblast custom-nya akan saya hitungkan.\n\nBoleh infokan juga Kak, untuk cerminnya mau pakai lampu 1 warna atau 3 warna, pakai frame atau tanpa frame, serta dikirim ke area mana?",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Mau tanya kak, kalau sandblast custom lebar 3 cm jarak dari tepi 2 cm di cermin 80x120 cm kena biaya tambahan berapa?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": null,
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 120,
+          "ukuran_2_cm": 80,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": true,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien menanyakan biaya tambahan untuk sandblast custom lebar 3 cm jarak dari tepi 2 cm pada cermin ukuran 80x120 cm."
+    }
+  },
+  {
+    "id": 9,
+    "input": "Halo admin, kalau saya mau pesan cermin wastafel 50x70 cm tapi di tempat saya gak ada colokan listrik, ada solusinya gak?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 3673,
+    "durasiMs": 4863,
+    "draf": "Halo Kak! Untuk lokasi tanpa colokan listrik, kami sediakan opsi cermin LED dengan sistem baterai cas (rechargeable) yang praktis.\n\nUntuk spesifikasi ukuran 50x70 cm dengan baterai, estimasi harganya *Rp800.000*.\n\nBoleh dibantu info, pengiriman ke area mana Kak agar kami hitungkan ongkirnya?",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Halo admin, kalau saya mau pesan cermin wastafel 50x70 cm tapi di tempat saya gak ada colokan listrik, ada solusinya gak?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": null,
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": 50,
+          "ukuran_2_cm": 70,
+          "satuan_tidak_jelas": false,
+          "lampu": "1_warna",
+          "kontrol": "touchscreen_baterai",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien ingin cermin wastafel 50x70 cm tanpa colokan listrik (butuh opsi baterai/rechargeable)."
+    }
+  },
+  {
+    "id": 10,
+    "input": "Siang kak, saya mau tanya garansi cerminnya apa saja ya dan apakah kalau kirim ke luar pulau aman?",
+    "model": "gemini-3.5-flash-lite",
+    "thinking": "low",
+    "ttftMs": 3683,
+    "durasiMs": 4656,
+    "draf": "Siang Kak. Untuk garansi kami berikan 7 hari untuk pecah/retak di jalan atau tidak sesuai, serta 3 bulan untuk fungsi kelistrikan LED dan touchscreen.\n\nPengiriman ke luar pulau sangat aman Kak, karena kami menggunakan packing kayu khusus yang sudah teruji.\n\nBoleh info Kakak rencana mau kirim ke kota mana dan ukuran cermin yang dicari?",
+    "spec": {
+      "nama_klien": null,
+      "platform": "whatsapp",
+      "pesan": [
+        {
+          "pengirim": "klien",
+          "waktu": null,
+          "teks": "Siang kak, saya mau tanya garansi cerminnya apa saja ya dan apakah kalau kirim ke luar pulau aman?"
+        }
+      ],
+      "waktu_pesan_terakhir_klien": null,
+      "kota": null,
+      "zona": "luar_kota",
+      "items": [
+        {
+          "bentuk": "rectangle",
+          "ukuran_1_cm": null,
+          "ukuran_2_cm": null,
+          "satuan_tidak_jelas": false,
+          "lampu": "3_warna",
+          "kontrol": "touchscreen",
+          "frame": "tanpa",
+          "antifog": false,
+          "sandblast": {
+            "pakai": false,
+            "lebar_cm": null,
+            "jarak_tepi_cm": null
+          },
+          "qty": 1
+        }
+      ],
+      "perlu_pasang": false,
+      "indikasi_b2b": null,
+      "bagian_tidak_terbaca": [],
+      "catatan": "Klien menanyakan garansi dan keamanan pengiriman ke luar pulau."
+    }
+  }
+]

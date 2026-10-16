@@ -1,0 +1,796 @@
+import { describe, it, expect } from 'vitest';
+import { hitungPenawaran } from './pricing';
+import { defaultPriceBookV1 } from './default-price-book';
+import { PriceBookData, PenawaranInput } from '@/types/pricing';
+
+describe('Mesin Harga Putra Glass (pricing.ts)', () => {
+  // =========================================================================
+  // 1. Contoh Hitung Bagian 6 (Baseline Mutlak)
+  // =========================================================================
+  it('1. Contoh Bagian 6: 1 cermin 60x80 cm Premium, sensor+baterai, antifog, Surabaya (luar kota), tanpa pasang -> Rp2.590.000', () => {
+    const input: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 600, // 60 cm
+          lebar_mm: 800,   // 80 cm
+          lampu: '3_warna',
+          kontrol: 'sensor_baterai', // +Rp250.000
+          antifog: true,             // +Rp200.000
+          sandblast: { pakai: false },
+          qty: 1,
+        },
+      ],
+      zona: 'luar_kota', // Pengiriman luar kota list = Rp1.300.000
+      perlu_pasang: false,
+      segmen: 'B2C',
+      user_role: 'admin',
+    };
+
+    const hasil = hitungPenawaran(input, defaultPriceBookV1);
+
+    expect(hasil.items).toHaveLength(1);
+    const item = hasil.items[0];
+
+    // Luas = 0.48 m2, tarif Premium B2C = 1.750.000 -> 0.48 * 1.750.000 = 840.000
+    expect(item.luas_m2_display).toBe(0.48);
+    expect(item.harga_cermin).toBe(840_000);
+
+    // Add-on breakdown
+    expect(item.add_on_breakdown).toEqual([
+      {
+        kode: 'sensor_baterai',
+        label: 'Sensor Tangan + Baterai',
+        harga_satuan: 250_000,
+        total: 250_000,
+      },
+      {
+        kode: 'antifog',
+        label: 'Antifog Pad',
+        harga_satuan: 200_000,
+        total: 200_000,
+      },
+    ]);
+
+    // Subtotal cermin: 840.000 + 250.000 + 200.000 = 1.290.000
+    expect(item.harga_satuan_item).toBe(1_290_000);
+    expect(hasil.subtotal_cermin).toBe(1_290_000);
+
+    // Ongkir luar kota = 1.300.000
+    expect(hasil.ongkir.list).toBe(1_300_000);
+    expect(hasil.ongkir.deal).toBe(1_300_000);
+    expect(hasil.pasang.deal).toBe(0);
+
+    // Total = 1.290.000 + 1.300.000 = 2.590.000
+    expect(hasil.total).toBe(2_590_000);
+
+    // DP 50% = 1.295.000, Pelunasan = 1.295.000
+    expect(hasil.dp_50).toBe(1_295_000);
+    expect(hasil.pelunasan).toBe(1_295_000);
+  });
+
+  // =========================================================================
+  // 2. Katalog SKU Lookup vs Rumus Custom
+  // =========================================================================
+  it('2. Katalog SKU Lookup: Capsule 60x40 sandblast kabel -> Rp650.000; Custom 120x70 -> per m2', () => {
+    // 2a. SKU Katalog
+    const inputSku: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'capsule',
+          panjang_mm: 600,
+          lebar_mm: 400,
+          kontrol: 'touchscreen',
+          sandblast: { pakai: true, lebar_mm: 30, jarak_tepi_mm: 20 },
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resSku = hitungPenawaran(inputSku, defaultPriceBookV1);
+    expect(resSku.items[0].is_sku).toBe(true);
+    expect(resSku.items[0].sku_kode).toBe('CAPSULE-40x60-SB-TC');
+    expect(resSku.items[0].harga_cermin).toBe(650_000);
+
+    // 2b. Custom 120x70 cm (1200x700 mm) = 0.84 m2 * 1.750.000 = 1.470.000
+    const inputCustom: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'capsule',
+          panjang_mm: 1200,
+          lebar_mm: 700,
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resCustom = hitungPenawaran(inputCustom, defaultPriceBookV1);
+    expect(resCustom.items[0].is_sku).toBe(false);
+    expect(resCustom.items[0].harga_cermin).toBe(1_470_000);
+  });
+
+  // =========================================================================
+  // 3. Harga Minimum per Item (Custom 35x50 cm) vs SKU Katalog
+  // =========================================================================
+  it('3. Harga minimum hanya berlaku untuk custom: 35x50 cm naik ke Rp650.000; SKU 30x45 tetap Rp570.000', () => {
+    // Custom 35x50 cm: 0.175 m2 * 1.750.000 = 306.250 -> dibulatkan 310.000 -> naik ke minimum 650.000
+    const inputCustomKecil: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 350,
+          lebar_mm: 500,
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resCustomKecil = hitungPenawaran(inputCustomKecil, defaultPriceBookV1);
+    expect(resCustomKecil.items[0].is_sku).toBe(false);
+    expect(resCustomKecil.items[0].harga_cermin_raw).toBe(310_000);
+    expect(resCustomKecil.items[0].harga_cermin).toBe(650_000);
+
+    // SKU Katalog 30x45 cm tanpa sandblast seharga Rp570.000 (tidak dipaksa naik ke 650.000)
+    const inputSkuKecil: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 450,
+          lebar_mm: 300,
+          sandblast: { pakai: true },
+          kontrol: 'touchscreen',
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resSkuKecil = hitungPenawaran(inputSkuKecil, defaultPriceBookV1);
+    expect(resSkuKecil.items[0].is_sku).toBe(true);
+    expect(resSkuKecil.items[0].sku_kode).toBe('RECTANGLE-30x45-SB-TC');
+    expect(resSkuKecil.items[0].harga_cermin).toBe(570_000);
+  });
+
+  // =========================================================================
+  // 4. Pembulatan Nyata Cermin
+  // =========================================================================
+  it('4. Pembulatan cermin: custom 65x75 cm (4875 cm2 * 1.750.000 = 853.125) -> Rp855.000', () => {
+    // 650x750 mm = 0.4875 m2 * 1.750.000 = 853.125 -> ceil kelipatan 5.000 = 855.000
+    const input: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 650,
+          lebar_mm: 750,
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+
+    const res = hitungPenawaran(input, defaultPriceBookV1);
+    expect(res.items[0].harga_cermin_raw).toBe(855_000);
+    expect(res.items[0].harga_cermin).toBe(855_000);
+  });
+
+  // =========================================================================
+  // 5. DP Ganjil & Pelunasan Eksak
+  // =========================================================================
+  it('5. DP Ganjil: total Rp1.185.000 -> DP Rp593.000, pelunasan Rp592.000', () => {
+    // Custom cermin 35x50 cm (min Rp650.000) + Ongkir deal Rp535.000 = Rp1.185.000
+    const input: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 350,
+          lebar_mm: 500,
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      ongkir_deal: 535_000, // Di atas batas admin 500.000, valid tanpa approval
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+
+    const res = hitungPenawaran(input, defaultPriceBookV1);
+    expect(res.total).toBe(1_185_000);
+    // dp = ceil(1.185.000 / 2000) * 1000 = 593 * 1000 = 593.000
+    expect(res.dp_50).toBe(593_000);
+    // pelunasan = 1.185.000 - 593.000 = 592.000
+    expect(res.pelunasan).toBe(592_000);
+    expect(res.dp_50 + res.pelunasan).toBe(res.total);
+  });
+
+  // =========================================================================
+  // 6. Varian Basic Otomatis
+  // =========================================================================
+  it('6. Varian Basic: lampu 1_warna ATAU kontrol saklar -> tarif Basic Rp1.550.000/m2', () => {
+    // 6a. 1_warna
+    const input1Warna: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 1000,
+          lebar_mm: 1000, // 1 m2 * 1.550.000 = 1.550.000
+          lampu: '1_warna',
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const res1Warna = hitungPenawaran(input1Warna, defaultPriceBookV1);
+    expect(res1Warna.items[0].varian).toBe('basic');
+    expect(res1Warna.items[0].tarif_m2_dipakai).toBe(1_550_000);
+    expect(res1Warna.items[0].harga_cermin).toBe(1_550_000);
+
+    // 6b. Saklar
+    const inputSaklar: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 1000,
+          lebar_mm: 1000,
+          lampu: '3_warna',
+          kontrol: 'saklar',
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resSaklar = hitungPenawaran(inputSaklar, defaultPriceBookV1);
+    expect(resSaklar.items[0].varian).toBe('basic');
+    expect(resSaklar.items[0].tarif_m2_dipakai).toBe(1_550_000);
+    expect(resSaklar.items[0].harga_cermin).toBe(1_550_000);
+  });
+
+  // =========================================================================
+  // 7. Multi-Item & Total Unit Dihitung per Penawaran
+  // =========================================================================
+  it('7. Multi-Item: 2 item berbeda + total unit (qty 1 + qty 2 = 3 unit) dihitung per penawaran', () => {
+    const input: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 1000,
+          lebar_mm: 500, // 0.5 m2 * 1.750.000 = 875.000
+          qty: 1,
+        },
+        {
+          bentuk_kode: 'round',
+          panjang_mm: 850,
+          lebar_mm: 850, // 0.7225 m2 * 1.750.000 = 1.264.375 -> dibulatkan 1.265.000
+          qty: 2,        // 2 * 1.265.000 = 2.530.000
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+
+    const res = hitungPenawaran(input, defaultPriceBookV1);
+    expect(res.items).toHaveLength(2);
+    expect(res.total_unit).toBe(3);
+    // 875.000 + 2.530.000 = 3.405.000
+    expect(res.subtotal_cermin).toBe(3_405_000);
+  });
+
+  // =========================================================================
+  // 8. Segmen B2B: Tingkat Kosong vs Tingkat Terisi
+  // =========================================================================
+  it('8. Segmen B2B: tabel tingkat kosong -> harga list Rp1.750.000/m2; terisi -> tarif tingkat', () => {
+    // 8a. Tabel tingkat kosong (default v1)
+    const inputB2BDefault: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 1000,
+          lebar_mm: 1000,
+          qty: 5,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2B',
+    };
+    const resB2BDefault = hitungPenawaran(inputB2BDefault, defaultPriceBookV1);
+    expect(resB2BDefault.items[0].tarif_m2_dipakai).toBe(1_750_000);
+
+    // 8b. Tabel tingkat terisi (misal >= 5 unit tarif 1.600.000)
+    const configB2BTier: PriceBookData = {
+      ...defaultPriceBookV1,
+      tingkat_b2b: [
+        {
+          min_unit: 5,
+          max_unit: 10,
+          tarif_m2: 1_600_000,
+          wewenang: 'admin',
+        },
+      ],
+    };
+    const resB2BTier = hitungPenawaran(inputB2BDefault, configB2BTier);
+    expect(resB2BTier.items[0].tarif_m2_dipakai).toBe(1_600_000);
+    expect(resB2BTier.items[0].harga_cermin).toBe(1_600_000);
+  });
+
+  // =========================================================================
+  // 9. Validasi Sandblast
+  // =========================================================================
+  it('9. Sandblast: lebar 2-5 cm & tepi 1-5 cm lolos; di luar itu ditolak', () => {
+    // 9a. Lolos (lebar 30 mm = 3 cm, tepi 20 mm = 2 cm)
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [
+            {
+              bentuk_kode: 'rectangle',
+              panjang_mm: 1000,
+              lebar_mm: 1000,
+              sandblast: { pakai: true, lebar_mm: 30, jarak_tepi_mm: 20 },
+              qty: 1,
+            },
+          ],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).not.toThrow();
+
+    // 9b. Lebar 10 mm (1 cm) -> ditolak
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [
+            {
+              bentuk_kode: 'rectangle',
+              panjang_mm: 1000,
+              lebar_mm: 1000,
+              sandblast: { pakai: true, lebar_mm: 10, jarak_tepi_mm: 20 },
+              qty: 1,
+            },
+          ],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/Lebar sandblast/);
+
+    // 9c. Lebar 60 mm (6 cm) -> ditolak
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [
+            {
+              bentuk_kode: 'rectangle',
+              panjang_mm: 1000,
+              lebar_mm: 1000,
+              sandblast: { pakai: true, lebar_mm: 60, jarak_tepi_mm: 20 },
+              qty: 1,
+            },
+          ],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/Lebar sandblast/);
+  });
+
+  // =========================================================================
+  // 10. Validasi Frame Aluminium (Master Bentuk)
+  // =========================================================================
+  it('10. Frame Aluminium: Rectangle siku lolos (+Rp400.000); Oval ditolak dengan error deskriptif', () => {
+    // 10a. Rectangle siku lolos
+    const resRect = hitungPenawaran(
+      {
+        items: [
+          {
+            bentuk_kode: 'rectangle',
+            panjang_mm: 1000,
+            lebar_mm: 1000,
+            frame: 'aluminium',
+            qty: 1,
+          },
+        ],
+        zona: 'dalam_kota',
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resRect.items[0].add_on_breakdown).toContainEqual(
+      expect.objectContaining({ kode: 'frame_aluminium', total: 400_000 })
+    );
+
+    // 10b. Oval ditolak
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [
+            {
+              bentuk_kode: 'oval',
+              panjang_mm: 1000,
+              lebar_mm: 1000,
+              frame: 'aluminium',
+              qty: 1,
+            },
+          ],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/Frame aluminium hanya tersedia untuk bentuk persegi\/persegi panjang bersudut siku/);
+  });
+
+  // =========================================================================
+  // 11. Batas Nego Pasang Bandung & Persetujuan Server
+  // =========================================================================
+  it('11. Pasang Bandung: Rp500.000 lolos admin; Rp400.000 ditolak tanpa konfirmasi/alasan, lolos dgn konfirmasi+alasan; Rp299.000 ditolak mutlak', () => {
+    // 11a. Admin Rp500.000 (batas_admin = 500.000) -> lolos
+    const resAdminOk = hitungPenawaran(
+      {
+        items: [{ bentuk_kode: 'rectangle', panjang_mm: 1000, lebar_mm: 1000, qty: 1 }],
+        zona: 'dalam_kota',
+        perlu_pasang: true,
+        pasang_deal: 500_000,
+        segmen: 'B2C',
+        user_role: 'admin',
+      },
+      defaultPriceBookV1
+    );
+    expect(resAdminOk.pasang.deal).toBe(500_000);
+
+    // 11b. Admin Rp400.000 tanpa konfirmasi owner -> warning kuning & is_valid_untuk_pdf false
+    const resNoConfirm = hitungPenawaran(
+      {
+        items: [{ bentuk_kode: 'rectangle', panjang_mm: 1000, lebar_mm: 1000, qty: 1 }],
+        zona: 'dalam_kota',
+        perlu_pasang: true,
+        pasang_deal: 400_000,
+        segmen: 'B2C',
+        user_role: 'admin',
+      },
+      defaultPriceBookV1
+    );
+    expect(resNoConfirm.pasang.status).toBe('warning_kuning');
+    expect(resNoConfirm.pasang.pesan).toBe('Di bawah batas admin. Konfirmasi owner?');
+    expect(resNoConfirm.is_valid_untuk_pdf).toBe(false);
+
+    // 11c. Admin Rp400.000 dengan checkbox tapi alasan kosong -> tetap warning kuning
+    const resEmptyReason = hitungPenawaran(
+      {
+        items: [{ bentuk_kode: 'rectangle', panjang_mm: 1000, lebar_mm: 1000, qty: 1 }],
+        zona: 'dalam_kota',
+        perlu_pasang: true,
+        pasang_deal: 400_000,
+        segmen: 'B2C',
+        user_role: 'admin',
+        konfirmasi_owner: {
+          pasang: {
+            sudah_dikonfirmasi: true,
+            alasan: '   ', // kosong
+          },
+        },
+      },
+      defaultPriceBookV1
+    );
+    expect(resEmptyReason.pasang.status).toBe('warning_kuning');
+    expect(resEmptyReason.is_valid_untuk_pdf).toBe(false);
+
+    // 11d. Admin Rp400.000 DENGAN konfirmasi owner + alasan sah -> lolos
+    const resWithConfirmation = hitungPenawaran(
+      {
+        items: [{ bentuk_kode: 'rectangle', panjang_mm: 1000, lebar_mm: 1000, qty: 1 }],
+        zona: 'dalam_kota',
+        perlu_pasang: true,
+        pasang_deal: 400_000,
+        segmen: 'B2C',
+        user_role: 'admin',
+        konfirmasi_owner: {
+          pasang: {
+            sudah_dikonfirmasi: true,
+            alasan: 'Disetujui owner karena klien DP hari ini',
+          },
+        },
+      },
+      defaultPriceBookV1
+    );
+    expect(resWithConfirmation.pasang.deal).toBe(400_000);
+    expect(resWithConfirmation.pasang.dikonfirmasi_owner).toBe(true);
+    expect(resWithConfirmation.pasang.alasan).toBe('Disetujui owner karena klien DP hari ini');
+
+    // 11e. Siapa pun (termasuk owner) isi Rp299.000 (di bawah batas owner 300.000) -> status merah
+    const resBelowOwner = hitungPenawaran(
+      {
+        items: [{ bentuk_kode: 'rectangle', panjang_mm: 1000, lebar_mm: 1000, qty: 1 }],
+        zona: 'dalam_kota',
+        perlu_pasang: true,
+        pasang_deal: 299_000,
+        segmen: 'B2C',
+        user_role: 'owner',
+        konfirmasi_owner: {
+          pasang: {
+            sudah_dikonfirmasi: true,
+            alasan: 'Owner override',
+          },
+        },
+      },
+      defaultPriceBookV1
+    );
+    expect(resBelowOwner.pasang.status).toBe('error_merah');
+    expect(resBelowOwner.pasang.pesan).toContain('Minimal Rp300.000');
+    expect(resBelowOwner.is_valid_untuk_pdf).toBe(false);
+  });
+
+  // =========================================================================
+  // 12. Add-on Tak Terdaftar -> Error perlu_owner
+  // =========================================================================
+  it('12. Add-on tak terdaftar: minta logo_custom -> throw error perlu_owner, bukan Rp0', () => {
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [
+            {
+              bentuk_kode: 'rectangle',
+              panjang_mm: 1000,
+              lebar_mm: 1000,
+              add_ons_lain: ['logo_custom'],
+              qty: 1,
+            },
+          ],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/perlu_owner: Add-on 'logo_custom'/);
+  });
+
+  // =========================================================================
+  // 13. Immutability Versi Buku Harga & Validasi Ukuran
+  // =========================================================================
+  it('13. Versi Buku Harga & Validasi Ukuran: v1 tetap Rp840.000 saat v2 tarif Rp2.000.000; ukuran <= 0 error', () => {
+    const itemInput = {
+      bentuk_kode: 'rectangle',
+      panjang_mm: 600,
+      lebar_mm: 800,
+      qty: 1,
+    };
+
+    // 13a. Hitung di V1
+    const resV1 = hitungPenawaran(
+      {
+        items: [itemInput],
+        zona: 'dalam_kota',
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resV1.items[0].harga_cermin).toBe(840_000);
+
+    // 13b. Hitung di V2 (tarif dinaikkan ke Rp2.000.000)
+    const priceBookV2: PriceBookData = {
+      ...defaultPriceBookV1,
+      versi: 2,
+      tarif_m2: {
+        ...defaultPriceBookV1.tarif_m2,
+        premium_b2c: 2_000_000,
+      },
+    };
+    const resV2 = hitungPenawaran(
+      {
+        items: [itemInput],
+        zona: 'dalam_kota',
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      priceBookV2
+    );
+    // 0.48 * 2.000.000 = 960.000
+    expect(resV2.items[0].harga_cermin).toBe(960_000);
+
+    // Penawaran lama yang disimpan dengan V1 tetap 840.000
+    expect(resV1.items[0].harga_cermin).toBe(840_000);
+
+    // 13c. Validasi ukuran negatif / nol
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [{ bentuk_kode: 'rectangle', panjang_mm: 0, lebar_mm: 800, qty: 1 }],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/lebih besar dari 0/);
+
+    expect(() =>
+      hitungPenawaran(
+        {
+          items: [{ bentuk_kode: 'rectangle', panjang_mm: 3500, lebar_mm: 800, qty: 1 }],
+          zona: 'dalam_kota',
+          perlu_pasang: false,
+          segmen: 'B2C',
+        },
+        defaultPriceBookV1
+      )
+    ).toThrow(/Dimensi maksimal produksi/);
+  });
+
+  // =========================================================================
+  // 14. Tambahan Tes SKU Katalog untuk Kontrol Sensor (ST) dan Baterai (BT)
+  // =========================================================================
+  it('14. SKU Katalog ST & BT: Rectangle 40x60 Sensor (ST) -> Rp755.000; Capsule 60x40 Baterai (BT) -> Rp850.000', () => {
+    // 14a. SKU ST: Rectangle 40x60 sandblast sensor tangan (ST) di katalog = Rp755.000
+    const resSt = hitungPenawaran(
+      {
+        items: [
+          {
+            bentuk_kode: 'rectangle',
+            panjang_mm: 400,
+            lebar_mm: 600,
+            kontrol: 'sensor',
+            sandblast: { pakai: true },
+            qty: 1,
+          },
+        ],
+        zona: 'dalam_kota',
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resSt.items[0].is_sku).toBe(true);
+    expect(resSt.items[0].sku_kode).toBe('RECTANGLE-40x60-SB-ST');
+    expect(resSt.items[0].harga_cermin).toBe(755_000);
+    expect(resSt.items[0].add_on_breakdown).toHaveLength(0);
+    expect(resSt.items[0].harga_satuan_item).toBe(755_000);
+
+    // 14b. SKU BT: Capsule 60x40 sandblast baterai (BT) di katalog = Rp850.000
+    const resBt = hitungPenawaran(
+      {
+        items: [
+          {
+            bentuk_kode: 'capsule',
+            panjang_mm: 600,
+            lebar_mm: 400,
+            kontrol: 'baterai',
+            sandblast: { pakai: true },
+            qty: 1,
+          },
+        ],
+        zona: 'dalam_kota',
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resBt.items[0].is_sku).toBe(true);
+    expect(resBt.items[0].sku_kode).toBe('CAPSULE-40x60-SB-BT');
+    expect(resBt.items[0].harga_cermin).toBe(850_000);
+    expect(resBt.items[0].harga_satuan_item).toBe(850_000);
+  });
+
+  // =========================================================================
+  // 15. Kasus Ongkir Luar Kota (Batas Admin 1.150.000, Batas Owner 650.000)
+  // =========================================================================
+  it('15. Ongkir Luar Kota: 1.150.000 (lolos), 900.000 + konfirmasi (lolos), 900.000 tanpa konfirmasi (total tampil, simpan ditolak), 650.000 + konfirmasi (lolos), 600.000 (merah/ditolak, batas owner 650.000)', () => {
+    const baseItem = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
+
+    // 15a. Ongkir 1.150.000 (lolos)
+    const res1150 = hitungPenawaran(
+      {
+        items: [baseItem],
+        zona: 'luar_kota',
+        ongkir_deal: 1_150_000,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res1150.ongkir.deal).toBe(1_150_000);
+    expect(res1150.ongkir.status).toBe('ok');
+    expect(res1150.is_valid_untuk_pdf).toBe(true);
+
+    // 15b. Ongkir 900.000 + konfirmasi (lolos)
+    const res900Ok = hitungPenawaran(
+      {
+        items: [baseItem],
+        zona: 'luar_kota',
+        ongkir_deal: 900_000,
+        perlu_pasang: false,
+        segmen: 'B2C',
+        konfirmasi_owner: {
+          ongkir: {
+            sudah_dikonfirmasi: true,
+            alasan: 'Promo proyek langganan',
+          },
+        },
+      },
+      defaultPriceBookV1
+    );
+    expect(res900Ok.ongkir.deal).toBe(900_000);
+    expect(res900Ok.ongkir.status).toBe('ok');
+    expect(res900Ok.ongkir.dikonfirmasi_owner).toBe(true);
+    expect(res900Ok.is_valid_untuk_pdf).toBe(true);
+
+    // 15c. Ongkir 900.000 TANPA konfirmasi (simpan ditolak / is_valid_untuk_pdf: false, total tetap tampil!)
+    const res900NoConfirm = hitungPenawaran(
+      {
+        items: [baseItem],
+        zona: 'luar_kota',
+        ongkir_deal: 900_000,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res900NoConfirm.ongkir.deal).toBe(900_000);
+    expect(res900NoConfirm.ongkir.status).toBe('warning_kuning');
+    expect(res900NoConfirm.ongkir.pesan).toBe('Di bawah batas admin. Konfirmasi owner?');
+    expect(res900NoConfirm.is_valid_untuk_pdf).toBe(false);
+    expect(res900NoConfirm.total).toBe(840_000 + 900_000); // Total tetap dihitung!
+
+    // 15d. Ongkir 650.000 + konfirmasi (lolos - tepat di batas owner 50%)
+    const res650Ok = hitungPenawaran(
+      {
+        items: [baseItem],
+        zona: 'luar_kota',
+        ongkir_deal: 650_000,
+        perlu_pasang: false,
+        segmen: 'B2C',
+        konfirmasi_owner: {
+          ongkir: {
+            sudah_dikonfirmasi: true,
+            alasan: 'Ongkir maksimal dibagi 2 disetujui owner',
+          },
+        },
+      },
+      defaultPriceBookV1
+    );
+    expect(res650Ok.ongkir.deal).toBe(650_000);
+    expect(res650Ok.ongkir.status).toBe('ok');
+    expect(res650Ok.is_valid_untuk_pdf).toBe(true);
+
+    // 15e. Ongkir 600.000 (ditolak / status merah, batas owner 650.000)
+    const res600Error = hitungPenawaran(
+      {
+        items: [baseItem],
+        zona: 'luar_kota',
+        ongkir_deal: 600_000,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res600Error.ongkir.deal).toBe(600_000);
+    expect(res600Error.ongkir.status).toBe('error_merah');
+    expect(res600Error.ongkir.pesan).toContain('Minimal Rp650.000 (ongkir maks. dibagi 2)');
+    expect(res600Error.ongkir.batas_owner).toBe(650_000);
+    expect(res600Error.is_valid_untuk_pdf).toBe(false);
+    expect(res600Error.total).toBe(840_000 + 600_000); // Total tetap dihitung!
+  });
+});

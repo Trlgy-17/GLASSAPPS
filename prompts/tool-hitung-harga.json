@@ -1,0 +1,30 @@
+{
+  "name": "hitung_harga",
+  "description": "Menghitung harga cermin Putra Glass dari buku harga aktif. Pakai untuk ukuran atau opsi alternatif yang belum ada di <hasil_kalkulator>. Jangan pernah menghitung harga sendiri.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bentuk": { "type": "string" },
+            "panjang_cm": { "type": "number" },
+            "lebar_cm": { "type": "number" },
+            "lampu": { "enum": ["3_warna", "1_warna"] },
+            "kontrol": { "enum": ["touchscreen", "touchscreen_baterai", "sensor", "sensor_baterai", "saklar"] },
+            "frame": { "enum": ["tanpa", "hpl", "aluminium"] },
+            "antifog": { "type": "boolean" },
+            "sandblast": { "type": "boolean" },
+            "qty": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["panjang_cm", "lebar_cm", "qty"]
+        }
+      },
+      "zona": { "enum": ["dalam_kota", "luar_kota"] },
+      "perlu_pasang": { "type": "boolean" }
+    },
+    "required": ["items"]
+  }
+}
