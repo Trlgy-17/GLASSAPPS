@@ -15,6 +15,8 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <head>
+        <link rel="preload" href="/fonts/plus-jakarta-sans-latin-700-normal.woff" as="font" type="font/woff" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/plus-jakarta-sans-latin-400-normal.woff" as="font" type="font/woff" crossOrigin="anonymous" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
