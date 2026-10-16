@@ -2,39 +2,35 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   parseDraftChain,
   executeWithHedgingAndFallback,
-  setGeminiDailyQuotaExhausted,
-  resetGeminiDailyQuota,
-  getGeminiDailyQuotaExhaustedUntil,
+  setModelDailyQuotaExhausted,
+  resetAllDailyQuota,
+  isModelDailyQuotaExhausted,
   calculateEstimatedCostRupiah,
+  formatModelDisplayName,
+  AI_ALL_EXHAUSTED_MESSAGE,
   ChainTarget,
 } from './fallback-chain';
-import {
-  setClaudeInactive,
-  resetClaudeInactive,
-  getClaudeInactiveState,
-} from './anthropic-provider';
 
-describe('AI Fallback Chain Engine (Gemini & Claude Auto-Fallback)', () => {
+describe('AI Fallback Chain Engine (Rantai Gemini Murni)', () => {
   beforeEach(() => {
-    resetGeminiDailyQuota();
-    resetClaudeInactive();
+    resetAllDailyQuota();
   });
 
-  it('1. Parsing AI_DRAFT_CHAIN dari string konfigurasi ke target chain yang valid', () => {
+  it('1. Parsing AI_DRAFT_CHAIN dari string konfigurasi ke target chain Gemini yang valid', () => {
     const chain = parseDraftChain(
-      'gemini:gemini-3.6-flash,anthropic:claude-haiku-5-5,gemini:gemini-3.5-flash-lite'
+      'gemini:gemini-3.6-flash,gemini:gemini-3.8-flash,gemini:gemini-3.5-flash-lite'
     );
     expect(chain.length).toBe(3);
     expect(chain[0]).toEqual({ provider: 'gemini', model: 'gemini-3.6-flash' });
-    expect(chain[1]).toEqual({ provider: 'anthropic', model: 'claude-haiku-5-5' });
+    expect(chain[1]).toEqual({ provider: 'gemini', model: 'gemini-3.8-flash' });
     expect(chain[2]).toEqual({ provider: 'gemini', model: 'gemini-3.5-flash-lite' });
   });
 
-  it('2. Simulasi Gemini 503 (Overloaded) -> Langsung pindah ke Claude tanpa retry di Gemini', async () => {
+  it('2. Simulasi Gemini 503 (Overloaded) -> Langsung pindah ke model berikutnya tanpa retry', async () => {
     const callLog: string[] = [];
     const chain: ChainTarget[] = [
       { provider: 'gemini', model: 'gemini-3.6-flash' },
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
+      { provider: 'gemini', model: 'gemini-3.8-flash' },
     ];
 
     const res = await executeWithHedgingAndFallback({
@@ -42,72 +38,72 @@ describe('AI Fallback Chain Engine (Gemini & Claude Auto-Fallback)', () => {
       hedgingTimeoutMs: 4000,
       executeFn: async (target) => {
         callLog.push(`${target.provider}:${target.model}`);
-        if (target.provider === 'gemini') {
+        if (target.model === 'gemini-3.6-flash') {
           const err: any = new Error('503 Service Unavailable: Model is overloaded');
           err.status = 503;
           throw err;
         }
         return {
-          result: 'Draf dari Claude Haiku',
+          result: 'Draf dari Gemini 3.8 Flash',
           inputTokens: 500,
           outputTokens: 150,
         };
       },
     });
 
-    expect(callLog).toEqual(['gemini:gemini-3.6-flash', 'anthropic:claude-haiku-5-5']);
-    expect(res.winner).toEqual({ provider: 'anthropic', model: 'claude-haiku-5-5' });
+    expect(callLog).toEqual(['gemini:gemini-3.6-flash', 'gemini:gemini-3.8-flash']);
+    expect(res.winner).toEqual({ provider: 'gemini', model: 'gemini-3.8-flash' });
     expect(res.alasanPindah).toBe('503');
-    expect(res.result).toBe('Draf dari Claude Haiku');
+    expect(res.result).toBe('Draf dari Gemini 3.8 Flash');
   });
 
-  it('3. Simulasi Gemini 429 Kuota Harian Habis -> Tandai tidak tersedia sampai reset kuota & panggilan berikutnya langsung lewati Gemini', async () => {
+  it('3. Simulasi 429 Kuota Harian pada model tertentu -> Model itu dilewati sampai reset & panggilan berikutnya langsung pakai model kedua', async () => {
     const chain: ChainTarget[] = [
       { provider: 'gemini', model: 'gemini-3.6-flash' },
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
     ];
 
-    // Panggilan pertama: Gemini 429
+    // Panggilan pertama: gemini-3.6-flash terkena 429
     const callLog1: string[] = [];
     const res1 = await executeWithHedgingAndFallback({
       chain,
       hedgingTimeoutMs: 4000,
       executeFn: async (target) => {
-        callLog1.push(`${target.provider}:${target.model}`);
-        if (target.provider === 'gemini') {
+        callLog1.push(target.model);
+        if (target.model === 'gemini-3.6-flash') {
           const err: any = new Error('Resource has been exhausted (e.g. check quota). PerDay limit reached.');
           err.status = 429;
           throw err;
         }
-        return { result: 'Draf pertama dari Claude' };
+        return { result: 'Draf dari Gemini 3.5 Flash Lite' };
       },
     });
 
-    expect(res1.winner.provider).toBe('anthropic');
+    expect(res1.winner.model).toBe('gemini-3.5-flash-lite');
     expect(res1.alasanPindah).toBe('429');
-    expect(getGeminiDailyQuotaExhaustedUntil()).not.toBeNull();
+    expect(isModelDailyQuotaExhausted('gemini-3.6-flash')).toBe(true);
 
-    // Panggilan kedua: Gemini langsung dilewati tanpa dicoba
+    // Panggilan kedua: gemini-3.6-flash langsung dilewati tanpa dicoba
     const callLog2: string[] = [];
     const res2 = await executeWithHedgingAndFallback({
       chain,
       hedgingTimeoutMs: 4000,
       executeFn: async (target) => {
-        callLog2.push(`${target.provider}:${target.model}`);
-        return { result: 'Draf kedua langsung dari Claude' };
+        callLog2.push(target.model);
+        return { result: 'Draf kedua langsung dari Gemini 3.5 Flash Lite' };
       },
     });
 
-    expect(callLog2).toEqual(['anthropic:claude-haiku-5-5']);
-    expect(res2.winner.provider).toBe('anthropic');
+    expect(callLog2).toEqual(['gemini-3.5-flash-lite']);
+    expect(res2.winner.model).toBe('gemini-3.5-flash-lite');
   });
 
-  it('4. Simulasi Hedging 4 Detik: Gemini lambat (>4 dtk) -> Claude dipanggil paralel & yang selesai duluan menang', async () => {
+  it('4. Simulasi Hedging 4 Detik: Model pertama lambat (>4 dtk) -> Model kedua dipanggil paralel & yang selesai duluan menang', async () => {
     vi.useFakeTimers();
     try {
       const chain: ChainTarget[] = [
         { provider: 'gemini', model: 'gemini-3.6-flash' },
-        { provider: 'anthropic', model: 'claude-haiku-5-5' },
+        { provider: 'gemini', model: 'gemini-3.8-flash' },
       ];
 
       const callLog: string[] = [];
@@ -116,142 +112,68 @@ describe('AI Fallback Chain Engine (Gemini & Claude Auto-Fallback)', () => {
         chain,
         hedgingTimeoutMs: 4000,
         executeFn: async (target, signal) => {
-          callLog.push(`${target.provider}:${target.model}`);
-          if (target.provider === 'gemini') {
-            // Gemini menggantung sampai sinyal abort
+          callLog.push(target.model);
+          if (target.model === 'gemini-3.6-flash') {
             return new Promise((_, reject) => {
               signal.addEventListener('abort', () => reject(new Error('Aborted by hedging')));
             });
           } else {
-            // Claude langsung menjawab
-            return { result: 'Draf Claude Cepat Menang' };
+            return { result: 'Draf dari Gemini 3.8 Flash Cepat' };
           }
         },
       });
 
-      // Majukan timer deterministik 4001ms untuk memicu hedging tanpa jeda wall-clock
+      // Majukan timer fake 4001ms
       await vi.advanceTimersByTimeAsync(4001);
 
       const res = await executionPromise;
-      expect(res.winner.provider).toBe('anthropic');
-      expect(res.result).toBe('Draf Claude Cepat Menang');
-      expect(res.alasanPindah).toBe('hedging_4s');
-      expect(callLog).toContain('gemini:gemini-3.6-flash');
-      expect(callLog).toContain('anthropic:claude-haiku-5-5');
+      expect(res.winner.model).toBe('gemini-3.8-flash');
+      expect(res.result).toBe('Draf dari Gemini 3.8 Flash Cepat');
+      expect(res.alasanPindah).toBe('timeout');
+      expect(callLog).toContain('gemini-3.6-flash');
+      expect(callLog).toContain('gemini-3.8-flash');
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('5. Simulasi Claude 529 (Overloaded) -> Pindah ke target berikutnya (Gemini 3.5 Flash Lite)', async () => {
-    const chain: ChainTarget[] = [
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
-    ];
-
-    const res = await executeWithHedgingAndFallback({
-      chain,
-      hedgingTimeoutMs: 4000,
-      executeFn: async (target) => {
-        if (target.provider === 'anthropic') {
-          const err: any = new Error('529 Overloaded: Claude is temporarily overloaded');
-          err.status = 529;
-          throw err;
-        }
-        return { result: 'Draf dari Gemini Lite' };
-      },
-    });
-
-    expect(res.winner).toEqual({ provider: 'gemini', model: 'gemini-3.5-flash-lite' });
-    expect(res.alasanPindah).toBe('529');
-    expect(res.result).toBe('Draf dari Gemini Lite');
-  });
-
-  it('6. Simulasi Saldo Claude Habis (Credit Balance Too Low) -> Claude dinonaktifkan, muncul banner admin, pindah ke Gemini', async () => {
-    const chain: ChainTarget[] = [
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
-      { provider: 'gemini', model: 'gemini-3.6-flash' },
-    ];
-
-    const res = await executeWithHedgingAndFallback({
-      chain,
-      hedgingTimeoutMs: 4000,
-      executeFn: async (target) => {
-        if (target.provider === 'anthropic') {
-          const err: any = new Error(
-            '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}'
-          );
-          err.status = 400;
-          throw err;
-        }
-        return { result: 'Draf aman dari Gemini' };
-      },
-    });
-
-    const claudeState = getClaudeInactiveState();
-    expect(claudeState.active).toBe(false);
-    expect(claudeState.reason).toBe('saldo');
-    expect(claudeState.message).toContain('AI cadangan (Claude) tidak aktif: cek saldo/API key.');
-
-    expect(res.winner.provider).toBe('gemini');
-    expect(res.claudeWarning).toBe('AI cadangan (Claude) tidak aktif: cek saldo/API key.');
-    expect(res.result).toBe('Draf aman dari Gemini');
-  });
-
-  it('7. Simulasi API Key Claude Kedaluwarsa / Salah (401) -> Banner minta ganti di .env, pindah ke Gemini', async () => {
-    const chain: ChainTarget[] = [
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
-      { provider: 'gemini', model: 'gemini-3.6-flash' },
-    ];
-
-    const res = await executeWithHedgingAndFallback({
-      chain,
-      hedgingTimeoutMs: 4000,
-      executeFn: async (target) => {
-        if (target.provider === 'anthropic') {
-          const err: any = new Error('401 authentication_error: invalid x-api-key');
-          err.status = 401;
-          throw err;
-        }
-        return { result: 'Draf dari Gemini' };
-      },
-    });
-
-    const claudeState = getClaudeInactiveState();
-    expect(claudeState.active).toBe(false);
-    expect(claudeState.reason).toBe('key_invalid');
-    expect(claudeState.message).toContain('API key Claude kedaluwarsa atau salah. Ganti di .env lalu restart aplikasi.');
-
-    expect(res.winner.provider).toBe('gemini');
-    expect(res.claudeWarning).toContain('API key Claude kedaluwarsa atau salah');
-  });
-
-  it('8. Jika semua provider gagal -> Melempar pesan ramah tanpa error JSON mentah', async () => {
+  it('5. Jika semua model habis / gagal -> Melempar pesan "AI sedang penuh. Ketik balasan manual atau pakai Kalkulator."', async () => {
     const chain: ChainTarget[] = [
       { provider: 'gemini', model: 'gemini-3.6-flash' },
-      { provider: 'anthropic', model: 'claude-haiku-5-5' },
+      { provider: 'gemini', model: 'gemini-3.8-flash' },
     ];
 
     await expect(
       executeWithHedgingAndFallback({
         chain,
         hedgingTimeoutMs: 4000,
-        executeFn: async (target) => {
+        executeFn: async () => {
           throw new Error('503 Service Unavailable');
         },
       })
-    ).rejects.toThrow(/Server AI sedang sibuk/);
+    ).rejects.toThrow(AI_ALL_EXHAUSTED_MESSAGE);
   });
 
-  it('9. Penghitungan estimasi biaya Rupiah akurat per provider dan model', () => {
-    // Claude Haiku 5.5: 1.000 in, 500 out -> ($0.80*1k + $4.00*0.5k)/1M = $0.0028 -> ~Rp44.8
-    const costClaude = calculateEstimatedCostRupiah('anthropic', 'claude-haiku-5-5', 1000, 500);
-    expect(costClaude).toBeGreaterThan(40);
-    expect(costClaude).toBeLessThan(50);
+  it('6. Format display nama model Gemini bersih dan tepat', () => {
+    expect(formatModelDisplayName('gemini-3.6-flash')).toBe('Gemini 3.6 Flash');
+    expect(formatModelDisplayName('gemini-3.8-flash')).toBe('Gemini 3.8 Flash');
+    expect(formatModelDisplayName('gemini-3.5-flash-lite')).toBe('Gemini 3.5 Flash Lite');
+  });
 
+  it('7. Penghitungan estimasi biaya Rupiah akurat per model Gemini', () => {
     // Gemini 3.5 Flash Lite: 1.000 in, 500 out -> ($0.075*1k + $0.30*0.5k)/1M = $0.000225 -> ~Rp3.6
-    const costGeminiLite = calculateEstimatedCostRupiah('gemini', 'gemini-3.5-flash-lite', 1000, 500);
-    expect(costGeminiLite).toBeGreaterThan(3);
-    expect(costGeminiLite).toBeLessThan(5);
+    const costLite = calculateEstimatedCostRupiah('gemini-3.5-flash-lite', 1000, 500);
+    expect(costLite).toBeGreaterThan(3);
+    expect(costLite).toBeLessThan(5);
+
+    // Gemini 3.6 Flash: 1.000 in, 500 out -> ($0.15*1k + $0.60*0.5k)/1M = $0.00045 -> ~Rp7.2
+    const cost36 = calculateEstimatedCostRupiah('gemini-3.6-flash', 1000, 500);
+    expect(cost36).toBeGreaterThan(7);
+    expect(cost36).toBeLessThan(8);
+
+    // Gemini 3.8 Flash: 1.000 in, 500 out -> ($0.20*1k + $0.80*0.5k)/1M = $0.0006 -> ~Rp9.6
+    const cost38 = calculateEstimatedCostRupiah('gemini-3.8-flash', 1000, 500);
+    expect(cost38).toBeGreaterThan(9);
+    expect(cost38).toBeLessThan(11);
   });
 });

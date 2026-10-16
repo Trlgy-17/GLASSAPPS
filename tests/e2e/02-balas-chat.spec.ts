@@ -238,25 +238,34 @@ test.describe('A.2 Balas Chat - Interaksi, Validasi Berkas, & Ketahanan', () => 
     await expect(page.locator('text=/Berhasil dicatat ke kasus/i')).toBeVisible();
   });
 
-  test('8. Simulasi 503 / 429 / kuota habis menampilkan pesan ramah tanpa error JSON mentah', async ({ page }) => {
-    // Mock kegagalan server AI (503 Service Unavailable)
+  test('8. Simulasi semua model habis: tampil pesan ramah dan tombol Buka Kalkulator, input admin tidak hilang', async ({
+    page,
+  }) => {
+    // Mock kegagalan semua model AI (503 / kuota habis)
     await page.route('**/api/balas/proses', async (route) => {
       await route.fulfill({
         status: 503,
         contentType: 'application/json',
         body: JSON.stringify({
           success: false,
-          error: 'Server AI sedang sibuk. Screenshot & catatan tetap tersimpan, klik Coba Lagi.',
+          error: 'AI sedang penuh. Ketik balasan manual atau pakai Kalkulator.',
         }),
       });
     });
 
-    const textarea = page.locator('textarea');
-    await textarea.fill('Pertanyaan klien simulasi 503');
+    const textarea = page.locator('textarea').first();
+    await textarea.fill('Pertanyaan klien saat AI sedang penuh');
     await page.click('button#btn-buat-draf');
 
-    // Banner error ramah harus muncul, BUKAN stack trace atau JSON mentah
-    const errorBanner = page.locator('text=/Server AI sedang sibuk.*Coba Lagi/i');
+    // Banner error ramah harus muncul dengan teks persis & tombol Buka Kalkulator
+    const errorBanner = page.locator('#banner-error-ai');
     await expect(errorBanner).toBeVisible({ timeout: 10000 });
+    await expect(errorBanner).toContainText('AI sedang penuh. Ketik balasan manual atau pakai Kalkulator.');
+
+    const btnBukaKalkulator = page.locator('#btn-buka-kalkulator');
+    await expect(btnBukaKalkulator).toBeVisible();
+
+    // Input admin TIDAK BOLEH hilang
+    await expect(textarea).toHaveValue('Pertanyaan klien saat AI sedang penuh');
   });
 });

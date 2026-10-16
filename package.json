@@ -20,7 +20,6 @@
     "fast-glob": "^3.3.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
     "@google/genai": "^2.30.0",
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.7",

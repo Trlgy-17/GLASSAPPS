@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { getClaudeInactiveState } from '@/lib/ai/anthropic-provider';
-import { getGeminiDailyQuotaExhaustedUntil, parseDraftChain } from '@/lib/ai/fallback-chain';
+import { getDailyQuotaStatus, parseDraftChain } from '@/lib/ai/fallback-chain';
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -58,59 +57,43 @@ export async function GET(req: NextRequest) {
 
     const rows = logs || [];
 
-    let geminiCount = 0;
-    let geminiCost = 0;
-    let geminiTokensIn = 0;
-    let geminiTokensOut = 0;
+    let totalCount = 0;
+    let totalCost = 0;
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
 
-    let anthropicCount = 0;
-    let anthropicCost = 0;
-    let anthropicTokensIn = 0;
-    let anthropicTokensOut = 0;
+    const perModelStats: Record<string, { count: number; cost: number; token_in: number; token_out: number }> = {};
 
     for (const row of rows) {
-      const prov = (row.provider || '').toLowerCase();
-      const isAnthropic = prov === 'anthropic' || (row.model || '').toLowerCase().includes('claude');
+      const model = row.model || 'gemini-3.6-flash';
       const cost = Number(row.biaya_perkiraan || 0);
       const inTok = Number(row.token_in || 0);
       const outTok = Number(row.token_out || 0);
 
-      if (isAnthropic) {
-        anthropicCount++;
-        anthropicCost += cost;
-        anthropicTokensIn += inTok;
-        anthropicTokensOut += outTok;
-      } else {
-        geminiCount++;
-        geminiCost += cost;
-        geminiTokensIn += inTok;
-        geminiTokensOut += outTok;
-      }
-    }
+      totalCount++;
+      totalCost += cost;
+      totalTokensIn += inTok;
+      totalTokensOut += outTok;
 
-    const totalCount = geminiCount + anthropicCount;
-    const totalCost = Math.round((geminiCost + anthropicCost) * 100) / 100;
+      if (!perModelStats[model]) {
+        perModelStats[model] = { count: 0, cost: 0, token_in: 0, token_out: 0 };
+      }
+      perModelStats[model].count++;
+      perModelStats[model].cost += cost;
+      perModelStats[model].token_in += inTok;
+      perModelStats[model].token_out += outTok;
+    }
 
     return NextResponse.json({
       success: true,
       ringkasan_harian: {
         tanggal: dateStr,
         total_draf: totalCount,
-        total_biaya_rp: totalCost,
-        gemini: {
-          draf_count: geminiCount,
-          token_in: geminiTokensIn,
-          token_out: geminiTokensOut,
-          biaya_rp: Math.round(geminiCost * 100) / 100,
-          quota_exhausted_until: getGeminiDailyQuotaExhaustedUntil(),
-        },
-        anthropic: {
-          draf_count: anthropicCount,
-          token_in: anthropicTokensIn,
-          token_out: anthropicTokensOut,
-          biaya_rp: Math.round(anthropicCost * 100) / 100,
-          status: getClaudeInactiveState(),
-        },
+        total_biaya_rp: Math.round(totalCost * 100) / 100,
+        token_in: totalTokensIn,
+        token_out: totalTokensOut,
+        per_model: perModelStats,
+        quota_status: getDailyQuotaStatus(),
         active_chain: parseDraftChain(),
       },
     });

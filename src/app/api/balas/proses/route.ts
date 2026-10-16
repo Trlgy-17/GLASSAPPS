@@ -204,7 +204,6 @@ export async function POST(req: NextRequest) {
       matched_penawaran: matchedPenawaran,
       model_used: unifiedRes.modelUsed,
       provider: unifiedRes.provider,
-      claude_warning: unifiedRes.claudeWarning || null,
       alasan_pindah: unifiedRes.alasanPindah || null,
       biaya_perkiraan: unifiedRes.biayaPerkiraan || 0,
       durasi: {

@@ -8,17 +8,11 @@ import { PriceBookData } from '@/types/pricing';
 import { buildPrompts, BuildPromptParams } from './prompt-builder';
 import { validateRupiahInDraft, validateMarketplaceGuards, validateForbiddenPhrases, extractAllRupiahNumbers, detectBrokenSentence } from './validator';
 import { createAdminClient } from '../supabase/server';
-import Anthropic from '@anthropic-ai/sdk';
-import {
-  getAnthropicClient,
-  callClaudeMessagesStream,
-  getClaudeInactiveState,
-  formatModelDisplayName,
-} from './anthropic-provider';
 import {
   parseDraftChain,
   executeWithHedgingAndFallback,
   calculateEstimatedCostRupiah,
+  formatModelDisplayName,
   ChainTarget,
 } from './fallback-chain';
 
@@ -27,7 +21,7 @@ export const MODEL_FAST = process.env.GEMINI_MODEL_FAST || 'gemini-3.5-flash-lit
 export const MODEL_MAIN = process.env.GEMINI_MODEL_MAIN || 'gemini-3.6-flash';
 export const MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-4-argon';
 export const MODEL_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.6-flash';
-export const MODEL_CLAUDE_HAIKU = process.env.CLAUDE_MODEL_HAIKU || 'claude-haiku-5-5';
+
 export const MODEL_EMBEDDING = 'gemini-embedding-001';
 export const MAX_REQUESTS_PER_DAY = parseInt(process.env.AI_MAX_REQUESTS_PER_DAY || '300', 10);
 
@@ -111,7 +105,7 @@ async function checkDailyQuota(): Promise<{ count: number; warning80: boolean }>
 export async function logAICall(data: {
   model: string;
   endpoint: string;
-  provider?: 'gemini' | 'anthropic';
+  provider?: 'gemini';
   alasan_pindah?: string | null;
   biaya_perkiraan?: number;
   langkah?: string;
@@ -130,23 +124,16 @@ export async function logAICall(data: {
   }
   try {
     const supabase = createAdminClient();
-    const resolvedProvider =
-      data.provider ||
-      (data.model.toLowerCase().includes('claude') || data.model.toLowerCase().includes('haiku')
-        ? 'anthropic'
-        : 'gemini');
-
     const inTok = data.token_in || 0;
     const outTok = data.token_out || 0;
     const resolvedCost =
       data.biaya_perkiraan !== undefined
         ? data.biaya_perkiraan
-        : calculateEstimatedCostRupiah(resolvedProvider, data.model, inTok, outTok);
-
+        : calculateEstimatedCostRupiah(data.model, inTok, outTok);
     await supabase.from('ai_log').insert({
       model: data.model,
       endpoint: data.endpoint,
-      provider: resolvedProvider,
+      provider: data.provider || 'gemini',
       alasan_pindah: data.alasan_pindah || null,
       biaya_perkiraan: resolvedCost,
       langkah: data.langkah || data.endpoint,
@@ -265,8 +252,7 @@ export interface ExtractionOutput {
 
 export async function extractScreenshot(
   screenshots: ScreenshotInput[],
-  pastedText?: string,
-  targetModel?: string
+  pastedText?: string
 ): Promise<{ extraction: ExtractionOutput; durationMs: number }> {
   await checkDailyQuota();
   const t0 = Date.now();
@@ -275,43 +261,6 @@ export async function extractScreenshot(
   const promptPath = path.resolve(process.cwd(), 'prompts/screenshot-extraction.md');
   let promptText = fs.readFileSync(promptPath, 'utf8');
   promptText = promptText.replace('{{kota_dalam_kota}}', 'Bandung, Cimahi, Kab. Bandung, KBB');
-
-  if (targetModel && (targetModel.includes('claude') || targetModel.includes('haiku'))) {
-    const client = getAnthropicClient();
-    const userContent: any[] = [];
-    screenshots.slice(0, 5).forEach((sc) => {
-      userContent.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: sc.mimeType || 'image/jpeg',
-          data: sc.base64.replace(/^data:image\/\w+;base64,/, ''),
-        },
-      });
-    });
-    let promptFull = promptText;
-    if (pastedText && pastedText.trim()) {
-      promptFull += `\nTEKS TAMBAHAN DARI CLIPBOARD:\n${pastedText}`;
-    }
-    userContent.push({ type: 'text', text: promptFull });
-
-    try {
-      const res = await client.messages.create({
-        model: targetModel,
-        max_tokens: 1000,
-        system: 'Kamu adalah sistem ekstraksi spesifikasi cermin Putra Glass. Keluarkan HANYA JSON valid.',
-        messages: [{ role: 'user', content: userContent }],
-      });
-      const block = res.content[0];
-      const raw = block && block.type === 'text' ? block.text : '{}';
-      const cleanJson = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      const durationMs = Date.now() - t0;
-      return { extraction: parsed, durationMs };
-    } catch (e) {
-      console.warn('Claude extract gagal, fallback ke Gemini:', e);
-    }
-  }
 
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
   parts.push({ text: promptText });
@@ -612,8 +561,6 @@ export async function executeFastRevision(
   const t0 = Date.now();
   const ai = getAIClient();
 
-  // Prompt kilat 1-shot khusus revisi
-  // Prompt kilat 1-shot khusus revisi dengan guardrail harga mutlak
   const revisionSystemPrompt = `
 Kamu adalah sales Putra Glass. Tugasmu HANYA merevisi draf WhatsApp sebelumnya berdasarkan instruksi: "${params.instruksiRevisi}".
 ATURAN MUTLAK KEAMANAN:
@@ -637,48 +584,33 @@ Keluarkan HANYA JSON valid:
 `;
   const userContent = `DRAF SEBELUMNYA:\n${params.previousDraftText}\n\nINSTRUKSI REVISI:\n${params.instruksiRevisi}`;
 
-  // Gunakan model tercepat dengan thinkingLevel MINIMAL untuk latensi <= 3 detik
   const modelToUse = targetModel || MODEL_FAST;
   let accumulated = '';
   let firstTokenMs = 0;
   let gotFirst = false;
-  let durationMs = 0;
 
-  if (modelToUse.includes('claude') || modelToUse.includes('haiku')) {
-    const res = await callClaudeMessagesStream({
-      model: modelToUse,
-      systemPrompt: revisionSystemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      maxTokens: 800,
-      onChunk: options?.onStreamChunk,
-    });
-    accumulated = res.text;
-    firstTokenMs = res.ttftMs;
-    durationMs = res.totalMs;
-  } else {
-    const stream = await ai.models.generateContentStream({
-      model: modelToUse,
-      contents: [{ role: 'user', parts: [{ text: userContent }] }],
-      config: {
-        systemInstruction: { parts: [{ text: revisionSystemPrompt }] },
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-        maxOutputTokens: 800,
-      },
-    });
+  const stream = await ai.models.generateContentStream({
+    model: modelToUse,
+    contents: [{ role: 'user', parts: [{ text: userContent }] }],
+    config: {
+      systemInstruction: { parts: [{ text: revisionSystemPrompt }] },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      maxOutputTokens: 800,
+    },
+  });
 
-    for await (const chunk of stream) {
-      const txt = chunk.text || '';
-      if (!gotFirst && txt.trim().length > 0) {
-        gotFirst = true;
-        firstTokenMs = Date.now() - t0;
-      }
-      accumulated += txt;
-      if (options?.onStreamChunk) {
-        options.onStreamChunk(txt);
-      }
+  for await (const chunk of stream) {
+    const txt = chunk.text || '';
+    if (!gotFirst && txt.trim().length > 0) {
+      gotFirst = true;
+      firstTokenMs = Date.now() - t0;
     }
-    durationMs = Date.now() - t0;
+    accumulated += txt;
+    if (options?.onStreamChunk) {
+      options.onStreamChunk(txt);
+    }
   }
+  const durationMs = Date.now() - t0;
 
   let parsed: DraftReplyOutput;
   try {
@@ -752,10 +684,9 @@ export interface UnifiedDraftParams {
 export interface UnifiedDraftResult {
   extraction: ExtractionOutput;
   draf: DraftReplyOutput;
-  provider: 'gemini' | 'anthropic';
+  provider: 'gemini';
   modelUsed: string;
   alasanPindah?: string | null;
-  claudeWarning?: string | null;
   inputTokens: number;
   outputTokens: number;
   biayaPerkiraan: number;
@@ -919,59 +850,11 @@ Petunjuk Khusus: Ini adalah lanjutan percakapan untuk penawaran ${params.klienLa
     parts.push({ text: 'Halo Putra Glass' });
   }
 
-  // Susun konten untuk Anthropic (Claude)
-  const anthropicMessages: any[] = [];
-  const anthropicUserContent: any[] = [];
-
-  params.screenshots.slice(0, 5).forEach((sc) => {
-    const mediaType = sc.mimeType === 'image/png' || sc.mimeType === 'image/webp' || sc.mimeType === 'image/jpeg'
-      ? sc.mimeType
-      : 'image/jpeg';
-    anthropicUserContent.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: mediaType,
-        data: sc.base64.replace(/^data:image\/\w+;base64,/, ''),
-      },
-    });
-  });
-
-  let anthropicTextPrompt = '';
-  if (params.klienLanjutan && params.klienLanjutan.total > 0) {
-    anthropicTextPrompt += `KONTEKS PENAWARAN KLIEN SEBELUMNYA:\nNomor Penawaran: ${params.klienLanjutan.nomor}\nNama Klien: ${params.klienLanjutan.nama}\nTotal Penawaran: [[TOTAL]] (DP 50%: [[DP]], Pelunasan: [[PELUNASAN]])\nTanggal: ${params.klienLanjutan.tanggal}\nPetunjuk Khusus: Ini adalah lanjutan percakapan untuk penawaran ${params.klienLanjutan.nomor}. Klien sudah memiliki penawaran resmi. Gunakan penanda [[TOTAL]] dan [[DP]] untuk menyebutkan total pembayaran dan nominal DP 50%.\n\n`;
-  }
-  if (params.pastedText && params.pastedText.trim()) {
-    anthropicTextPrompt += `CHAT KLIEN:\n${params.pastedText}\n\n`;
-  }
-  if (params.arahanAdmin && params.arahanAdmin.trim()) {
-    anthropicTextPrompt += `ARAHAN ADMIN:\n${params.arahanAdmin}\n\n`;
-  }
-  if (!anthropicTextPrompt.trim() && anthropicUserContent.length === 0) {
-    anthropicTextPrompt = 'Halo Putra Glass';
-  }
-  if (anthropicTextPrompt.trim()) {
-    anthropicUserContent.push({
-      type: 'text',
-      text: anthropicTextPrompt.trim(),
-    });
-  }
-  anthropicMessages.push({
-    role: 'user',
-    content: anthropicUserContent,
-  });
-
-  // Eksekusi via Fallback Chain & Hedging 4 detik
+  // Eksekusi via Fallback Chain & Hedging 4 detik (Gemini Chain)
   const defaultChain = parseDraftChain();
   const draftChain = params.modelName
     ? [
-        {
-          provider:
-            params.modelName.includes('claude') || params.modelName.includes('haiku')
-              ? 'anthropic'
-              : 'gemini',
-          model: params.modelName,
-        } as ChainTarget,
+        { provider: 'gemini' as const, model: params.modelName },
         ...defaultChain.filter((t) => t.model !== params.modelName),
       ]
     : defaultChain;
@@ -980,59 +863,43 @@ Petunjuk Khusus: Ini adalah lanjutan percakapan untuk penawaran ${params.klienLa
     chain: draftChain,
     hedgingTimeoutMs: 4000,
     executeFn: async (target, signal, onChunk) => {
-      if (target.provider === 'anthropic') {
-        const res = await callClaudeMessagesStream({
-          model: target.model,
-          systemPrompt: unifiedSystemPrompt,
-          messages: anthropicMessages,
-          maxTokens: 1500,
-          abortSignal: signal,
-          onChunk,
-        });
-        return {
-          result: res.text,
-          inputTokens: res.inputTokens,
-          outputTokens: res.outputTokens,
-        };
-      } else {
-        const stream = await ai.models.generateContentStream({
-          model: target.model,
-          contents: parts,
-          config: {
-            systemInstruction: { parts: [{ text: unifiedSystemPrompt }] },
-            thinkingConfig: { thinkingLevel: thinkingLvl },
-            maxOutputTokens: 1500,
-          },
-        });
+      const stream = await ai.models.generateContentStream({
+        model: target.model,
+        contents: parts,
+        config: {
+          systemInstruction: { parts: [{ text: unifiedSystemPrompt }] },
+          thinkingConfig: { thinkingLevel: thinkingLvl },
+          maxOutputTokens: 1500,
+        },
+      });
 
-        let text = '';
-        let inTokens = 0;
-        let outTokens = 0;
-        for await (const chunk of stream) {
-          if (signal.aborted) {
-            throw new Error('Permintaan dibatalkan oleh sinyal abort');
-          }
-          const chunkText = chunk.text || '';
-          text += chunkText;
-          onChunk(chunkText);
-          if (chunk.usageMetadata) {
-            inTokens = chunk.usageMetadata.promptTokenCount || inTokens;
-            outTokens = chunk.usageMetadata.candidatesTokenCount || outTokens;
-          }
+      let text = '';
+      let inTokens = 0;
+      let outTokens = 0;
+      for await (const chunk of stream) {
+        if (signal.aborted) {
+          throw new Error('Permintaan dibatalkan oleh sinyal abort');
         }
-        return {
-          result: text,
-          inputTokens: inTokens,
-          outputTokens: outTokens,
-        };
+        const chunkText = chunk.text || '';
+        text += chunkText;
+        onChunk(chunkText);
+        if (chunk.usageMetadata) {
+          inTokens = chunk.usageMetadata.promptTokenCount || inTokens;
+          outTokens = chunk.usageMetadata.candidatesTokenCount || outTokens;
+        }
       }
+      return {
+        result: text,
+        inputTokens: inTokens,
+        outputTokens: outTokens,
+      };
     },
     onStreamChunk: params.onStreamChunk,
   });
 
   const accumulated = hedgingRes.result;
   const modelUsed = hedgingRes.winner.model;
-  const provider = hedgingRes.winner.provider;
+  const provider = 'gemini' as const;
   const ttftMs = hedgingRes.ttftMs;
   const durasiMs = hedgingRes.totalMs;
 
@@ -1281,30 +1148,15 @@ Keluarkan HANYA JSON blok DRAFT:
 }
 <!--/DRAFT-->`;
 
-      let rewriteTxt = '';
-      if (provider === 'anthropic') {
-        const client = getAnthropicClient();
-        const rwRes = await client.messages.create({
-          model: modelUsed,
-          max_tokens: 800,
-          system: 'Kamu adalah sales Putra Glass. Perbaiki draf sesuai instruksi.',
-          messages: [{ role: 'user', content: rewriteUserPrompt }],
-        });
-        const contentBlock = rwRes.content[0];
-        if (contentBlock && contentBlock.type === 'text') {
-          rewriteTxt = contentBlock.text;
-        }
-      } else {
-        const rewriteRes = await ai.models.generateContent({
-          model: modelUsed,
-          contents: [{ role: 'user', parts: [{ text: rewriteUserPrompt }] }],
-          config: {
-            thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-            maxOutputTokens: 800,
-          },
-        });
-        rewriteTxt = rewriteRes.text || '';
-      }
+      const rewriteRes = await ai.models.generateContent({
+        model: modelUsed,
+        contents: [{ role: 'user', parts: [{ text: rewriteUserPrompt }] }],
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          maxOutputTokens: 800,
+        },
+      });
+      const rewriteTxt = rewriteRes.text || '';
       const matchRewr = rewriteTxt.match(/<!--DRAFT-->([\s\S]*?)<!--\/DRAFT-->/) || rewriteTxt.match(/```json([\s\S]*?)```/);
       if (matchRewr) {
         const cleanRewr = (matchRewr[1] || rewriteTxt).replace(/<!--[\s\S]*?-->/g, '').trim();
@@ -1419,7 +1271,7 @@ Keluarkan HANYA JSON blok DRAFT:
     provider,
     modelUsed,
     alasanPindah: hedgingRes.alasanPindah,
-    claudeWarning: hedgingRes.claudeWarning,
+
     inputTokens: hedgingRes.inputTokens,
     outputTokens: hedgingRes.outputTokens,
     biayaPerkiraan: hedgingRes.biayaPerkiraan,
@@ -1434,35 +1286,7 @@ Keluarkan HANYA JSON blok DRAFT:
   };
 }
 
-/**
- * AnthropicProvider resmi Putra Glass
- */
-export const AnthropicProvider = {
-  getClient: getAnthropicClient,
-  async draft(params: UnifiedDraftParams): Promise<UnifiedDraftResult> {
-    return executeUnifiedDraft({
-      ...params,
-      modelName: MODEL_CLAUDE_HAIKU,
-    });
-  },
-  async revise(
-    params: FastRevisionParams,
-    options?: { onStreamChunk?: (chunkText: string) => void }
-  ): Promise<{ draf: DraftReplyOutput; durationMs: number; modelUsed: string }> {
-    return executeFastRevision(params, options, MODEL_CLAUDE_HAIKU);
-  },
-  async extract(
-    screenshots: ScreenshotInput[],
-    pastedText?: string
-  ): Promise<{ extraction: ExtractionOutput; durationMs: number }> {
-    return extractScreenshot(screenshots, pastedText, MODEL_CLAUDE_HAIKU);
-  },
-  async memory(
-    params: MemoryParams
-  ): Promise<{ kartu_id: string; durationMs: number }> {
-    return summarizeMemory(params, MODEL_CLAUDE_HAIKU);
-  },
-};
+
 
 // =========================================================================
 // 5. MODUL C: KARTU MEMORI & EMBEDDING
@@ -1478,8 +1302,7 @@ export interface MemoryParams {
 }
 
 export async function summarizeMemory(
-  params: MemoryParams,
-  targetModel?: string
+  params: MemoryParams
 ): Promise<{ kartu_id: string; durationMs: number }> {
   await checkDailyQuota();
   const t0 = Date.now();
@@ -1500,28 +1323,15 @@ INPUT:
 `;
 
   try {
-    let rawResText = '';
-    if (targetModel && (targetModel.includes('claude') || targetModel.includes('haiku'))) {
-      const client = getAnthropicClient();
-      const anthRes = await client.messages.create({
-        model: targetModel,
-        max_tokens: 500,
-        system: 'Keluarkan HANYA JSON valid sesuai format memori yang diminta.',
-        messages: [{ role: 'user', content: inputText }],
-      });
-      const blk = anthRes.content[0];
-      rawResText = blk && blk.type === 'text' ? blk.text : '{}';
-    } else {
-      const res = await ai.models.generateContent({
-        model: MODEL_FAST,
-        contents: inputText,
-        config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-        },
-      });
-      rawResText = res.text || '';
-    }
+    const res = await ai.models.generateContent({
+      model: MODEL_FAST,
+      contents: inputText,
+      config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: 'application/json',
+      },
+    });
+    const rawResText = res.text || '';
 
     const parsed = JSON.parse(rawResText || '{}');
     const kartu = parsed.kartu_memori || {};

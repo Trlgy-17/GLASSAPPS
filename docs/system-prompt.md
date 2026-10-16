@@ -8,10 +8,10 @@ System prompt utama di-cache (prompt caching) karena sama untuk setiap permintaa
 
 | Prompt | Model | Dipanggil saat | Setelan |
 | --- | --- | --- | --- |
-| 2. Prompt utama CS | `claude-sonnet-5-5` | Setiap draf dan regenerasi | Temperature rendah (±0,5), max 1.500 token, tool `hitung_harga`, keluaran JSON |
+| 2. Prompt utama CS | `gemini-3.6-flash` | Setiap draf dan regenerasi | Temperature rendah (±0,5), max 1.500 token, tool `hitung_harga`, keluaran JSON |
 | 3. Template konteks | — | Pesan user untuk prompt 2 | Diisi server, urutan blok tetap |
-| 4. Ekstraksi screenshot | `claude-haiku-5-5` | Setiap tempel screenshot | Temperature 0, max 2.000 token, keluaran JSON |
-| 5. Kartu memori | `claude-haiku-5-5` | Saat "Terkirim" dan saat hasil ditandai | Temperature 0, keluaran JSON |
+| 4. Ekstraksi screenshot | `gemini-3.5-flash-lite` | Setiap tempel screenshot | Temperature 0, max 2.000 token, keluaran JSON |
+| 5. Kartu memori | `gemini-3.5-flash-lite` | Saat "Terkirim" dan saat hasil ditandai | Temperature 0, keluaran JSON |
 
 **Aturan implementasi**
 
@@ -288,9 +288,9 @@ Definisi tool (dieksekusi server dengan `pricing.ts` yang sama dengan kalkulator
 
 Tool mengembalikan error yang bisa dibaca model (mis. `"aluminium tidak tersedia untuk bentuk oval"`), bukan angka nol. Ukuran yang cocok dengan SKU katalog memakai harga SKU, selain itu rumus per m². Varian tidak dikirim model: pricing.ts menetapkan Basic jika lampu 1\_warna atau kontrol saklar, selain itu Premium. Untuk lead B2B, pricing.ts otomatis memakai harga tingkat sesuai total unit. Segmen diambil server dari data lead, bukan dari input model, sehingga model tidak bisa membuka harga B2B sendiri.
 
-## 4. Prompt Ekstraksi Screenshot (`claude-haiku-5-5`)
+## 4. Prompt Ekstraksi Screenshot (`gemini-3.5-flash-lite`)
 
-Dipanggil dengan semua gambar (urut) + teks tempelan dalam satu pesan. Tugasnya hanya membaca, tidak membalas. Jika akurasi pada set uji < 95%, naikkan ke `claude-sonnet-5-5`.
+Dipanggil dengan semua gambar (urut) + teks tempelan dalam satu pesan. Tugasnya hanya membaca, tidak membalas.
 
 ```text
 Kamu membaca screenshot percakapan WhatsApp/Instagram antara klien dan admin Putra Glass (cermin LED custom). Tugasmu HANYA mentranskripsi dan mengekstrak data. Jangan membalas, jangan menyimpulkan niat.
@@ -339,7 +339,7 @@ KELUARAN: HANYA JSON valid.
 }
 ```
 
-## 5. Prompt Kartu Memori & Usulan Playbook (`claude-haiku-5-5`)
+## 5. Prompt Kartu Memori & Usulan Playbook (`gemini-3.5-flash-lite`)
 
 Dipanggil saat admin menekan "Terkirim" dan dipanggil ulang saat hasil (DP/gagal) ditandai. Kartu yang dihasilkan di-embed dan disimpan di `kartu_memori`; usulan aturan masuk antrean persetujuan owner.
 

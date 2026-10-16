@@ -1,12 +1,5 @@
-import { formatRupiah } from '@/lib/pricing/format-rupiah';
-import {
-  setClaudeInactive,
-  getClaudeInactiveState,
-  resetClaudeInactive,
-} from './anthropic-provider';
-
 export interface ChainTarget {
-  provider: 'gemini' | 'anthropic';
+  provider: 'gemini';
   model: string;
 }
 
@@ -16,30 +9,44 @@ export interface HedgingExecutionResult<T> {
   alasanPindah: string | null;
   ttftMs: number;
   totalMs: number;
-  claudeWarning?: string | null;
   inputTokens: number;
   outputTokens: number;
   biayaPerkiraan: number;
 }
 
-// In-memory status quota harian Gemini
-let _geminiDailyQuotaExhaustedUntil: number | null = null;
+// In-memory status kuota harian per model Gemini
+// model -> timestamp reset (ms)
+const _modelDailyQuotaExhausted = new Map<string, number>();
 
-export function getGeminiDailyQuotaExhaustedUntil(): number | null {
-  if (_geminiDailyQuotaExhaustedUntil && Date.now() > _geminiDailyQuotaExhaustedUntil) {
-    _geminiDailyQuotaExhaustedUntil = null;
+export function isModelDailyQuotaExhausted(model: string): boolean {
+  const until = _modelDailyQuotaExhausted.get(model);
+  if (!until) return false;
+  if (Date.now() > until) {
+    _modelDailyQuotaExhausted.delete(model);
+    return false;
   }
-  return _geminiDailyQuotaExhaustedUntil;
+  return true;
 }
 
-export function setGeminiDailyQuotaExhausted(): number {
+export function setModelDailyQuotaExhausted(model: string): number {
   const resetDate = calculateNextQuotaResetWib();
-  _geminiDailyQuotaExhaustedUntil = resetDate.getTime();
-  return _geminiDailyQuotaExhaustedUntil;
+  const resetMs = resetDate.getTime();
+  _modelDailyQuotaExhausted.set(model, resetMs);
+  return resetMs;
 }
 
-export function resetGeminiDailyQuota(): void {
-  _geminiDailyQuotaExhaustedUntil = null;
+export function resetAllDailyQuota(): void {
+  _modelDailyQuotaExhausted.clear();
+}
+
+export function getDailyQuotaStatus(): Record<string, number> {
+  const status: Record<string, number> = {};
+  for (const [mdl, until] of _modelDailyQuotaExhausted.entries()) {
+    if (Date.now() <= until) {
+      status[mdl] = until;
+    }
+  }
+  return status;
 }
 
 /**
@@ -47,20 +54,30 @@ export function resetGeminiDailyQuota(): void {
  */
 export function calculateNextQuotaResetWib(): Date {
   const now = new Date();
-  // Reset harian Gemini terjadi setiap pukul 14:00 - 15:00 WIB (00:00 PST)
-  // Set durasi minimal 14 jam ke depan
   return new Date(now.getTime() + 14 * 3600 * 1000);
 }
 
 /**
+ * Format nama display model untuk UI
+ */
+export function formatModelDisplayName(modelName?: string | null): string {
+  if (!modelName) return 'Gemini 3.6 Flash';
+  const lower = modelName.toLowerCase();
+  if (lower.includes('3.8')) return 'Gemini 3.8 Flash';
+  if (lower.includes('3.6')) return 'Gemini 3.6 Flash';
+  if (lower.includes('3.5') || lower.includes('lite')) return 'Gemini 3.5 Flash Lite';
+  return modelName;
+}
+
+/**
  * Parsing chain string:
- * e.g. "gemini:gemini-3.6-flash,anthropic:claude-haiku-5-5,gemini:gemini-3.5-flash-lite"
+ * Default: gemini:gemini-3.6-flash,gemini:gemini-3.8-flash,gemini:gemini-3.5-flash-lite
  */
 export function parseDraftChain(chainStr?: string): ChainTarget[] {
   const raw =
     chainStr ||
     process.env.AI_DRAFT_CHAIN ||
-    'gemini:gemini-3.6-flash,anthropic:claude-haiku-5-5,gemini:gemini-3.5-flash-lite';
+    'gemini:gemini-3.6-flash,gemini:gemini-3.8-flash,gemini:gemini-3.5-flash-lite';
 
   const parts = raw
     .split(',')
@@ -69,13 +86,9 @@ export function parseDraftChain(chainStr?: string): ChainTarget[] {
 
   const targets: ChainTarget[] = [];
   for (const part of parts) {
-    if (part.includes(':')) {
-      const [prov, mdl] = part.split(':');
-      const cleanProv = prov.trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'gemini';
-      targets.push({ provider: cleanProv, model: mdl.trim() });
-    } else {
-      const cleanProv = part.toLowerCase().includes('claude') ? 'anthropic' : 'gemini';
-      targets.push({ provider: cleanProv, model: part.trim() });
+    const clean = part.replace(/^gemini:/i, '').trim();
+    if (clean) {
+      targets.push({ provider: 'gemini', model: clean });
     }
   }
 
@@ -83,74 +96,57 @@ export function parseDraftChain(chainStr?: string): ChainTarget[] {
     ? targets
     : [
         { provider: 'gemini', model: 'gemini-3.6-flash' },
-        { provider: 'anthropic', model: 'claude-haiku-5-5' },
+        { provider: 'gemini', model: 'gemini-3.8-flash' },
         { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
       ];
 }
 
 /**
- * Hitung perkiraan biaya dalam mata uang Rupiah
- * Kurs acuan $1 = Rp16.000
+ * Hitung perkiraan biaya model Gemini dalam Rupiah ($1 = Rp16.000)
  */
 export function calculateEstimatedCostRupiah(
-  provider: 'gemini' | 'anthropic',
   model: string,
   tokenIn: number,
   tokenOut: number
 ): number {
   const USD_TO_IDR = 16000;
-  if (provider === 'anthropic') {
-    // Claude Haiku 5.5: $0.80 / 1M input, $4.00 / 1M output
-    const costUsd = (tokenIn * 0.8 + tokenOut * 4.0) / 1000000;
-    return Math.round(costUsd * USD_TO_IDR * 100) / 100;
-  }
+  const lower = model.toLowerCase();
 
-  const lowerModel = model.toLowerCase();
-  if (lowerModel.includes('lite') || lowerModel.includes('flash-lite')) {
-    // Gemini 3.5 Flash Lite: $0.075 / 1M input, $0.30 / 1M output
+  if (lower.includes('lite') || lower.includes('flash-lite')) {
+    // Gemini 3.5 Flash Lite: $0.075 / 1M in, $0.30 / 1M out
     const costUsd = (tokenIn * 0.075 + tokenOut * 0.3) / 1000000;
     return Math.round(costUsd * USD_TO_IDR * 100) / 100;
   }
 
-  // Gemini 3.6 Flash: $0.15 / 1M input, $0.60 / 1M output
+  if (lower.includes('3.8')) {
+    // Gemini 3.8 Flash: $0.20 / 1M in, $0.80 / 1M out
+    const costUsd = (tokenIn * 0.2 + tokenOut * 0.8) / 1000000;
+    return Math.round(costUsd * USD_TO_IDR * 100) / 100;
+  }
+
+  // Gemini 3.6 Flash / default: $0.15 / 1M in, $0.60 / 1M out
   const costUsd = (tokenIn * 0.15 + tokenOut * 0.6) / 1000000;
   return Math.round(costUsd * USD_TO_IDR * 100) / 100;
 }
 
 /**
- * Periksa apakah target provider saat ini tersedia untuk dipanggil
+ * Periksa apakah target model saat ini tersedia untuk dipanggil
  */
 export function checkTargetAvailability(target: ChainTarget): {
   available: boolean;
   skipReason?: string;
-  claudeWarning?: string;
 } {
-  if (target.provider === 'gemini') {
-    const exhaustedUntil = getGeminiDailyQuotaExhaustedUntil();
-    if (exhaustedUntil && Date.now() < exhaustedUntil && target.model === 'gemini-3.6-flash') {
-      return {
-        available: false,
-        skipReason: '429_daily_exhausted',
-      };
-    }
+  if (isModelDailyQuotaExhausted(target.model)) {
+    return {
+      available: false,
+      skipReason: '429_daily_exhausted',
+    };
   }
-
-  if (target.provider === 'anthropic') {
-    const state = getClaudeInactiveState();
-    if (!state.active && state.message) {
-      return {
-        available: false,
-        skipReason: state.reason || 'claude_inactive',
-        claudeWarning: state.message,
-      };
-    }
-  }
-
   return { available: true };
 }
 
 /**
- * Analisis error dari pemanggilan provider untuk menentukan tindakan fallback
+ * Analisis error dari pemanggilan model Gemini untuk menentukan tindakan fallback
  */
 export function classifyProviderError(
   target: ChainTarget,
@@ -158,92 +154,38 @@ export function classifyProviderError(
 ): {
   isRetryableOnSameProvider: boolean;
   switchReason: string;
-  claudeWarning?: string;
 } {
   const errMsg = String(err?.message || err || '').toLowerCase();
   const status = Number(err?.status || err?.statusCode || 0);
 
-  // 1. Error Gemini Kuota Harian (429 Resource Exhausted)
-  if (target.provider === 'gemini') {
-    if (status === 429 || errMsg.includes('resource_exhausted') || errMsg.includes('quota')) {
-      const isDaily =
-        errMsg.includes('perday') ||
-        errMsg.includes('per_day') ||
-        errMsg.includes('daily') ||
-        errMsg.includes('day');
-      if (isDaily) {
-        setGeminiDailyQuotaExhausted();
-      }
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: '429',
-      };
+  if (status === 429 || errMsg.includes('resource_exhausted') || errMsg.includes('quota')) {
+    const isDaily =
+      errMsg.includes('perday') ||
+      errMsg.includes('per_day') ||
+      errMsg.includes('daily') ||
+      errMsg.includes('day') ||
+      status === 429;
+    if (isDaily) {
+      setModelDailyQuotaExhausted(target.model);
     }
-    if (status === 503 || errMsg.includes('503') || errMsg.includes('overloaded') || errMsg.includes('unavailable')) {
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: '503',
-      };
-    }
-
-    if (errMsg.includes('timeout') || errMsg.includes('deadline')) {
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: 'timeout',
-      };
-    }
+    return {
+      isRetryableOnSameProvider: false,
+      switchReason: '429',
+    };
   }
 
-  // 2. Error Anthropic (Claude)
-  if (target.provider === 'anthropic') {
-    // 400 Saldo habis: "Your credit balance is too low to access the Anthropic API"
-    if (
-      (status === 400 && errMsg.includes('credit balance')) ||
-      errMsg.includes('plans & billing') ||
-      errMsg.includes('balance is too low')
-    ) {
-      const msg = 'AI cadangan (Claude) tidak aktif: cek saldo/API key.';
-      setClaudeInactive('saldo', msg);
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: 'saldo_habis',
-        claudeWarning: msg,
-      };
-    }
+  if (status === 503 || errMsg.includes('503') || errMsg.includes('overloaded') || errMsg.includes('unavailable')) {
+    return {
+      isRetryableOnSameProvider: false,
+      switchReason: '503',
+    };
+  }
 
-    // 401 API Key kedaluwarsa atau salah
-    if (status === 401 || errMsg.includes('invalid x-api-key') || errMsg.includes('authentication_error')) {
-      const msg = 'API key Claude kedaluwarsa atau salah. Ganti di .env lalu restart aplikasi.';
-      setClaudeInactive('key_invalid', msg);
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: '401',
-        claudeWarning: msg,
-      };
-    }
-
-    // 529 / 503 Overloaded
-    if (status === 529 || status === 503 || errMsg.includes('529') || errMsg.includes('overloaded')) {
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: '529',
-      };
-    }
-
-    // 429 Rate limit evaluasi
-    if (status === 429 || errMsg.includes('rate limit')) {
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: '429',
-      };
-    }
-
-    if (errMsg.includes('timeout') || errMsg.includes('abort')) {
-      return {
-        isRetryableOnSameProvider: false,
-        switchReason: 'timeout',
-      };
-    }
+  if (errMsg.includes('timeout') || errMsg.includes('deadline')) {
+    return {
+      isRetryableOnSameProvider: false,
+      switchReason: 'timeout',
+    };
   }
 
   return {
@@ -252,8 +194,11 @@ export function classifyProviderError(
   };
 }
 
+export const AI_ALL_EXHAUSTED_MESSAGE =
+  'AI sedang penuh. Ketik balasan manual atau pakai Kalkulator.';
+
 /**
- * Runner terpadu dengan Hedging 4 detik & Fallback Chain
+ * Runner terpadu rantai model Gemini dengan Hedging 4 detik
  */
 export async function executeWithHedgingAndFallback<T>(params: {
   chain?: ChainTarget[];
@@ -271,29 +216,26 @@ export async function executeWithHedgingAndFallback<T>(params: {
 }): Promise<HedgingExecutionResult<T>> {
   const chain = params.chain || parseDraftChain();
   const hedgingMs = params.hedgingTimeoutMs ?? 4000;
-  let lastClaudeWarning: string | null = null;
   let lastReason: string | null = null;
 
-  // Saring target yang tersedia
+  // Saring target yang tidak terkena kuota harian
   const availableTargets: Array<{ target: ChainTarget; skipReason?: string }> = [];
   for (const t of chain) {
     const avail = checkTargetAvailability(t);
     if (avail.available) {
       availableTargets.push({ target: t });
-    } else {
-      if (avail.claudeWarning) lastClaudeWarning = avail.claudeWarning;
-      if (avail.skipReason && !lastReason) lastReason = avail.skipReason;
+    } else if (avail.skipReason && !lastReason) {
+      lastReason = avail.skipReason;
     }
   }
 
+  // Jika semua target tersaring karena kuota harian, tetap coba model fallback terakhir
   if (availableTargets.length === 0) {
-    // Jika seluruh target tersaring, tetap coba target di chain (fallback safety)
     for (const t of chain) {
       availableTargets.push({ target: t });
     }
   }
 
-  // Coba target berurutan dengan hedging jika ada target cadangan
   for (let i = 0; i < availableTargets.length; i++) {
     const primary = availableTargets[i].target;
     const secondary = i + 1 < availableTargets.length ? availableTargets[i + 1].target : null;
@@ -315,12 +257,11 @@ export async function executeWithHedgingAndFallback<T>(params: {
       });
     })();
 
-    // Tangkap rejection secara lokal agar tidak menimbulkan unhandled rejection di Node runtime
     const safePrimaryPromise = primaryPromise
       .then((res) => ({ type: 'primary_done' as const, res }))
       .catch((err) => ({ type: 'primary_error' as const, err }));
 
-    // Jika tidak ada target berikutnya atau hedging dimatikan
+    // Jika tidak ada target cadangan atau hedging dinonaktifkan
     if (!secondary || hedgingMs <= 0) {
       const outcome = await safePrimaryPromise;
       if (outcome.type === 'primary_done') {
@@ -333,21 +274,19 @@ export async function executeWithHedgingAndFallback<T>(params: {
           alasanPindah: lastReason,
           ttftMs: primaryTtft || totalMs,
           totalMs,
-          claudeWarning: lastClaudeWarning,
           inputTokens: inTok,
           outputTokens: outTok,
-          biayaPerkiraan: calculateEstimatedCostRupiah(primary.provider, primary.model, inTok, outTok),
+          biayaPerkiraan: calculateEstimatedCostRupiah(primary.model, inTok, outTok),
         };
       } else {
         primaryController.abort();
         const classified = classifyProviderError(primary, outcome.err);
         lastReason = classified.switchReason;
-        if (classified.claudeWarning) lastClaudeWarning = classified.claudeWarning;
         continue;
       }
     }
 
-    // Ada target cadangan -> Pasang Timer Hedging
+    // Ada target cadangan -> Pasang Timer Hedging 4 detik
     let hedgingTimer: any;
     const hedgingTimerPromise = new Promise<{ type: 'hedging_timeout' }>((resolve) => {
       hedgingTimer = setTimeout(() => {
@@ -372,10 +311,9 @@ export async function executeWithHedgingAndFallback<T>(params: {
         alasanPindah: lastReason,
         ttftMs: primaryTtft || totalMs,
         totalMs,
-        claudeWarning: lastClaudeWarning,
         inputTokens: inTok,
         outputTokens: outTok,
-        biayaPerkiraan: calculateEstimatedCostRupiah(primary.provider, primary.model, inTok, outTok),
+        biayaPerkiraan: calculateEstimatedCostRupiah(primary.model, inTok, outTok),
       };
     }
 
@@ -384,9 +322,8 @@ export async function executeWithHedgingAndFallback<T>(params: {
       primaryController.abort();
       const classified = classifyProviderError(primary, race1.err);
       lastReason = classified.switchReason;
-      if (classified.claudeWarning) lastClaudeWarning = classified.claudeWarning;
 
-      // Primary langsung error -> panggil secondary langsung tanpa tunggu hedging
+      // Primary langsung error (503/429/timeout) -> langsung jalankan secondary tanpa tunggu 4 dtk
       try {
         const tSec0 = Date.now();
         const secRes = await params.executeFn(secondary, secondaryController!.signal, (chunk) => {
@@ -401,23 +338,21 @@ export async function executeWithHedgingAndFallback<T>(params: {
           alasanPindah: lastReason,
           ttftMs: Date.now() - tSec0,
           totalMs,
-          claudeWarning: lastClaudeWarning,
           inputTokens: inTok,
           outputTokens: outTok,
-          biayaPerkiraan: calculateEstimatedCostRupiah(secondary.provider, secondary.model, inTok, outTok),
+          biayaPerkiraan: calculateEstimatedCostRupiah(secondary.model, inTok, outTok),
         };
       } catch (secErr: any) {
         secondaryController?.abort();
         const classifiedSec = classifyProviderError(secondary, secErr);
         lastReason = classifiedSec.switchReason;
-        if (classifiedSec.claudeWarning) lastClaudeWarning = classifiedSec.claudeWarning;
         i++; // lewati secondary yang gagal
         continue;
       }
     }
 
-    // Hedging timeout (4 detik token belum datang) -> Jalankan secondary secara paralel
-    lastReason = 'hedging_4s';
+    // Hedging timeout 4 detik -> jalankan secondary paralel
+    lastReason = 'timeout';
     let secondaryTtft = 0;
     let secondaryGotToken = false;
     const tSecondary0 = Date.now();
@@ -456,10 +391,9 @@ export async function executeWithHedgingAndFallback<T>(params: {
         alasanPindah: 'hedging_resolved_primary',
         ttftMs: primaryTtft || totalMs,
         totalMs,
-        claudeWarning: lastClaudeWarning,
         inputTokens: inTok,
         outputTokens: outTok,
-        biayaPerkiraan: calculateEstimatedCostRupiah(primary.provider, primary.model, inTok, outTok),
+        biayaPerkiraan: calculateEstimatedCostRupiah(primary.model, inTok, outTok),
       };
     } else if (winnerRace.winner === 'secondary') {
       primaryController.abort();
@@ -469,18 +403,16 @@ export async function executeWithHedgingAndFallback<T>(params: {
       return {
         result: winnerRace.res.result,
         winner: secondary,
-        alasanPindah: 'hedging_4s',
+        alasanPindah: 'timeout',
         ttftMs: secondaryTtft || totalMs,
         totalMs,
-        claudeWarning: lastClaudeWarning,
         inputTokens: inTok,
         outputTokens: outTok,
-        biayaPerkiraan: calculateEstimatedCostRupiah(secondary.provider, secondary.model, inTok, outTok),
+        biayaPerkiraan: calculateEstimatedCostRupiah(secondary.model, inTok, outTok),
       };
     } else if (winnerRace.winner === 'primary_error') {
       const classified = classifyProviderError(primary, winnerRace.err);
       lastReason = classified.switchReason;
-      if (classified.claudeWarning) lastClaudeWarning = classified.claudeWarning;
 
       const secOutcome = await safeSecondaryPromise;
       if (secOutcome.winner === 'secondary') {
@@ -493,23 +425,20 @@ export async function executeWithHedgingAndFallback<T>(params: {
           alasanPindah: lastReason,
           ttftMs: secondaryTtft || totalMs,
           totalMs,
-          claudeWarning: lastClaudeWarning,
           inputTokens: inTok,
           outputTokens: outTok,
-          biayaPerkiraan: calculateEstimatedCostRupiah(secondary.provider, secondary.model, inTok, outTok),
+          biayaPerkiraan: calculateEstimatedCostRupiah(secondary.model, inTok, outTok),
         };
       } else {
         secondaryController?.abort();
         const classifiedSec = classifyProviderError(secondary, secOutcome.err);
         lastReason = classifiedSec.switchReason;
-        if (classifiedSec.claudeWarning) lastClaudeWarning = classifiedSec.claudeWarning;
         i++;
         continue;
       }
     } else {
-      // secondary_error -> tunggu primary
       const classifiedSec = classifyProviderError(secondary, (winnerRace as any).err);
-      if (classifiedSec.claudeWarning) lastClaudeWarning = classifiedSec.claudeWarning;
+      lastReason = classifiedSec.switchReason;
 
       const priOutcome = await safePrimaryPromise;
       if (priOutcome.type === 'primary_done') {
@@ -522,10 +451,9 @@ export async function executeWithHedgingAndFallback<T>(params: {
           alasanPindah: lastReason,
           ttftMs: primaryTtft || totalMs,
           totalMs,
-          claudeWarning: lastClaudeWarning,
           inputTokens: inTok,
           outputTokens: outTok,
-          biayaPerkiraan: calculateEstimatedCostRupiah(primary.provider, primary.model, inTok, outTok),
+          biayaPerkiraan: calculateEstimatedCostRupiah(primary.model, inTok, outTok),
         };
       } else {
         primaryController.abort();
@@ -537,8 +465,7 @@ export async function executeWithHedgingAndFallback<T>(params: {
     }
   }
 
-  throw new Error(
-    lastClaudeWarning ||
-      'Server AI sedang sibuk. Screenshot & catatan tetap tersimpan, klik Coba Lagi.'
-  );
+  const err: any = new Error(AI_ALL_EXHAUSTED_MESSAGE);
+  err.code = 'ALL_EXHAUSTED';
+  throw err;
 }

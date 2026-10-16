@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { matchKotaFromText, WilayahKota } from '@/lib/wilayah/kota';
-import { formatModelDisplayName } from '@/lib/ai/anthropic-provider';
+import { formatModelDisplayName, AI_ALL_EXHAUSTED_MESSAGE } from '@/lib/ai/fallback-chain';
 // Lazy load CityCombobox agar bundle JS awal tetap kecil
 const CityCombobox = dynamic(
   () => import('@/components/ui/city-combobox').then((mod) => mod.CityCombobox),
@@ -111,13 +111,11 @@ export default function BalasChatPage() {
   const [manualSearchQuery, setManualSearchQuery] = useState('');
   const [manualSearchResults, setManualSearchResults] = useState<KasusTerakhirItem[]>([]);
   const [isSearchingQuotes, setIsSearchingQuotes] = useState(false);
-  const [claudeWarning, setClaudeWarning] = useState<string | null>(null);
   const [aiDailySummary, setAiDailySummary] = useState<{
     tanggal: string;
     total_draf: number;
     total_biaya_rp: number;
-    gemini: { draf_count: number; biaya_rp: number };
-    anthropic: { draf_count: number; biaya_rp: number };
+    per_model: Record<string, { count: number; cost: number }>;
   } | null>(null);
   // UI Interactive States
   const [isEditingExtraction, setIsEditingExtraction] = useState(false);
@@ -151,9 +149,6 @@ export default function BalasChatPage() {
           const json = await res.json();
           if (json.ringkasan_harian) {
             setAiDailySummary(json.ringkasan_harian);
-            if (json.ringkasan_harian.anthropic?.status?.message) {
-              setClaudeWarning(json.ringkasan_harian.anthropic.status.message);
-            }
           }
         }
       } catch {}
@@ -309,9 +304,7 @@ export default function BalasChatPage() {
           } else {
             setMatchedPenawaran(null);
           }
-          if (json.claude_warning) {
-            setClaudeWarning(json.claude_warning);
-          }
+
           setDurasiPipeline(json.durasi);
           setActualModel(json.model_used || json.draf?.model_used || null);
           if (json.extraction?.platform) {
@@ -334,16 +327,14 @@ export default function BalasChatPage() {
           }
         } else {
           setFriendlyError(
-            json.error || 'Server AI sedang sibuk. Screenshot & catatan tetap tersimpan, klik Coba Lagi.'
+            json.error || AI_ALL_EXHAUSTED_MESSAGE
           );
         }
       } catch {
         clearTimeout(hitungTimer);
         clearTimeout(drafTimer);
         clearInterval(stopwatchIntervalRef.current || undefined);
-        setFriendlyError(
-          'Server AI sedang sibuk. Screenshot & catatan tetap tersimpan, klik Coba Lagi.'
-        );
+        setFriendlyError(AI_ALL_EXHAUSTED_MESSAGE);
       } finally {
         setIsProcessing(false);
         setCurrentStep('idle');
@@ -707,27 +698,7 @@ export default function BalasChatPage() {
         </div>
       </div>
 
-      {/* Banner AI Cadangan Claude Tidak Aktif (Saldo / Key Salah) */}
-      {claudeWarning && (
-        <div
-          id="banner-claude-warning"
-          className="p-3.5 bg-amber-500/10 border border-amber-500/40 text-amber-900 dark:text-amber-200 rounded-[18px] text-xs flex items-center justify-between gap-3 shadow-none animate-in fade-in duration-200"
-        >
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-warn shrink-0" />
-            <span className="font-semibold">{claudeWarning}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setClaudeWarning(null)}
-            className="px-2.5 py-1 bg-surface border border-line rounded-lg text-xs font-semibold hover:bg-raised transition cursor-pointer"
-          >
-            Tutup
-          </button>
-        </div>
-      )}
-
-      {/* Ringkasan Harian Pemakaian AI Admin (Berapa draf per penyedia + Biaya) */}
+      {/* Ringkasan Harian Pemakaian AI Admin (Hanya Model Gemini + Biaya) */}
       {aiDailySummary && (
         <div
           id="box-admin-daily-ai-usage"
@@ -735,32 +706,48 @@ export default function BalasChatPage() {
         >
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="font-bold text-accent">Pemakaian AI Hari Ini:</span>
-            <span className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
-              Gemini: <strong>{aiDailySummary.gemini.draf_count}</strong> draf (Rp{aiDailySummary.gemini.biaya_rp.toLocaleString('id-ID')})
-            </span>
-            <span className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
-              Claude: <strong>{aiDailySummary.anthropic.draf_count}</strong> draf (Rp{aiDailySummary.anthropic.biaya_rp.toLocaleString('id-ID')})
-            </span>
+            {Object.entries(aiDailySummary.per_model || {}).length > 0 ? (
+              Object.entries(aiDailySummary.per_model).map(([mdl, s]) => (
+                <span key={mdl} className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
+                  {formatModelDisplayName(mdl)}: <strong>{s.count}</strong> draf (Rp{Math.round(s.cost).toLocaleString('id-ID')})
+                </span>
+              ))
+            ) : (
+              <span className="text-muted font-medium">Gemini aktif (0 draf hari ini)</span>
+            )}
           </div>
           <div className="font-semibold text-muted">
-            Total Biaya: <strong className="text-ink">Rp{aiDailySummary.total_biaya_rp.toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
+            Total Biaya: <strong className="text-ink">Rp{Math.round(aiDailySummary.total_biaya_rp).toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
           </div>
         </div>
       )}
 
-      {/* Banner Pesan Error Ramah (Jika AI Sibuk) */}
+      {/* Banner Pesan Error Ramah (Jika AI Penuh / Habis) */}
       {friendlyError && (
-        <div className="p-4 bg-warn-bg border border-warn/30 rounded-[18px] text-warn text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none">
+        <div
+          id="banner-error-ai"
+          className="p-4 bg-warn-bg border border-warn/30 rounded-[18px] text-warn text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none"
+        >
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-5 h-5 text-warn shrink-0" />
             <span>{friendlyError}</span>
           </div>
-          <button
-            onClick={() => runPipeline()}
-            className="min-h-[44px] px-5 py-2 bg-rail hover:opacity-90 text-white rounded-xl font-bold text-sm shrink-0 cursor-pointer"
-          >
-            Coba Lagi
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/penawaran/baru"
+              id="btn-buka-kalkulator"
+              className="min-h-[44px] px-4 py-2 bg-accent text-accent-ink hover:opacity-95 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+            >
+              Buka Kalkulator
+            </Link>
+            <button
+              type="button"
+              onClick={() => runPipeline()}
+              className="min-h-[44px] px-4 py-2 bg-surface border border-line text-ink hover:bg-raised rounded-xl font-semibold text-xs transition cursor-pointer"
+            >
+              Coba Lagi
+            </button>
+          </div>
         </div>
       )}
 

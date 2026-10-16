@@ -293,7 +293,7 @@ Kunci API Claude dan embedding hanya ada di server; browser tidak pernah memangg
 | Backend | Route handler Next.js (runtime Node) | Cukup untuk beban beberapa admin; tidak ada server kedua untuk dirawat |
 | Database | Supabase Postgres + pgvector | Data relasional (harga, penawaran) dan vektor memori dalam satu DB, dengan Row Level Security |
 | Auth & file | Supabase Auth + Storage bucket privat | Screenshot dan PDF tidak pernah publik; akses lewat signed URL berumur pendek |
-| AI | Claude API: `claude-haiku-5-5` untuk ekstraksi dan ringkasan memori, `claude-sonnet-5-5` untuk draf balasan | Haiku cepat dan murah untuk tugas terstruktur; Sonnet untuk nuansa persuasi. Prompt caching untuk system prompt + knowledge base |
+| AI | Gemini API: `gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.5-flash-lite` | Cepat dan andal untuk tugas ekstraksi, kalkulasi harga, dan draf balasan dengan auto-fallback |
 | Embedding | Model embedding multibahasa (mis. Voyage AI) | Claude API tidak menyediakan embedding; model harus paham bahasa chat Indonesia yang penuh singkatan |
 | PDF | `@react-pdf/renderer` di server | Layout deterministik tanpa Chromium; font disematkan |
 | Hosting | Vercel + Supabase, region Singapura | Latensi rendah dari Indonesia |
