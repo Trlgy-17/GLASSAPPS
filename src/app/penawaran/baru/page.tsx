@@ -21,13 +21,14 @@ import {
   RotateCcw,
   Copy,
 } from 'lucide-react';
-
 interface LocalItemState {
+  mode: 'custom' | 'produk_jadi';
+  selected_sku_kode?: string;
   bentuk_kode: string;
   panjang_cm: number;
   lebar_cm: number;
   lampu: '3_warna' | '1_warna';
-  kontrol: 'touchscreen' | 'touchscreen_baterai' | 'sensor' | 'sensor_baterai' | 'saklar';
+  kontrol: 'touchscreen' | 'touchscreen_baterai' | 'sensor' | 'sensor_baterai' | 'saklar' | 'baterai';
   frame: 'tanpa' | 'hpl' | 'aluminium';
   antifog: boolean;
   sandblast_pakai: boolean;
@@ -77,13 +78,14 @@ export default function PenawaranPage() {
   // Items State
   const [items, setItems] = useState<LocalItemState[]>([
     {
+      mode: 'custom',
       bentuk_kode: 'rectangle',
       panjang_cm: 60,
       lebar_cm: 80,
       lampu: '3_warna',
-      kontrol: 'sensor_baterai',
+      kontrol: 'touchscreen',
       frame: 'tanpa',
-      antifog: true,
+      antifog: false,
       sandblast_pakai: false,
       sandblast_lebar_cm: 3,
       sandblast_tepi_cm: 2,
@@ -172,6 +174,7 @@ export default function PenawaranPage() {
     setItems((prev) => [
       ...prev,
       {
+        mode: 'custom',
         bentuk_kode: 'rectangle',
         panjang_cm: 60,
         lebar_cm: 80,
@@ -458,147 +461,393 @@ export default function PenawaranPage() {
 
               return (
                 <div key={idx} className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-5">
-                  <div className="flex justify-between items-center pb-3 border-b border-line">
-                    <span className="font-bold text-ink text-sm">Cermin #{idx + 1}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-ink text-sm">Cermin #{idx + 1}</span>
+                      {/* Toggle Mode: Produk Jadi (SKU) vs Custom */}
+                      <div className="inline-flex p-1 bg-raised rounded-xl border border-line text-xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const firstSku = config.sku_katalog[0];
+                            updateItem(idx, {
+                              mode: 'produk_jadi',
+                              bentuk_kode: firstSku?.bentuk_kode || 'rectangle',
+                              panjang_cm: (firstSku?.panjang_mm || 600) / 10,
+                              lebar_cm: (firstSku?.lebar_mm || 400) / 10,
+                              kontrol: firstSku?.kontrol || 'touchscreen',
+                              sandblast_pakai: Boolean(firstSku?.sandblast),
+                              lampu: '3_warna',
+                            });
+                          }}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                            item.mode === 'produk_jadi'
+                              ? 'bg-surface text-accent font-bold shadow-xs'
+                              : 'text-muted hover:text-ink'
+                          }`}
+                        >
+                          Produk Jadi (SKU)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateItem(idx, { mode: 'custom', lampu: '3_warna', kontrol: 'touchscreen' })}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                            item.mode === 'custom'
+                              ? 'bg-surface text-accent font-bold shadow-xs'
+                              : 'text-muted hover:text-ink'
+                          }`}
+                        >
+                          Custom Ukuran (per m²)
+                        </button>
+                      </div>
+                    </div>
+
                     {items.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeItem(idx)}
-                        className="text-warn hover:opacity-80 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        className="text-warn hover:opacity-80 text-xs font-semibold flex items-center gap-1 cursor-pointer self-end sm:self-auto"
                       >
                         <Trash2 className="w-4 h-4" /> Hapus
                       </button>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-muted mb-1.5">
-                        Bentuk Cermin
-                      </label>
-                      <select
-                        value={item.bentuk_kode}
-                        onChange={(e) => {
-                          const newKode = e.target.value;
-                          const shapeDef = config.master_bentuk.find((b) => b.kode === newKode);
-                          updateItem(idx, {
-                            bentuk_kode: newKode,
-                            frame: item.frame === 'aluminium' && !shapeDef?.boleh_aluminium ? 'tanpa' : item.frame,
-                          });
-                        }}
-                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
-                      >
-                        {config.master_bentuk.map((b) => (
-                          <option key={b.kode} value={b.kode}>
-                            {b.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  {item.mode === 'produk_jadi' ? (
+                    /* =========================================================================
+                       MODE PRODUK JADI (SKU KATALOG)
+                       Kontrol = Touchscreen (TC) / Sensor Tangan (ST) / Baterai (BT)
+                       Ukuran & bentuk mengambil dari daftar SKU katalog aktif
+                       ========================================================================= */
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">
+                            Pilih Model &amp; Ukuran Katalog:
+                          </label>
+                          <select
+                            value={`${item.bentuk_kode}|${item.panjang_cm}|${item.lebar_cm}|${item.sandblast_pakai}`}
+                            onChange={(e) => {
+                              const [b, p, l, sb] = e.target.value.split('|');
+                              updateItem(idx, {
+                                bentuk_kode: b,
+                                panjang_cm: Number(p),
+                                lebar_cm: Number(l),
+                                sandblast_pakai: sb === 'true',
+                              });
+                            }}
+                            className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
+                          >
+                            {/* Kelompokkan SKU unik berdasarkan bentuk & ukuran */}
+                            {Array.from(
+                              new Set(
+                                config.sku_katalog.map(
+                                  (s) => `${s.bentuk_kode}|${s.panjang_mm / 10}|${s.lebar_mm / 10}|${s.sandblast}`
+                                )
+                              )
+                            ).map((key) => {
+                              const [b, p, l, sb] = key.split('|');
+                              const bDef = config.master_bentuk.find((mb) => mb.kode === b);
+                              const sbLabel = sb === 'true' ? 'Sandblast' : 'Polos';
+                              return (
+                                <option key={key} value={key}>
+                                  {bDef?.label || b} {p}×{l} cm ({sbLabel})
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-muted mb-1.5">
-                        Panjang (cm)
-                      </label>
-                      <input
-                        type="number"
-                        min="15"
-                        max="300"
-                        value={item.panjang_cm}
-                        onChange={(e) => updateItem(idx, { panjang_cm: Number(e.target.value) })}
-                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
-                      />
-                      {(item.panjang_cm < 15 || item.panjang_cm > 300) && (
-                        <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
-                      )}
-                    </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">
+                            Dimensi Fisik Terpilih:
+                          </label>
+                          <div className="p-2.5 bg-raised border border-line rounded-xl text-sm font-semibold text-ink flex items-center justify-between min-h-[44px]">
+                            <span>{item.panjang_cm} × {item.lebar_cm} cm</span>
+                            <span className="text-xs text-muted">
+                              {item.sandblast_pakai ? 'Dengan Sandblast' : 'Tanpa Sandblast'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-muted mb-1.5">
-                        Lebar (cm)
-                      </label>
-                      <input
-                        type="number"
-                        min="15"
-                        max="300"
-                        value={item.lebar_cm}
-                        onChange={(e) => updateItem(idx, { lebar_cm: Number(e.target.value) })}
-                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
-                      />
-                      {(item.lebar_cm < 15 || item.lebar_cm > 300) && (
-                        <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
-                      )}
-                    </div>
-                  </div>
+                      {/* Kartu Pilihan Kontrol Produk Jadi (TC / ST / BT) */}
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-xs font-semibold text-muted">
+                          Pilihan Kontrol Produk Jadi:
+                        </label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {/* Touchscreen (TC) */}
+                          {(() => {
+                            const skuTc = config.sku_katalog.find(
+                              (s) =>
+                                s.bentuk_kode === item.bentuk_kode &&
+                                ((s.panjang_mm === item.panjang_cm * 10 && s.lebar_mm === item.lebar_cm * 10) ||
+                                  (s.panjang_mm === item.lebar_cm * 10 && s.lebar_mm === item.panjang_cm * 10)) &&
+                                s.sandblast === item.sandblast_pakai &&
+                                s.kontrol === 'touchscreen'
+                            );
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => updateItem(idx, { kontrol: 'touchscreen' })}
+                                className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                                  item.kontrol === 'touchscreen'
+                                    ? 'border-accent bg-tint text-ink'
+                                    : 'border-line bg-raised text-muted hover:bg-surface'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <p className="font-bold text-ink text-sm">Touchscreen (TC)</p>
+                                  {item.kontrol === 'touchscreen' && (
+                                    <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted mt-1 leading-snug">
+                                  Tombol sentuh kaca, kabel colok listrik
+                                </p>
+                                <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                                  {skuTc ? formatRupiah(skuTc.harga_tetap) : 'Tersedia di katalog'}
+                                </span>
+                              </button>
+                            );
+                          })()}
 
-                  {/* KONTROL LAMPU: 3 Pilihan Kartu dengan Keterangan */}
-                  <div className="space-y-2 pt-2">
-                    <label className="block text-xs font-semibold text-muted">
-                      Pilihan Kontrol Lampu:
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen' })}
-                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
-                          item.lampu === '3_warna' && item.kontrol === 'touchscreen'
-                            ? 'border-accent bg-tint text-ink'
-                            : 'border-line bg-raised text-muted hover:bg-surface'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-ink text-sm">LED 3 Warna (Premium)</p>
-                          {item.lampu === '3_warna' && item.kontrol === 'touchscreen' && (
-                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                          {/* Sensor Tangan (ST) */}
+                          {(() => {
+                            const skuSt = config.sku_katalog.find(
+                              (s) =>
+                                s.bentuk_kode === item.bentuk_kode &&
+                                ((s.panjang_mm === item.panjang_cm * 10 && s.lebar_mm === item.lebar_cm * 10) ||
+                                  (s.panjang_mm === item.lebar_cm * 10 && s.lebar_mm === item.panjang_cm * 10)) &&
+                                s.sandblast === item.sandblast_pakai &&
+                                s.kontrol === 'sensor'
+                            );
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => updateItem(idx, { kontrol: 'sensor' })}
+                                className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                                  item.kontrol === 'sensor'
+                                    ? 'border-accent bg-tint text-ink'
+                                    : 'border-line bg-raised text-muted hover:bg-surface'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <p className="font-bold text-ink text-sm">Sensor Tangan (ST)</p>
+                                  {item.kontrol === 'sensor' && (
+                                    <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted mt-1 leading-snug">
+                                  Lambaikan tangan on/off tanpa menyentuh cermin
+                                </p>
+                                <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                                  {skuSt ? formatRupiah(skuSt.harga_tetap) : 'Tersedia di katalog'}
+                                </span>
+                              </button>
+                            );
+                          })()}
+
+                          {/* Baterai (BT) */}
+                          {(() => {
+                            const skuBt = config.sku_katalog.find(
+                              (s) =>
+                                s.bentuk_kode === item.bentuk_kode &&
+                                ((s.panjang_mm === item.panjang_cm * 10 && s.lebar_mm === item.lebar_cm * 10) ||
+                                  (s.panjang_mm === item.lebar_cm * 10 && s.lebar_mm === item.panjang_cm * 10)) &&
+                                s.sandblast === item.sandblast_pakai &&
+                                s.kontrol === 'baterai'
+                            );
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => updateItem(idx, { kontrol: 'baterai' })}
+                                className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                                  item.kontrol === 'baterai' || item.kontrol === 'touchscreen_baterai'
+                                    ? 'border-accent bg-tint text-ink'
+                                    : 'border-line bg-raised text-muted hover:bg-surface'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <p className="font-bold text-ink text-sm">Baterai Cas (BT)</p>
+                                  {(item.kontrol === 'baterai' || item.kontrol === 'touchscreen_baterai') && (
+                                    <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted mt-1 leading-snug">
+                                  Tanpa kabel di dinding, cas Type-C rechargeable
+                                </p>
+                                <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                                  {skuBt ? formatRupiah(skuBt.harga_tetap) : 'Tersedia di katalog'}
+                                </span>
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* =========================================================================
+                       MODE CUSTOM (PER M²)
+                       Paket = LED 3 Warna Premium / Sensor Tangan + Baterai / LED 1 Warna Basic
+                       Bebas tentukan ukuran panjang & lebar
+                       ========================================================================= */
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">
+                            Bentuk Cermin Custom
+                          </label>
+                          <select
+                            value={item.bentuk_kode}
+                            onChange={(e) => {
+                              const newKode = e.target.value;
+                              const shapeDef = config.master_bentuk.find((b) => b.kode === newKode);
+                              updateItem(idx, {
+                                bentuk_kode: newKode,
+                                frame: item.frame === 'aluminium' && !shapeDef?.boleh_aluminium ? 'tanpa' : item.frame,
+                              });
+                            }}
+                            className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
+                          >
+                            {config.master_bentuk.map((b) => (
+                              <option key={b.kode} value={b.kode}>
+                                {b.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">
+                            Panjang (cm)
+                          </label>
+                          <input
+                            type="number"
+                            min="15"
+                            max="300"
+                            value={item.panjang_cm}
+                            onChange={(e) => updateItem(idx, { panjang_cm: Number(e.target.value) })}
+                            className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
+                          />
+                          {(item.panjang_cm < 15 || item.panjang_cm > 300) && (
+                            <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
                           )}
                         </div>
-                        <p className="text-xs text-muted mt-1 leading-snug">
-                          Warm, Natural, Cool White dengan tombol touchscreen kabel
-                        </p>
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen_baterai' })}
-                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
-                          item.kontrol === 'touchscreen_baterai' || item.kontrol === 'sensor_baterai'
-                            ? 'border-accent bg-tint text-ink'
-                            : 'border-line bg-raised text-muted hover:bg-surface'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-ink text-sm">Sensor Tangan + Baterai</p>
-                          {(item.kontrol === 'touchscreen_baterai' || item.kontrol === 'sensor_baterai') && (
-                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                        <div>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">
+                            Lebar (cm)
+                          </label>
+                          <input
+                            type="number"
+                            min="15"
+                            max="300"
+                            value={item.lebar_cm}
+                            onChange={(e) => updateItem(idx, { lebar_cm: Number(e.target.value) })}
+                            className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
+                          />
+                          {(item.lebar_cm < 15 || item.lebar_cm > 300) && (
+                            <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
                           )}
                         </div>
-                        <p className="text-xs text-muted mt-1 leading-snug">
-                          Tanpa colokan listrik, cas Type-C tahan 2–3 minggu
-                        </p>
-                      </button>
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => updateItem(idx, { lampu: '1_warna', kontrol: 'saklar' })}
-                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
-                          item.lampu === '1_warna' || item.kontrol === 'saklar'
-                            ? 'border-accent bg-tint text-ink'
-                            : 'border-line bg-raised text-muted hover:bg-surface'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-ink text-sm">LED 1 Warna Saklar (Basic)</p>
-                          {(item.lampu === '1_warna' || item.kontrol === 'saklar') && (
-                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
-                          )}
+                      {/* KONTROL CUSTOM: 3 Pilihan Kartu Paket dari Buku Harga */}
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-xs font-semibold text-muted">
+                          Pilihan Paket Kontrol Custom:
+                        </label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {/* Paket 1: LED 3 Warna Premium */}
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen' })}
+                            className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                              item.lampu === '3_warna' && item.kontrol === 'touchscreen'
+                                ? 'border-accent bg-tint text-ink'
+                                : 'border-line bg-raised text-muted hover:bg-surface'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="font-bold text-ink text-sm">LED 3 Warna Premium</p>
+                              {item.lampu === '3_warna' && item.kontrol === 'touchscreen' && (
+                                <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-1 leading-snug">
+                              Warm, Natural, Cool White dengan tombol touchscreen kabel
+                            </p>
+                            <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                              Tarif {formatRupiah(config.tarif_m2.premium_b2c)}/m²
+                            </span>
+                          </button>
+
+                          {/* Paket 2: Sensor Tangan + Baterai */}
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'sensor_baterai' })}
+                            className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                              item.kontrol === 'sensor_baterai' || item.kontrol === 'touchscreen_baterai'
+                                ? 'border-accent bg-tint text-ink'
+                                : 'border-line bg-raised text-muted hover:bg-surface'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="font-bold text-ink text-sm">Sensor Tangan + Baterai</p>
+                              {(item.kontrol === 'sensor_baterai' || item.kontrol === 'touchscreen_baterai') && (
+                                <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-1 leading-snug">
+                              Tanpa colokan listrik, cas Type-C tahan 2–3 minggu
+                            </p>
+                            <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                              Tarif Premium + Add-on {formatRupiah(config.add_on.sensor_baterai?.harga || 250000)}
+                            </span>
+                          </button>
+
+                          {/* Paket 3: LED 1 Warna Basic */}
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, { lampu: '1_warna', kontrol: 'saklar' })}
+                            className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                              item.lampu === '1_warna' || item.kontrol === 'saklar'
+                                ? 'border-accent bg-tint text-ink'
+                                : 'border-line bg-raised text-muted hover:bg-surface'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="font-bold text-ink text-sm">LED 1 Warna Basic</p>
+                              {(item.lampu === '1_warna' || item.kontrol === 'saklar') && (
+                                <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-1 leading-snug">
+                              1 warna lampu pilihan dengan saklar dinding standar
+                            </p>
+                            <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                              Tarif {formatRupiah(config.tarif_m2.basic_m2)}/m²
+                            </span>
+                          </button>
                         </div>
-                        <p className="text-xs text-muted mt-1 leading-snug">
-                          1 warna lampu dengan saklar dinding standar
-                        </p>
-                      </button>
+                      </div>
+
+                      {/* Sandblast Custom Option */}
+                      <div className="pt-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer min-h-[36px]">
+                          <input
+                            type="checkbox"
+                            checked={item.sandblast_pakai}
+                            onChange={(e) => updateItem(idx, { sandblast_pakai: e.target.checked })}
+                            className="w-4 h-4 rounded text-accent"
+                          />
+                          <span>Garis Sandblast (+{formatRupiah(config.add_on.sandblast?.harga || 100000)}/m keliling)</span>
+                        </label>
+                      </div>
                     </div>
-                  </div>
-
+                  )}
                   {/* Frame Luar & Addons */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                     <div>

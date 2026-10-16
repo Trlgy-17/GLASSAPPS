@@ -646,7 +646,7 @@ export async function executeUnifiedDraft(params: UnifiedDraftParams): Promise<U
   const t0 = Date.now();
   const ai = getAIClient();
   const candidateModels = params.modelName
-    ? [params.modelName]
+    ? [params.modelName, MODEL_FAST]
     : DRAFT_MODELS.filter(isModelAvailable);
   if (candidateModels.length === 0) {
     candidateModels.push(MODEL_FAST);
@@ -656,8 +656,11 @@ export async function executeUnifiedDraft(params: UnifiedDraftParams): Promise<U
 Kamu adalah Senior Sales & CS Putra Glass (cermin LED custom premium di Bandung).
 Tugasmu:
 1. Analisis teks dan/atau screenshot chat klien.
-2. Keluarkan blok SPEC di paling awal:
-<!--SPEC-->
+2. PENTING - ATURAN 2 MODE KONTROL (JANGAN TERTUKAR):
+   - Mode "Produk Jadi" (SKU Katalog standar): Kontrol = Touchscreen (TC) / Sensor Tangan (ST) / Baterai (BT).
+   - Mode "Custom" (Ukuran bebas per m2): Paket = LED 3 Warna Premium (touchscreen kabel) / Sensor Tangan + Baterai (rechargeable) / LED 1 Warna Basic (saklar).
+   - Jika klien belum jelas memilih ukuran/model, tanyakan: "Mau model jadi (ukuran katalog) atau custom ukuran sesuai ruangan Kak?".
+3. Keluarkan blok SPEC di paling awal:
 {
   "nama_klien": "Nama klien jika ada, atau null",
   "kota": "Nama kota jika ada, atau null",
@@ -789,14 +792,58 @@ ATURAN HARGA MUTLAK:
 
   // Ekstrak blok SPEC
   let extractedSpec: any = {};
-  const specMatch = accumulated.match(/<!--SPEC-->([\s\S]*?)<!--\/SPEC-->/);
+  const specMatch =
+    accumulated.match(/<!--\s*SPEC\s*-->([\s\S]*?)<!--\s*\/SPEC\s*-->/i) ||
+    accumulated.match(/```json\s*<!--\s*SPEC\s*-->([\s\S]*?)<!--\s*\/SPEC\s*-->/i);
+
   if (specMatch) {
     try {
       extractedSpec = JSON.parse(specMatch[1].trim());
     } catch {}
   }
 
-  // Hitung harga resmi lewat pricing.ts
+  // Fallback jika model tidak membungkus SPEC atau gagal parse
+  if (!extractedSpec.items || extractedSpec.items.length === 0) {
+    const rawJsonMatch = accumulated.match(/\{[\s\S]*?"items"[\s\S]*?\}/);
+    if (rawJsonMatch) {
+      try {
+        extractedSpec = JSON.parse(rawJsonMatch[0].trim());
+      } catch {}
+    }
+  }
+
+  // Ekstrak dimensi darurat dari teks jika SPEC kosong
+  let it = extractedSpec.items?.[0];
+  if (!it && params.pastedText) {
+    const dimMatch = params.pastedText.match(/(\d+)\s*(?:x|×)\s*(\d+)/i);
+    const diaMatch = params.pastedText.match(/diameter\s*(\d+)/i) || params.pastedText.match(/D(\d+)/i);
+    if (dimMatch) {
+      it = {
+        panjang_cm: Number(dimMatch[1]),
+        lebar_cm: Number(dimMatch[2]),
+        bentuk: params.pastedText.toLowerCase().includes('oval') ? 'oval' : 'rectangle',
+        lampu: params.pastedText.toLowerCase().includes('1 warna') ? '1_warna' : '3_warna',
+        kontrol: params.pastedText.toLowerCase().includes('sensor') ? 'sensor' : 'touchscreen',
+        sandblast: params.pastedText.toLowerCase().includes('sandblast'),
+      };
+    } else if (diaMatch) {
+      it = {
+        panjang_cm: Number(diaMatch[1]),
+        lebar_cm: Number(diaMatch[1]),
+        bentuk: 'round',
+        lampu: '3_warna',
+        kontrol: 'touchscreen',
+        sandblast: params.pastedText.toLowerCase().includes('sandblast'),
+      };
+    }
+  }
+
+  if (!extractedSpec.kota && params.pastedText) {
+    if (/bandung|cimahi/i.test(params.pastedText)) extractedSpec.kota = 'Bandung';
+    else if (/surabaya/i.test(params.pastedText)) extractedSpec.kota = 'Surabaya';
+    else if (/jakarta/i.test(params.pastedText)) extractedSpec.kota = 'Jakarta';
+  }
+
   let harga1Str = '(belum bisa kami hitung karena ukuran belum ada, boleh infokan rencana ukuran berapa cm Kak?)';
   let ongkirStr = 'sesuai lokasi tujuan';
   let totalStr = '(akan kami hitung setelah ukuran pasti)';
@@ -804,9 +851,7 @@ ATURAN HARGA MUTLAK:
   let pelunasanStr = '(50% saat cermin siap kirim)';
   const calculatedNumbers: number[] = [];
 
-  const it = extractedSpec.items?.[0];
   const hasDimensions = it && (it.panjang_cm || it.ukuran_1_cm) && (it.lebar_cm || it.ukuran_2_cm);
-
   if (hasDimensions) {
     try {
       const pCm = it.panjang_cm || it.ukuran_1_cm;

@@ -482,19 +482,26 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
   kalkulasi.items.forEach((item) => {
     const pCm = item.panjang_mm / 10;
     const lCm = item.lebar_mm / 10;
+    const bentukDef = config.master_bentuk.find((b) => b.kode.toLowerCase() === (item.sku_kode?.split('-')[0]?.toLowerCase() || ''));
     const bentukLabel = item.is_sku
-      ? item.sku_kode
+      ? `Cermin LED Katalog (${item.sku_kode}) · ${bentukDef?.label || 'Standar'} ${pCm} × ${lCm} cm`
       : `Cermin LED ${item.varian === 'premium' ? 'Premium' : 'Basic'} · ${pCm} × ${lCm} cm`;
 
     // Chips default spesifikasi cermin
     const cerminChips: string[] = [];
-    if (item.varian === 'premium') {
-      cerminChips.push('LED 3 warna', 'Touchscreen');
+    if (item.is_sku) {
+      if (item.sku_kode?.includes('-ST')) cerminChips.push('Sensor Tangan (ST)');
+      else if (item.sku_kode?.includes('-BT')) cerminChips.push('Baterai Cas (BT)');
+      else cerminChips.push('Touchscreen (TC)');
+      if (item.sku_kode?.includes('-SB-')) cerminChips.push('Sandblast');
     } else {
-      cerminChips.push('LED 1 warna / Saklar');
+      if (item.varian === 'premium') {
+        cerminChips.push('LED 3 warna', 'Touchscreen');
+      } else {
+        cerminChips.push('LED 1 warna / Saklar');
+      }
     }
     cerminChips.push('Bevel 10 mm', 'Kaca 5 mm');
-
     const numStr = String(rowCounter++).padStart(2, '0');
     tableRows.push({
       num: numStr,
