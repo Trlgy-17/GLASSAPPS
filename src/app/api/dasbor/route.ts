@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   // 5. Perubahan harga terakhir dari audit_log
   const { data: priceBookLogs } = await adminClient
     .from('audit_log')
-    .select('id, aktor, aksi, objek, sebelum, sesudah, alasan, created_at, users:aktor(nama, email)')
+    .select('id, aktor, aksi, objek, alasan, created_at, users:aktor(nama, email)')
     .eq('aksi', 'CREATE_PRICE_BOOK')
     .order('created_at', { ascending: false })
     .limit(5);
