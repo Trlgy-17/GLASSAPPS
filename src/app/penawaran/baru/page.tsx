@@ -432,8 +432,8 @@ export default function PenawaranPage() {
                   }}
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
-                  <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
-                  <option value="dalam_kota">Bandung Raya (List: Rp750.000)</option>
+                  <option value="luar_kota">Luar Kota (Packing Kayu · List: Rp1.300.000 · Net Admin: Rp1.150.000)</option>
+                  <option value="dalam_kota">Bandung Raya (List: Rp750.000 · Net Admin: Rp500.000)</option>
                 </select>
               </div>
 
@@ -981,8 +981,8 @@ export default function PenawaranPage() {
                     placeholder={`Default: ${formatRupiah(ongkirListPrice)}`}
                     className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none"
                   />
-                  <p className="text-[11px] text-muted">
-                    Batas Wewenang Admin: {formatRupiah(batasOngkirAdmin)}
+                  <p className="text-[11px] text-muted font-medium">
+                    Batas Wewenang Admin (Harga Net): {formatRupiah(batasOngkirAdmin)}
                   </p>
 
                   {kalkulasi.ongkir.status === 'error_merah' && (
