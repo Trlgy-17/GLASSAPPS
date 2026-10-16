@@ -539,9 +539,13 @@ export async function executeFastRevision(
   const ai = getAIClient();
 
   // Prompt kilat 1-shot khusus revisi
+  // Prompt kilat 1-shot khusus revisi dengan guardrail harga mutlak
   const revisionSystemPrompt = `
 Kamu adalah sales Putra Glass. Tugasmu HANYA merevisi draf WhatsApp sebelumnya berdasarkan instruksi: "${params.instruksiRevisi}".
-Pertahankan seluruh angka rupiah sah yang ada di draf sebelumnya. Jangan menambah spek baru.
+ATURAN MUTLAK KEAMANAN:
+- DILARANG KERAS mengubah harga, memberi diskon baru, memotong harga, atau menyebut batas wewenang owner.
+- Pertahankan seluruh angka rupiah sah yang ada di draf sebelumnya persis apa adanya.
+- Jangan pernah mengeluarkan penanda placeholder [[...]].
 Keluarkan HANYA JSON valid:
 {
   "ringkasan_situasi": "Revisi cepat",
@@ -557,7 +561,6 @@ Keluarkan HANYA JSON valid:
   "langkah_berikutnya": "Kirim draf revisi ke klien"
 }
 `;
-
   const userContent = `DRAF SEBELUMNYA:\n${params.previousDraftText}\n\nINSTRUKSI REVISI:\n${params.instruksiRevisi}`;
 
   // Gunakan model tercepat dengan thinkingLevel MINIMAL untuk latensi <= 3 detik
@@ -598,6 +601,32 @@ Keluarkan HANYA JSON valid:
     throw new Error('Gagal memproses draf revisi');
   }
 
+  // Bersihkan penanda [[...]] yang mungkin tersisa
+  if (Array.isArray(parsed.draf)) {
+    parsed.draf.forEach((d) => {
+      if (Array.isArray(d.bubbles)) {
+        d.bubbles = d.bubbles.map((b) => b.replace(/\[\[.*?\]\]/g, ''));
+      }
+    });
+  }
+
+  const allBubbles: string[] = [];
+  (parsed.draf || []).forEach((d) => (d.bubbles || []).forEach((b) => allBubbles.push(b)));
+
+  // Validasi Rupiah, Marketplace Guard, dan Frasa Terlarang
+  const calculatedNumbers = params.calculatedNumbers || [];
+  const rupiahVal = validateRupiahInDraft(allBubbles, calculatedNumbers, calculatedNumbers);
+  const marketplaceVal = validateMarketplaceGuards(params.kanal || 'whatsapp', allBubbles);
+  const forbiddenVal = validateForbiddenPhrases(allBubbles);
+
+  const hasErrors = !rupiahVal.valid || !marketplaceVal.valid || !forbiddenVal.valid;
+  const allErrors = [...rupiahVal.errors, ...marketplaceVal.errors, ...forbiddenVal.errors];
+
+  parsed.angka_dipakai = rupiahVal.numbersFound || calculatedNumbers;
+  parsed.angka_tidak_terverifikasi = !rupiahVal.valid;
+  if (hasErrors) {
+    parsed.catatan_internal = (parsed.catatan_internal ? parsed.catatan_internal + ' | ' : '') + allErrors.join('; ');
+  }
   await logAICall({
     model: modelToUse,
     endpoint: 'fastRevision',
@@ -752,45 +781,60 @@ ATURAN HARGA MUTLAK:
   let modelUsed = '';
 
   for (const modelToTry of candidateModels) {
-    try {
-      modelUsed = modelToTry;
-      const stream = await ai.models.generateContentStream({
-        model: modelToTry,
-        contents: parts,
-        config: {
-          systemInstruction: { parts: [{ text: unifiedSystemPrompt }] },
-          thinkingConfig: { thinkingLevel: thinkingLvl },
-          maxOutputTokens: 1500,
-        },
-      });
+    let attempts = 0;
+    while (attempts < 2) {
+      attempts++;
+      try {
+        modelUsed = modelToTry;
+        const stream = await ai.models.generateContentStream({
+          model: modelToTry,
+          contents: parts,
+          config: {
+            systemInstruction: { parts: [{ text: unifiedSystemPrompt }] },
+            thinkingConfig: { thinkingLevel: thinkingLvl },
+            maxOutputTokens: 1500,
+          },
+        });
 
-      accumulated = '';
-      for await (const chunk of stream) {
-        const txt = chunk.text || '';
-        if (!gotFirst && txt.trim().length > 0) {
-          gotFirst = true;
-          ttftMs = Date.now() - t0;
+        accumulated = '';
+        for await (const chunk of stream) {
+          const txt = chunk.text || '';
+          if (!gotFirst && txt.trim().length > 0) {
+            gotFirst = true;
+            ttftMs = Date.now() - t0;
+          }
+          accumulated += txt;
+          if (params.onStreamChunk) {
+            params.onStreamChunk(txt);
+          }
         }
-        accumulated += txt;
-        if (params.onStreamChunk) {
-          params.onStreamChunk(txt);
+        if (accumulated.trim().length > 0) {
+          break;
         }
-      }
-      if (accumulated.trim().length > 0) {
-        break; // Berhasil!
-      }
-    } catch (tryErr: unknown) {
-      const errStatus = tryErr && typeof tryErr === 'object' && 'status' in tryErr ? tryErr.status : undefined;
-      const errMsg = tryErr instanceof Error ? tryErr.message : String(tryErr);
-      console.warn(`Model ${modelToTry} gagal:`, errMsg);
-      if (errStatus !== 503) {
-        recordModelFailure(modelToTry);
-      }
-      if (modelToTry === candidateModels[candidateModels.length - 1]) {
-        throw tryErr;
+      } catch (tryErr: unknown) {
+        const errStatus = tryErr && typeof tryErr === 'object' && 'status' in tryErr ? tryErr.status : undefined;
+        const errMsg = tryErr instanceof Error ? tryErr.message : String(tryErr);
+        console.warn(`Model ${modelToTry} percobaan #${attempts} gagal:`, errMsg);
+        if (errStatus === 503 && attempts < 2) {
+          const { promise, resolve } = Promise.withResolvers<void>();
+          setTimeout(resolve, 1200);
+          await promise;
+          continue;
+        }
+        if (errStatus !== 503) {
+          recordModelFailure(modelToTry);
+        }
+        if (modelToTry === candidateModels[candidateModels.length - 1]) {
+          throw tryErr;
+        }
+        break;
       }
     }
+    if (accumulated.trim().length > 0) {
+      break;
+    }
   }
+
 
   const durasiMs = Date.now() - t0;
 

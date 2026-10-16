@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { draftReply, MODEL_EMBEDDING } from '@/lib/ai/provider';
 import { GoogleGenAI } from '@google/genai';
+import { checkAiRateLimit } from '@/lib/ai/rate-limiter';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
 
 export async function POST(req: NextRequest) {
@@ -31,6 +32,19 @@ export async function POST(req: NextRequest) {
 
   if (userData?.peran !== 'admin') {
     return NextResponse.json({ error: 'Hanya admin yang boleh membuat draf balasan' }, { status: 403 });
+  }
+
+  const rateLimit = checkAiRateLimit(user.id, 20);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec) } }
+    );
+  }
+
+  const contentLength = Number(req.headers.get('content-length') || '0');
+  if (contentLength > 15 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Ukuran request terlalu besar (maksimal 15 MB)' }, { status: 413 });
   }
 
   try {

@@ -101,8 +101,22 @@ export default function BalasChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Muat 5 Kasus Terakhir
+  // Muat 5 Kasus Terakhir & Pulihkan draf input admin dari sessionStorage jika ada
   useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('balas_chat_draft_input');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.pastedText) setPastedText(parsed.pastedText);
+        if (Array.isArray(parsed.images) && parsed.images.length > 0) {
+          setImages(parsed.images);
+        }
+        if (parsed.kanal) setKanal(parsed.kanal);
+      }
+    } catch (e) {
+      console.warn('Gagal memulihkan draf input:', e);
+    }
+
     async function loadKasusTerakhir() {
       try {
         const res = await fetch('/api/balas/kasus-terakhir');
@@ -118,6 +132,22 @@ export default function BalasChatPage() {
     }
     loadKasusTerakhir();
   }, []);
+
+  // Simpan input admin ke sessionStorage secara otomatis agar tidak hilang saat refresh
+  useEffect(() => {
+    try {
+      if (pastedText || images.length > 0) {
+        sessionStorage.setItem(
+          'balas_chat_draft_input',
+          JSON.stringify({ pastedText, images, kanal })
+        );
+      } else {
+        sessionStorage.removeItem('balas_chat_draft_input');
+      }
+    } catch (e) {
+      console.warn('Gagal menyimpan draf input:', e);
+    }
+  }, [pastedText, images, kanal]);
 
   // Helper kompresi gambar
   const resizeImage = (file: File): Promise<ScreenshotItem> => {
@@ -313,17 +343,25 @@ export default function BalasChatPage() {
 
       const newImages: File[] = [];
       let textPasted = '';
+      let hasNonImage = false;
 
       for (let i = 0; i < clipboardItems.length; i++) {
         const item = clipboardItems[i];
         if (item.type.indexOf('image') !== -1) {
           const file = item.getAsFile();
           if (file) newImages.push(file);
+        } else if (item.kind === 'file' && item.type.indexOf('image') === -1) {
+          hasNonImage = true;
         } else if (item.type === 'text/plain') {
           item.getAsString((s) => {
             if (s && s.trim()) textPasted = s;
           });
         }
+      }
+
+      if (hasNonImage) {
+        alert('Hanya berkas gambar (screenshot) yang diperbolehkan');
+        return;
       }
 
       if (newImages.length > 0) {
@@ -383,15 +421,26 @@ export default function BalasChatPage() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const files = Array.from(e.target.files);
-    if (images.length + files.length > 5) {
-      alert('Maksimal 5 screenshot per permintaan');
+
+    // Tolak jika ada berkas bukan gambar
+    const nonImage = files.find((f) => !f.type.startsWith('image/'));
+    if (nonImage) {
+      alert(`Berkas "${nonImage.name}" bukan gambar. Hanya berkas gambar yang diperbolehkan.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
+
+    // Tolak jika total gambar melebihi 5
+    if (images.length + files.length > 5) {
+      alert('Maksimal 5 screenshot per permintaan');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     const resized = await Promise.all(files.map(resizeImage));
     const updated = [...images, ...resized].slice(0, 5);
     setImages(updated);
     if (fileInputRef.current) fileInputRef.current.value = '';
-
     clearTimeout(debounceTimerRef.current || undefined);
     debounceTimerRef.current = setTimeout(() => {
       runPipeline(updated, pastedText);
@@ -440,6 +489,7 @@ export default function BalasChatPage() {
       if (res.ok) {
         setSentSuccess(true);
         setShowConfirmSent(false);
+        try { sessionStorage.removeItem('balas_chat_draft_input'); } catch {}
       }
     } catch (err) {
       console.warn('Gagal mencatat status terkirim:', err);
@@ -470,6 +520,7 @@ export default function BalasChatPage() {
   };
 
   const handleChatBaru = () => {
+    try { sessionStorage.removeItem('balas_chat_draft_input'); } catch {}
     setImages([]);
     setPastedText('');
     setExtraction(null);

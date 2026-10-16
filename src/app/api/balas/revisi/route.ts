@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { executeFastRevision, logAICall } from '@/lib/ai/provider';
-
+import { checkAiRateLimit } from '@/lib/ai/rate-limiter';
 export async function POST(req: NextRequest) {
   const tTotalStart = Date.now();
   const supabase = await createClient();
@@ -33,6 +33,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Hanya admin yang boleh merevisi draf' }, { status: 403 });
   }
   const durasiAuth = Date.now() - tAuth0;
+
+  const rateLimit = checkAiRateLimit(user.id, 20);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec) } }
+    );
+  }
+
+  const contentLength = Number(req.headers.get('content-length') || '0');
+  if (contentLength > 15 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Ukuran request terlalu besar (maksimal 15 MB)' }, { status: 413 });
+  }
 
   try {
     const body = await req.json();
