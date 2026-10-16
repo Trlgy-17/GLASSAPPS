@@ -265,29 +265,39 @@ export default function PenawaranPage() {
           nama_klien: namaKlien.trim() || 'Klien Putra Glass',
           kota_klien: kotaKlien.trim() || 'Bandung',
           kanal: 'whatsapp',
-          segmen,
-          zona,
-          perlu_pasang: perluPasang,
-          items: items.map((it) => ({
-            bentuk_kode: it.bentuk_kode,
-            panjang_mm: it.panjang_cm * 10,
-            lebar_mm: it.lebar_cm * 10,
-            lampu: it.lampu,
-            kontrol: it.kontrol,
-            frame: it.frame,
-            antifog: it.antifog,
-            sandblast: {
-              pakai: it.sandblast_pakai,
-              lebar_mm: it.sandblast_lebar_cm * 10,
-              jarak_tepi_mm: it.sandblast_tepi_cm * 10,
+          is_unduh_pdf: isUnduh,
+          penawaran_input: {
+            segmen,
+            zona,
+            perlu_pasang: perluPasang,
+            ongkir_deal: kalkulasi.ongkir.deal,
+            pasang_deal: kalkulasi.pasang.deal,
+            konfirmasi_owner: {
+              ongkir: ongkirKonfirmasiOwner && ongkirAlasan.trim() ? { sudah_dikonfirmasi: true, alasan: ongkirAlasan.trim() } : undefined,
+              pasang: pasangKonfirmasiOwner && pasangAlasan.trim() ? { sudah_dikonfirmasi: true, alasan: pasangAlasan.trim() } : undefined,
             },
-            qty: it.qty,
-          })),
-          is_unduh: isUnduh,
-          ongkir_deal: kalkulasi.ongkir.deal,
-          pasang_deal: kalkulasi.pasang.deal,
-          alasan_ongkir: ongkirAlasan,
-          alasan_pasang: pasangAlasan,
+            items: items.map((it) => {
+              const rawP = Number(it.panjang_cm);
+              const rawL = Number(it.lebar_cm);
+              const safeP = isNaN(rawP) || rawP <= 0 ? 60 : Math.round(rawP);
+              const safeL = isNaN(rawL) || rawL <= 0 ? 80 : Math.round(rawL);
+              return {
+                bentuk_kode: it.bentuk_kode || 'rectangle',
+                panjang_mm: safeP * 10,
+                lebar_mm: safeL * 10,
+                lampu: it.lampu,
+                kontrol: it.kontrol,
+                frame: it.frame,
+                antifog: it.antifog,
+                sandblast: {
+                  pakai: it.sandblast_pakai,
+                  lebar_mm: Math.max(20, Math.min(50, (it.sandblast_lebar_cm || 3) * 10)),
+                  jarak_tepi_mm: Math.max(10, Math.min(50, (it.sandblast_tepi_cm || 2) * 10)),
+                },
+                qty: Math.max(1, Math.round(Number(it.qty) || 1)),
+              };
+            }),
+          },
         }),
       });
 

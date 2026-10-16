@@ -52,12 +52,49 @@ export async function POST(req: NextRequest) {
   const initialStatus = is_unduh_pdf ? 'terkirim' : 'draf';
   const terkirimAt = is_unduh_pdf ? new Date().toISOString() : null;
 
+  const rawInput = penawaran_input || {
+    segmen: body.segmen || 'B2C',
+    zona: body.zona || 'dalam_kota',
+    perlu_pasang: Boolean(body.perlu_pasang),
+    ongkir_deal: body.ongkir_deal,
+    pasang_deal: body.pasang_deal,
+    konfirmasi_owner: {
+      ongkir: body.alasan_ongkir ? { sudah_dikonfirmasi: true, alasan: body.alasan_ongkir } : undefined,
+      pasang: body.alasan_pasang ? { sudah_dikonfirmasi: true, alasan: body.alasan_pasang } : undefined,
+    },
+    items: body.items,
+  };
+
+  // Resolusi lead_id: buat lead baru jika belum ada
+  let resolvedLeadId = lead_id;
+  if (!resolvedLeadId) {
+    const clientName = (nama_klien || 'Klien Putra Glass').trim();
+    const clientCity = (kota_klien || 'Bandung').trim();
+    const { data: newLead, error: leadErr } = await adminClient
+      .from('leads')
+      .insert({
+        brand_id: 'putraglass',
+        nama: clientName,
+        kota: clientCity,
+        zona: rawInput.zona || 'dalam_kota',
+        segmen: rawInput.segmen || 'B2C',
+        status: 'prospek',
+      })
+      .select('id')
+      .single();
+
+    if (leadErr || !newLead) {
+      return NextResponse.json({ error: 'Gagal membuat data kontak lead klien' }, { status: 500 });
+    }
+    resolvedLeadId = newLead.id;
+  }
+
   // 3. Kalkulasi via Pricing Engine Tunggal (Validasi Server: di bawah batas admin wajib konfirmasi + alasan)
   let kalkulasi;
   try {
     kalkulasi = hitungPenawaran(
       {
-        ...penawaran_input,
+        ...rawInput,
         user_role: userRole,
       },
       priceBook
@@ -107,7 +144,7 @@ export async function POST(req: NextRequest) {
     .from('penawaran')
     .insert({
       nomor: quoteNumber,
-      lead_id,
+      lead_id: resolvedLeadId,
       price_book_id: priceBookId,
       items_json: kalkulasi.items,
       ringkasan_json: {
