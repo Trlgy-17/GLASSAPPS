@@ -142,7 +142,7 @@ export interface KonfirmasiOwner {
 
 export interface PenawaranInput {
   items: CerminItemInput[];
-  zona: 'dalam_kota' | 'luar_kota';
+  zona?: 'dalam_kota' | 'luar_kota' | '';
   perlu_pasang: boolean;
   ongkir_deal?: number;
   ongkir_aktual?: number;

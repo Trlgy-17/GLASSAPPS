@@ -1207,6 +1207,7 @@ export default function BalasChatPage() {
 
                 <button
                   type="button"
+                  id="btn-buat-penawaran-pdf"
                   onClick={handleBuatPenawaranPDF}
                   className="min-h-[48px] px-6 bg-surface border border-line text-ink hover:bg-raised rounded-xl font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
                 >

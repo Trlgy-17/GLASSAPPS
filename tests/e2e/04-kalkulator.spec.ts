@@ -373,6 +373,8 @@ test.describe('A.4 Kalkulator Penawaran - 20 Kombinasi Rumus & Input Ekstrim', (
   test('Uji UI: Ongkir dibagi 2 (Rp650.000) boleh oleh admin tanpa izin owner, wajib isi alasan potongan', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/penawaran/baru');
+    // Pilih zona luar kota terlebih dahulu
+    await page.locator('#select-zona-pengiriman').selectOption('luar_kota');
 
     const inputOngkirDeal = page.locator('#input-ongkir-deal');
     // Masukkan ongkir deal di bawah list (misal Rp650.000 / dibagi 2 luar kota)

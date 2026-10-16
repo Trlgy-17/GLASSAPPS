@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
 import { defaultAdminPriceBookV1 } from '@/lib/pricing/admin-price-book';
 import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { parseRupiah, formatRupiah } from '@/lib/pricing/format-rupiah';
@@ -50,21 +51,54 @@ function parseDimensionInput(val: string): number {
   const num = parseFloat(sanitized);
   return isNaN(num) ? 0 : num;
 }
-
-export default function PenawaranPage() {
+function PenawaranContent() {
+  const searchParams = useSearchParams();
   const [config, setConfig] = useState<PriceBookData | PriceBookDataAdmin>(defaultAdminPriceBookV1);
   const [userRole, setUserRole] = useState<'owner' | 'admin'>('admin');
   const isSavingRef = useRef(false);
   // Header State
   const [nomorPenawaran] = useState('PG-Q-2610-0001');
   const [namaKlien, setNamaKlien] = useState('');
-  const [kotaKlien, setKotaKlien] = useState('Surabaya');
-  const [kodeWilayah, setKodeWilayah] = useState<string | undefined>('35.78');
+  const [kotaKlien, setKotaKlien] = useState('');
+  const [kodeWilayah, setKodeWilayah] = useState<string | undefined>(undefined);
   const [isCustomKota, setIsCustomKota] = useState(false);
   const [segmen, setSegmen] = useState<'B2C' | 'B2B'>('B2C');
-  const [zona, setZona] = useState<'dalam_kota' | 'luar_kota'>('luar_kota');
+  const [zona, setZona] = useState<'dalam_kota' | 'luar_kota' | ''>('');
   const [perluPasang, setPerluPasang] = useState(false);
 
+  // Pulihkan data hanya jika ada query param (misal dari Balas chat 'Buat penawaran')
+  useEffect(() => {
+    const qNama = searchParams.get('nama');
+    const qKota = searchParams.get('kota');
+    const qBentuk = searchParams.get('bentuk');
+    const qPanjang = searchParams.get('panjang');
+    const qLebar = searchParams.get('lebar');
+    const qLampu = searchParams.get('lampu');
+    const qKontrol = searchParams.get('kontrol');
+    const qFrame = searchParams.get('frame');
+    const qAntifog = searchParams.get('antifog');
+
+    if (qNama) setNamaKlien(qNama);
+    if (qKota) {
+      setKotaKlien(qKota);
+      const autoZ = detectZonaByKota(qKota);
+      setZona(autoZ);
+    }
+    if (qBentuk || qPanjang || qLebar) {
+      setItems((prev) => [
+        {
+          ...prev[0],
+          bentuk_kode: qBentuk || prev[0].bentuk_kode,
+          panjang_cm: qPanjang ? Number(qPanjang) || 60 : prev[0].panjang_cm,
+          lebar_cm: qLebar ? Number(qLebar) || 80 : prev[0].lebar_cm,
+          lampu: (qLampu as any) || prev[0].lampu,
+          kontrol: (qKontrol as any) || prev[0].kontrol,
+          frame: (qFrame as any) || prev[0].frame,
+          antifog: qAntifog === 'true',
+        },
+      ]);
+    }
+  }, [searchParams]);
   // Batas dari Buku Harga
   const isDalamKota = zona === 'dalam_kota';
   const batasKirim = isDalamKota ? config.logistik?.kirim_bandung : config.logistik?.kirim_luar_kota;
@@ -397,7 +431,7 @@ export default function PenawaranPage() {
                   type="text"
                   value={namaKlien}
                   onChange={(e) => setNamaKlien(e.target.value)}
-                  placeholder="contoh: Kak Rina"
+                  placeholder="Ketik nama klien..."
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink placeholder:text-muted/60 focus:bg-surface focus:outline-none focus:border-accent"
                 />
               </div>
@@ -423,7 +457,7 @@ export default function PenawaranPage() {
                       setOngkirInputText('');
                     }
                   }}
-                  placeholder="Ketik atau pilih kabupaten/kota..."
+                  placeholder="Pilih atau ketik kota tujuan"
                 />
                 {isCustomKota && (
                   <p id="msg-kota-manual-warning" className="text-[11px] text-muted font-medium mt-1">
@@ -440,14 +474,15 @@ export default function PenawaranPage() {
                   id="select-zona-pengiriman"
                   value={zona}
                   onChange={(e) => {
-                    const newZona = e.target.value as 'dalam_kota' | 'luar_kota';
+                    const newZona = e.target.value as 'dalam_kota' | 'luar_kota' | '';
                     setZona(newZona);
                     setOngkirInputText('');
                   }}
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
-                  <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
+                  <option value="">-- Pilih Zona Pengiriman --</option>
                   <option value="dalam_kota">Bandung Raya (List: Rp750.000)</option>
+                  <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
                 </select>
               </div>
 
@@ -946,8 +981,13 @@ export default function PenawaranPage() {
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-muted block">Total Penawaran:</span>
                 <span id="label-total-penawaran" className="text-[36px] font-extrabold text-ink leading-tight tabular-nums block">
-                  {formatRupiah(kalkulasi.total)}
+                  {kalkulasi ? formatRupiah(kalkulasi.total) : 'Rp0'}
                 </span>
+                {!zona && (
+                  <span id="note-ongkir-belum-dipilih" className="text-[11px] text-muted block">
+                    Ongkir dihitung setelah kota dipilih.
+                  </span>
+                )}
               </div>
 
               {/* DP 50% & Pelunasan */}
@@ -981,7 +1021,9 @@ export default function PenawaranPage() {
                     <span className="font-bold text-ink flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-accent" /> 1. JASA PENGIRIMAN
                     </span>
-                    <span className="font-extrabold text-ink tabular-nums text-sm">{formatRupiah(kalkulasi.ongkir.deal)}</span>
+                    <span className="font-extrabold text-ink tabular-nums text-sm">
+                      {zona ? formatRupiah(kalkulasi?.ongkir.deal || 0) : 'Rp0'}
+                    </span>
                   </div>
 
 
@@ -1044,10 +1086,16 @@ export default function PenawaranPage() {
                     className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums font-semibold"
                   />
 
-                  <div className="flex items-center justify-between text-[11px] text-muted">
-                    <span>Net: {formatRupiah(isDalamKota ? 500000 : 1150000)}</span>
-                    <span>Minimal (dibagi dua): {formatRupiah(batasOngkirMin)}</span>
-                  </div>
+                  {zona ? (
+                    <div className="flex items-center justify-between text-[11px] text-muted">
+                      <span>Net: {formatRupiah(isDalamKota ? 500000 : 1150000)}</span>
+                      <span>Minimal (dibagi dua): {formatRupiah(batasOngkirMin)}</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-muted">
+                      Pilih kota tujuan untuk menghitung ongkos kirim resmi.
+                    </div>
+                  )}
 
                   {/* Level 3: Ditolak (< 50%) */}
                   {kalkulasi.ongkir.wewenang === 'ditolak' && (
@@ -1147,5 +1195,19 @@ export default function PenawaranPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PenawaranPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-center text-sm text-muted">
+          Memuat kalkulator penawaran...
+        </div>
+      }
+    >
+      <PenawaranContent />
+    </Suspense>
   );
 }

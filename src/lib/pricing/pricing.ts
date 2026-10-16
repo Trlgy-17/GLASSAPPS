@@ -42,29 +42,33 @@ export function hitungPenawaran(
   let isValidUntukPdf = true;
 
   // 3. Evaluasi Pengiriman (Ongkir)
+  const isZonaUnset = !input.zona;
   const isDalamKota = input.zona === 'dalam_kota';
   const batasKirim = isDalamKota
     ? config.logistik.kirim_bandung
     : config.logistik.kirim_luar_kota;
 
   // Kota jauh / ongkir ekspedisi aktual di atas tarif standar luar kota
-  const isKotaJauh = !isDalamKota && Boolean(input.ongkir_aktual && input.ongkir_aktual > batasKirim.list);
-  const ongkirList = isKotaJauh ? input.ongkir_aktual! : batasKirim.list;
+  const isKotaJauh = !isZonaUnset && !isDalamKota && Boolean(input.ongkir_aktual && input.ongkir_aktual > batasKirim.list);
+  const ongkirList = isZonaUnset ? 0 : (isKotaJauh ? input.ongkir_aktual! : batasKirim.list);
 
   // Batas Net Admin:
   // - Kota jauh: tidak ada net otomatis (net = list)
   // - Dalam kota: Rp500.000
   // - Luar kota: Rp1.150.000
-  const batasNetAdmin = isKotaJauh
+  const batasNetAdmin = isZonaUnset
+    ? 0
+    : isKotaJauh
     ? ongkirList
     : (isDalamKota ? (batasKirim.batas_admin || 500_000) : (batasKirim.batas_admin || 1_150_000));
 
   // Batas 50% Minimal Bayar:
   const batasMinimal50 = Math.round(ongkirList * 0.5);
 
-  const ongkirDeal = input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList;
+  const ongkirDeal = isZonaUnset
+    ? 0
+    : (input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList);
   const potonganOngkir = Math.max(0, ongkirList - ongkirDeal);
-
   let ongkirStatus: 'ok' | 'warning_kuning' | 'error_merah' = 'ok';
   let ongkirWewenang: 'normal' | 'perlu_alasan' | 'perlu_owner' | 'ditolak' = 'normal';
   let ongkirPesan: string | undefined;
@@ -76,8 +80,15 @@ export function hitungPenawaran(
   const kfOwner = input.konfirmasi_owner?.ongkir;
   const alasanInput = (kfOwner?.alasan || input.alasan_potongan_ongkir || '').trim();
 
+  if (isZonaUnset) {
+    ongkirStatus = 'ok';
+    ongkirWewenang = 'normal';
+    ongkirPesan = 'Ongkir dihitung setelah kota dipilih.';
+    isValidUntukPdf = false;
+    errors.push('Pilih kota tujuan terlebih dahulu.');
+  }
   // Level 3 (Ditolak): Di bawah 50%
-  if (ongkirDeal < batasMinimal50) {
+  else if (ongkirDeal < batasMinimal50) {
     ongkirStatus = 'error_merah';
     ongkirWewenang = 'ditolak';
     ongkirPesan = `Ongkir maksimal dibagi dua, klien bayar minimal Rp${batasMinimal50.toLocaleString('id-ID')}.`;

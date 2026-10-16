@@ -29,7 +29,7 @@ export function CityCombobox({
   value,
   kodeWilayah,
   onChange,
-  placeholder = 'Ketik atau pilih kabupaten/kota...',
+  placeholder = 'Pilih atau ketik kota tujuan',
   className = '',
   disabled = false,
 }: CityComboboxProps) {

@@ -30,6 +30,10 @@ export function Navbar() {
   }, [pathname]);
 
   const handleLogout = async () => {
+    try {
+      sessionStorage.removeItem('balas_chat_draft_input');
+      sessionStorage.removeItem('penawaran_baru_form_draft');
+    } catch {}
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
