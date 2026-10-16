@@ -588,7 +588,7 @@ export default function BalasChatPage() {
   }, [pastedText, extraction]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden">
       {/* Header Halaman (30px/800) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -709,7 +709,7 @@ export default function BalasChatPage() {
       {/* Layout 2 Kolom: Kiri (Catatan & Screenshot 35%) | Kanan (Panel Cermin LED 65%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* KOLOM KIRI (Panel Radius 18-20px) */}
-        <div className="lg:col-span-5 bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-5">
+        <div className="lg:col-span-5 bg-surface p-4 sm:p-6 rounded-[20px] border border-line shadow-none space-y-5 max-w-full overflow-hidden">
           <div className="flex items-center justify-between">
             <h2 className="text-[17px] font-bold text-ink">Screenshot &amp; Catatan</h2>
             <span className="text-xs text-muted font-medium">{images.length}/5 gambar</span>
@@ -781,9 +781,9 @@ export default function BalasChatPage() {
 
           {/* Kanal Selector & Tombol Buat Draf */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <span className="text-muted font-medium">Kanal Chat:</span>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {['whatsapp', 'instagram', 'tiktok', 'shopee'].map((p) => (
                   <button
                     key={p}
@@ -823,7 +823,7 @@ export default function BalasChatPage() {
         </div>
 
         {/* KOLOM KANAN: PANEL DRAF = "CERMIN LED" */}
-        <div className="lg:col-span-7 cermin-led-panel p-6 md:p-8 space-y-6">
+        <div className="lg:col-span-7 cermin-led-panel p-4 sm:p-6 md:p-8 space-y-6 max-w-full overflow-hidden">
           {/* Garis LED 2px di tepi atas dengan Glow */}
           <div className={`led-line ${isProcessing ? 'led-pulse' : ''}`} />
 
