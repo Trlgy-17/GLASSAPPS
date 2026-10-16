@@ -413,15 +413,21 @@ export default function PenawaranPage() {
                     setKotaKlien(nama);
                     setKodeWilayah(kode);
                     setIsCustomKota(Boolean(isCustom));
-                    const autoZona = detectZonaByKota(kode || nama);
-                    setZona(autoZona);
-                    setOngkirInputText('');
+                    if (isCustom) {
+                      // Kota manual otomatis zona luar kota (ongkir aktual/isi manual)
+                      setZona('luar_kota');
+                      setOngkirInputText('');
+                    } else {
+                      const autoZona = detectZonaByKota(kode || nama);
+                      setZona(autoZona);
+                      setOngkirInputText('');
+                    }
                   }}
                   placeholder="Ketik atau pilih kabupaten/kota..."
                 />
                 {isCustomKota && (
-                  <p className="text-[11px] text-warn font-medium mt-1">
-                    Kota tidak dikenal di master Kemendagri, ongkir isi manual.
+                  <p id="msg-kota-manual-warning" className="text-[11px] text-muted font-medium mt-1">
+                    Kota tidak ada di daftar. Pilih zona ongkir secara manual.
                   </p>
                 )}
               </div>

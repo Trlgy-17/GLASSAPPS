@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useId } from 'react';
-import { MapPin, Search, History, ChevronDown, Check, AlertCircle } from 'lucide-react';
-import type { WilayahKota } from '@/lib/wilayah/kota';
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
+import { MapPin, History, ChevronDown, Check, Plus } from 'lucide-react';
+import type { WilayahKota, ProvinsiGroup } from '@/lib/wilayah/kota';
 
 interface CityComboboxProps {
   value: string; // nama kota atau kode
@@ -14,6 +14,16 @@ interface CityComboboxProps {
 }
 
 const RECENT_CITIES_KEY = 'pg_recent_cities_v1';
+const ITEM_HEIGHT = 48; // px per item
+const HEADER_HEIGHT = 32; // px per header provinsi
+const CONTAINER_HEIGHT = 320; // px
+
+type FlatDropdownItem =
+  | { type: 'recent_header'; title: string }
+  | { type: 'recent_city'; city: WilayahKota }
+  | { type: 'provinsi_header'; title: string; count: number }
+  | { type: 'city'; city: WilayahKota }
+  | { type: 'custom_option'; customText: string };
 
 export function CityCombobox({
   value,
@@ -27,29 +37,29 @@ export function CityCombobox({
   const [query, setQuery] = useState(value || '');
   const [suggestions, setSuggestions] = useState<WilayahKota[]>([]);
   const [recentCities, setRecentCities] = useState<WilayahKota[]>([]);
-  const [allCities, setAllCities] = useState<WilayahKota[]>([]);
+  const [groupedProvinsi, setGroupedProvinsi] = useState<ProvinsiGroup[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
 
+  // Virtual scrolling state
+  const [scrollTop, setScrollTop] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listboxRef = useRef<HTMLUListElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const comboboxId = useId();
 
-  // Sinkronkan value prop ke query input jika berubah dari luar
   useEffect(() => {
     setQuery(value || '');
   }, [value]);
 
-  // Muat data kota hanya saat komponen disentuh / fokus (dynamic import)
   const ensureDataLoaded = async () => {
     if (isDataLoaded) return;
     try {
-      const { KOTA_INDONESIA } = await import('@/lib/wilayah/kota');
-      setAllCities(KOTA_INDONESIA);
+      const { getAllCitiesGroupedByProvinsi } = await import('@/lib/wilayah/kota');
+      setGroupedProvinsi(getAllCitiesGroupedByProvinsi());
       setIsDataLoaded(true);
 
-      // Muat 5 recent cities dari localStorage
       try {
         const stored = localStorage.getItem(RECENT_CITIES_KEY);
         if (stored) {
@@ -79,16 +89,17 @@ export function CityCombobox({
   useEffect(() => {
     if (!isOpen || !isDataLoaded) return;
 
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       setSuggestions([]);
       setHighlightedIndex(-1);
       return;
     }
 
     import('@/lib/wilayah/kota').then(({ searchKota }) => {
-      const found = searchKota(query, 12);
+      const found = searchKota(trimmed, 25);
       setSuggestions(found);
-      setHighlightedIndex(found.length > 0 ? 0 : -1);
+      setHighlightedIndex(found.length > 0 ? 0 : 0); // 0 bisa city atau custom
     });
   }, [query, isOpen, isDataLoaded]);
 
@@ -120,6 +131,85 @@ export function CityCombobox({
     setHighlightedIndex(-1);
   };
 
+  // Susun flat list untuk virtual scroll & keyboard nav
+  const flatItems: FlatDropdownItem[] = useMemo(() => {
+    const items: FlatDropdownItem[] = [];
+    const trimmed = query.trim();
+
+    if (!trimmed) {
+      // 1. Dropdown terbuka tanpa ketik: 5 recent + SEMUA 514 kota per provinsi
+      if (recentCities.length > 0) {
+        items.push({ type: 'recent_header', title: 'Terakhir Digunakan' });
+        for (const c of recentCities) {
+          items.push({ type: 'recent_city', city: c });
+        }
+      }
+
+      for (const grp of groupedProvinsi) {
+        items.push({ type: 'provinsi_header', title: grp.provinsi, count: grp.cities.length });
+        for (const c of grp.cities) {
+          items.push({ type: 'city', city: c });
+        }
+      }
+    } else {
+      // 2. Mengetik query:
+      // Tampilkan hasil pencarian
+      for (const s of suggestions) {
+        items.push({ type: 'city', city: s });
+      }
+
+      // Jika TIDAK cocok dengan kota mana pun (suggestions.length === 0),
+      // tampilkan opsi '+ Pakai <teks> sebagai kota tujuan'
+      if (suggestions.length === 0) {
+        items.push({ type: 'custom_option', customText: trimmed });
+      }
+    }
+
+    return items;
+  }, [query, suggestions, recentCities, groupedProvinsi]);
+
+  // Posisi y kumulatif untuk tiap item (virtualization)
+  const itemLayouts = useMemo(() => {
+    let top = 0;
+    const layouts: { top: number; height: number }[] = [];
+    for (const item of flatItems) {
+      const height = item.type.includes('header') ? HEADER_HEIGHT : ITEM_HEIGHT;
+      layouts.push({ top, height });
+      top += height;
+    }
+    return { layouts, totalHeight: top };
+  }, [flatItems]);
+
+  // Item yang terlihat di viewport
+  const visibleIndices = useMemo(() => {
+    const startY = Math.max(0, scrollTop - 100);
+    const endY = scrollTop + CONTAINER_HEIGHT + 100;
+    const indices: number[] = [];
+    for (let i = 0; i < itemLayouts.layouts.length; i++) {
+      const l = itemLayouts.layouts[i];
+      if (l.top + l.height >= startY && l.top <= endY) {
+        indices.push(i);
+      }
+    }
+    return indices;
+  }, [scrollTop, itemLayouts]);
+
+  // Daftar item yang bisa dipilih keyboard (bukan header)
+  const selectableIndices = useMemo(() => {
+    const indices: number[] = [];
+    for (let i = 0; i < flatItems.length; i++) {
+      if (!flatItems[i].type.includes('header')) {
+        indices.push(i);
+      }
+    }
+    return indices;
+  }, [flatItems]);
+
+  // Scroll virtual listener
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  };
+
   // Keyboard navigation ARIA combobox
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) {
@@ -131,31 +221,49 @@ export function CityCombobox({
       return;
     }
 
-    const totalItems = query.trim()
-      ? suggestions.length + 1 // + 1 untuk opsi custom
-      : recentCities.length;
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev + 1) % totalItems);
+      if (selectableIndices.length === 0) return;
+      const currentPos = selectableIndices.indexOf(highlightedIndex);
+      const nextPos = (currentPos + 1) % selectableIndices.length;
+      const targetIdx = selectableIndices[nextPos];
+      setHighlightedIndex(targetIdx);
+      scrollToItem(targetIdx);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev - 1 + totalItems) % totalItems);
+      if (selectableIndices.length === 0) return;
+      const currentPos = selectableIndices.indexOf(highlightedIndex);
+      const prevPos = (currentPos - 1 + selectableIndices.length) % selectableIndices.length;
+      const targetIdx = selectableIndices[prevPos];
+      setHighlightedIndex(targetIdx);
+      scrollToItem(targetIdx);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (query.trim()) {
-        if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
-          handleSelectCity(suggestions[highlightedIndex]);
-        } else {
-          // Opsi custom
-          handleSelectCustom(query);
+      if (highlightedIndex >= 0 && highlightedIndex < flatItems.length) {
+        const selectedItem = flatItems[highlightedIndex];
+        if (selectedItem.type === 'city' || selectedItem.type === 'recent_city') {
+          handleSelectCity(selectedItem.city);
+        } else if (selectedItem.type === 'custom_option') {
+          handleSelectCustom(selectedItem.customText);
         }
-      } else if (highlightedIndex >= 0 && highlightedIndex < recentCities.length) {
-        handleSelectCity(recentCities[highlightedIndex]);
+      } else if (query.trim()) {
+        // Jika tidak ada item yang terpilih atau kota tidak cocok, pakai custom
+        handleSelectCustom(query);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setIsOpen(false);
+    }
+  };
+
+  const scrollToItem = (index: number) => {
+    if (!scrollContainerRef.current || index < 0 || index >= itemLayouts.layouts.length) return;
+    const l = itemLayouts.layouts[index];
+    const container = scrollContainerRef.current;
+    if (l.top < container.scrollTop) {
+      container.scrollTop = l.top;
+    } else if (l.top + l.height > container.scrollTop + CONTAINER_HEIGHT) {
+      container.scrollTop = l.top + l.height - CONTAINER_HEIGHT;
     }
   };
 
@@ -185,119 +293,147 @@ export function CityCombobox({
           }}
           onChange={(e) => {
             setQuery(e.target.value);
+            ensureDataLoaded();
             if (!isOpen) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="w-full text-xs sm:text-sm pl-9 pr-8 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent font-semibold transition"
+          className="w-full text-xs sm:text-sm pl-9 pr-9 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent font-semibold transition"
         />
         <button
           type="button"
           tabIndex={-1}
+          id="btn-toggle-city-dropdown"
+          aria-label="Buka daftar kota"
+          onMouseDown={(e) => {
+            e.preventDefault();
+          }}
           onClick={() => {
             if (disabled) return;
             ensureDataLoaded();
-            setIsOpen(!isOpen);
-            inputRef.current?.focus();
+            setIsOpen((prev) => !prev);
           }}
-          className="absolute right-2.5 p-1 text-muted hover:text-ink transition cursor-pointer"
+          className="absolute right-2 p-1 text-muted hover:text-ink transition cursor-pointer"
         >
-          <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
-      {/* Dropdown Suggestions Listbox */}
+      {/* Virtualized Dropdown Listbox */}
       {isOpen && (
         <div
           id={`city-listbox-${comboboxId}`}
           role="listbox"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-64 sm:max-h-72 overflow-y-auto rounded-xl border border-line bg-surface shadow-xl text-xs sm:text-sm divide-y divide-line/40 animate-in fade-in zoom-in-95 duration-100"
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          style={{ maxHeight: `${CONTAINER_HEIGHT}px` }}
+          className="absolute z-50 left-0 right-0 mt-1 overflow-y-auto rounded-xl border border-line bg-surface shadow-xl text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-100"
         >
-          {/* Recent Cities Header if query is empty */}
-          {!query.trim() && recentCities.length > 0 && (
-            <div className="p-2">
-              <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-muted uppercase tracking-wider">
-                <History className="w-3.5 h-3.5 text-accent" />
-                <span>Terakhir Digunakan</span>
-              </div>
-              <ul className="space-y-0.5 mt-1">
-                {recentCities.map((city, idx) => (
-                  <li
-                    key={city.kode}
+          <div style={{ height: `${itemLayouts.totalHeight}px`, position: 'relative' }}>
+            {visibleIndices.map((idx) => {
+              const item = flatItems[idx];
+              const layout = itemLayouts.layouts[idx];
+              const isHighlighted = highlightedIndex === idx;
+
+              if (item.type === 'recent_header') {
+                return (
+                  <div
+                    key={`recent-hdr-${idx}`}
+                    style={{
+                      position: 'absolute',
+                      top: `${layout.top}px`,
+                      height: `${layout.height}px`,
+                      left: 0,
+                      right: 0,
+                    }}
+                    className="px-3 flex items-center gap-1.5 bg-raised/80 border-b border-line/40 text-[11px] font-bold text-accent uppercase tracking-wider"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>{item.title}</span>
+                  </div>
+                );
+              }
+
+              if (item.type === 'provinsi_header') {
+                return (
+                  <div
+                    key={`prov-hdr-${idx}`}
+                    style={{
+                      position: 'absolute',
+                      top: `${layout.top}px`,
+                      height: `${layout.height}px`,
+                      left: 0,
+                      right: 0,
+                    }}
+                    data-testid="provinsi-header"
+                    className="px-3 flex items-center justify-between bg-raised/90 border-b border-line/60 text-[11px] font-bold text-ink uppercase tracking-wider sticky top-0"
+                  >
+                    <span>{item.title}</span>
+                    <span className="text-[10px] text-muted font-normal lowercase">{item.count} daerah</span>
+                  </div>
+                );
+              }
+
+              if (item.type === 'custom_option') {
+                return (
+                  <div
+                    key={`custom-${idx}`}
                     role="option"
-                    aria-selected={highlightedIndex === idx}
-                    onClick={() => handleSelectCity(city)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition ${
-                      highlightedIndex === idx ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                    id="option-custom-city"
+                    aria-selected={isHighlighted}
+                    style={{
+                      position: 'absolute',
+                      top: `${layout.top}px`,
+                      height: `${layout.height}px`,
+                      left: 0,
+                      right: 0,
+                    }}
+                    onClick={() => handleSelectCustom(item.customText)}
+                    className={`px-3 flex items-center gap-2 cursor-pointer border-t border-line/60 transition ${
+                      isHighlighted ? 'bg-accent/15 text-accent font-bold' : 'hover:bg-raised text-ink'
                     }`}
                   >
-                    <div>
-                      <div className="font-semibold">{city.nama}</div>
-                      <div className="text-[11px] text-muted">{city.provinsi}</div>
+                    <Plus className="w-4 h-4 text-accent shrink-0" />
+                    <div className="truncate">
+                      <span>+ Pakai &apos;<strong className="text-accent">{item.customText}</strong>&apos; sebagai kota tujuan</span>
                     </div>
-                    {kodeWilayah === city.kode && <Check className="w-4 h-4 text-accent" />}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Quick instructions if query is empty and no recent */}
-          {!query.trim() && recentCities.length === 0 && (
-            <div className="p-4 text-center text-xs text-muted">
-              Ketik nama kota, kabupaten, atau provinsi untuk mencari...
-            </div>
-          )}
-
-          {/* Matching suggestions */}
-          {query.trim() && (
-            <div className="p-1.5">
-              {suggestions.length > 0 ? (
-                <ul className="space-y-0.5">
-                  {suggestions.map((city, idx) => (
-                    <li
-                      key={city.kode}
-                      role="option"
-                      aria-selected={highlightedIndex === idx}
-                      onClick={() => handleSelectCity(city)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition ${
-                        highlightedIndex === idx ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-semibold">{city.nama}</div>
-                        <div className="text-[11px] text-muted">{city.provinsi}</div>
-                      </div>
-                      {kodeWilayah === city.kode && <Check className="w-4 h-4 text-accent" />}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="p-2.5 text-xs text-muted text-center">
-                  Tidak ditemukan kabupaten/kota resmi yang cocok.
-                </div>
-              )}
-
-              {/* Opsi Pakai '<teks>' (Custom) */}
-              <div
-                role="option"
-                aria-selected={highlightedIndex === suggestions.length}
-                onClick={() => handleSelectCustom(query)}
-                className={`mt-1.5 p-2.5 border-t border-line/60 rounded-lg cursor-pointer flex items-start gap-2 transition ${
-                  highlightedIndex === suggestions.length ? 'bg-amber-500/10 border-amber-500/40' : 'hover:bg-raised'
-                }`}
-              >
-                <AlertCircle className="w-4 h-4 text-warn shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-semibold text-ink">
-                    Pakai &ldquo;<span className="text-accent">{query.trim()}</span>&rdquo;
                   </div>
-                  <div className="text-[11px] text-warn font-medium">
-                    Kota tidak dikenal di master Kemendagri, ongkir wajib diisi manual.
+                );
+              }
+
+              // Normal or recent city item
+              const isRecent = item.type === 'recent_city';
+              const city = item.city;
+              const isSelected = kodeWilayah === city.kode;
+
+              return (
+                <div
+                  key={`city-${city.kode}-${idx}`}
+                  role="option"
+                  aria-selected={isHighlighted}
+                  data-city-code={city.kode}
+                  style={{
+                    position: 'absolute',
+                    top: `${layout.top}px`,
+                    height: `${layout.height}px`,
+                    left: 0,
+                    right: 0,
+                  }}
+                  onClick={() => handleSelectCity(city)}
+                  className={`px-3 flex items-center justify-between cursor-pointer border-b border-line/20 transition ${
+                    isHighlighted
+                      ? 'bg-raised text-accent font-semibold'
+                      : 'text-ink hover:bg-raised/60'
+                  }`}
+                >
+                  <div className="truncate pr-2">
+                    <div className="font-semibold text-xs sm:text-sm truncate">{city.nama}</div>
+                    <div className="text-[11px] text-muted truncate">{city.provinsi}</div>
                   </div>
+                  {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
                 </div>
-              </div>
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

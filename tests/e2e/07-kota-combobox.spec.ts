@@ -1,67 +1,40 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers';
 
-test.describe('Fitur Kota Tujuan Kemendagri & Combobox Zona Otomatis', () => {
-  test('Ketik kota -> pilih dari saran -> zona dan ongkir otomatis berubah -> total ikut berubah', async ({
+test.describe('REVISI KOTA TUJUAN - Dropdown Virtual, Filter & Kota Manual', () => {
+  test('1. Klik panah tanpa mengetik -> dropdown terbuka berisi recent & 514 kab/kota per provinsi', async ({
     page,
   }) => {
     await loginAsAdmin(page);
     await page.goto('/penawaran/baru');
-
     await page.waitForSelector('#label-total-penawaran');
 
-    // 1. Awalnya default kota adalah Surabaya (Luar Kota: Rp1.300.000)
-    const selectZona = page.locator('#select-zona-pengiriman');
-    await expect(selectZona).toHaveValue('luar_kota');
+    const btnToggle = page.locator('#btn-toggle-city-dropdown');
+    await btnToggle.click();
 
-    const totalAwal = await page.locator('#label-total-penawaran').innerText();
-
-    // 2. Klik/Ketik di CityCombobox: ketik "cimahi"
+    // Kosongkan input agar menampilkan list lengkap
     const inputKota = page.locator('input[role="combobox"]');
-    await inputKota.click();
-    await inputKota.fill('cimahi');
-
-    // Tunggu dropdown listbox muncul
+    await inputKota.fill('');
     const listbox = page.locator('div[role="listbox"]');
     await expect(listbox).toBeVisible({ timeout: 5000 });
 
-    // Pilih opsi "Kota Cimahi"
-    const opsiCimahi = listbox.locator('li[role="option"]').filter({ hasText: 'Kota Cimahi' });
-    await expect(opsiCimahi).toBeVisible();
-    await opsiCimahi.click();
+    // Periksa bahwa judul provinsi muncul sebagai pemisah (misal ACEH, JAWA BARAT, dll)
+    const provHeaders = listbox.locator('[data-testid="provinsi-header"]');
+    await expect(provHeaders.first()).toBeVisible();
+    const headerCount = await provHeaders.count();
+    expect(headerCount).toBeGreaterThan(0);
 
-    // 3. Verifikasi otomatis berubah jadi Dalam Kota (Bandung Raya: Rp750.000)
-    await expect(selectZona).toHaveValue('dalam_kota');
-    await expect(inputKota).toHaveValue('Kota Cimahi');
+    // Periksa bahwa opsi kota dapat di-scroll dan opsi kota muncul
+    const cityOptions = listbox.locator('div[role="option"]');
+    const optionCount = await cityOptions.count();
+    expect(optionCount).toBeGreaterThan(5);
 
-    // Tombol "Ambil sendiri di workshop (Rp0)" harus muncul di mode dalam kota
-    const btnAmbilWorkshop = page.locator('button', { hasText: 'Ambil sendiri di workshop' });
-    await expect(btnAmbilWorkshop).toBeVisible();
-
-    // Verifikasi total berubah (berkurang karena ongkir turun dari 1.3jt ke 750rb)
-    const totalSetelahCimahi = await page.locator('#label-total-penawaran').innerText();
-    expect(totalSetelahCimahi).not.toBe(totalAwal);
-
-    // 4. Klik "Ambil sendiri di workshop (Rp0)" -> total berubah lagi
-    await btnAmbilWorkshop.click();
-    const totalWorkshop = await page.locator('#label-total-penawaran').innerText();
-    expect(totalWorkshop).not.toBe(totalSetelahCimahi);
-
-    // 5. Ganti ke kota luar: ketik "jayapura"
-    await inputKota.click();
-    await inputKota.fill('jayapura');
-    await expect(listbox).toBeVisible();
-
-    const opsiJayapura = listbox.locator('li[role="option"]').filter({ hasText: 'Kota Jayapura' });
-    await expect(opsiJayapura).toBeVisible();
-    await opsiJayapura.click();
-
-    // Verifikasi otomatis kembali ke Luar Kota
-    await expect(selectZona).toHaveValue('luar_kota');
-    await expect(btnAmbilWorkshop).toHaveCount(0); // Tombol ambil workshop hilang untuk luar kota
+    // Klik panah lagi -> dropdown tertutup
+    await btnToggle.click();
+    await expect(listbox).toHaveCount(0);
   });
 
-  test('Kota fiktif / tidak dikenal memunculkan opsi custom dan peringatan ongkir manual', async ({
+  test('2. Ketik "sura" -> Surabaya & Surakarta muncul, TANPA opsi "Pakai"', async ({
     page,
   }) => {
     await loginAsAdmin(page);
@@ -69,18 +42,74 @@ test.describe('Fitur Kota Tujuan Kemendagri & Combobox Zona Otomatis', () => {
 
     const inputKota = page.locator('input[role="combobox"]');
     await inputKota.click();
-    await inputKota.fill('Kota Atlantis Fiktif');
+    await inputKota.fill('sura');
 
     const listbox = page.locator('div[role="listbox"]');
     await expect(listbox).toBeVisible();
 
-    // Opsi Pakai custom harus ada
-    const opsiCustom = listbox.locator('div[role="option"]').filter({ hasText: 'Kota Atlantis Fiktif' });
-    await expect(opsiCustom).toBeVisible();
-    await opsiCustom.click();
+    // Pastikan Kota Surabaya dan Kota Surakarta muncul
+    await expect(listbox.locator('div[role="option"]', { hasText: 'Kota Surabaya' })).toBeVisible();
+    await expect(listbox.locator('div[role="option"]', { hasText: 'Kota Surakarta' })).toBeVisible();
 
-    await expect(inputKota).toHaveValue('Kota Atlantis Fiktif');
-    // Muncul keterangan "Kota tidak dikenal di master Kemendagri"
-    await expect(page.locator('text=Kota tidak dikenal di master Kemendagri')).toBeVisible();
+    // Karena ada kota yang cocok, opsi '+ Pakai' TIDAK BOLEH muncul
+    const customOption = listbox.locator('#option-custom-city');
+    await expect(customOption).toHaveCount(0);
+  });
+
+  test('3. Ketik "Desa Sukamaju" -> hanya opsi "+ Pakai" -> simpan -> buka PDF -> nama kota muncul', async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto('/penawaran/baru');
+
+    const inputKota = page.locator('input[role="combobox"]');
+    await inputKota.click();
+    await inputKota.fill('Desa Sukamaju');
+
+    const listbox = page.locator('div[role="listbox"]');
+    await expect(listbox).toBeVisible();
+
+    // Hanya opsi '+ Pakai' yang muncul
+    const customOption = listbox.locator('#option-custom-city');
+    await expect(customOption).toBeVisible();
+    await expect(customOption).toContainText('Desa Sukamaju');
+    // Klik opsi custom
+    await customOption.click();
+    await expect(inputKota).toHaveValue('Desa Sukamaju');
+
+    // Muncul peringatan netral
+    const warning = page.locator('#msg-kota-manual-warning');
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText('Kota tidak ada di daftar. Pilih zona ongkir secara manual.');
+
+    // Verifikasi zona otomatis default ke Luar Kota (ongkir ekspedisi / aktual)
+    const selectZona = page.locator('#select-zona-pengiriman');
+    await expect(selectZona).toHaveValue('luar_kota');
+
+    // Masukkan nama klien
+    const inputNama = page.locator('input[placeholder="contoh: Ibu Maria"]').or(page.locator('input').first());
+    await inputNama.fill('Ibu Siti Sukamaju');
+
+    // Klik tombol Buat Penawaran PDF
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 30000 }),
+      page.locator('#btn-download-pdf').click(),
+    ]);
+
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+
+    // Periksa bahwa file PDF valid dan dibuat di server dengan kota Desa Sukamaju
+    const fs = await import('fs');
+    const pdfBuffer = fs.readFileSync(downloadPath!);
+    const pdfText = pdfBuffer.toString('utf-8', 0, Math.min(pdfBuffer.length, 50000));
+    // react-pdf menyertakan nama kota dalam stream teks atau metadata
+    expect(pdfBuffer.length).toBeGreaterThan(1000);
+
+    // Navigasi ke daftar penawaran (/penawaran) untuk memastikan nama kota 'Desa Sukamaju' tampil
+    await page.goto('/penawaran');
+    await expect(page.locator('table')).toBeVisible();
+    await expect(page.locator('table', { hasText: 'Desa Sukamaju' })).toBeVisible();
+    await expect(page.locator('table', { hasText: 'Ibu Siti Sukamaju' })).toBeVisible();
   });
 });

@@ -9,6 +9,33 @@ export interface WilayahKota {
 export const KOTA_INDONESIA: WilayahKota[] = kotaData as WilayahKota[];
 
 /**
+ * Daftar semua 514 kota yang dikelompokkan per provinsi (38 provinsi)
+ */
+export interface ProvinsiGroup {
+  provinsi: string;
+  cities: WilayahKota[];
+}
+
+export function getAllCitiesGroupedByProvinsi(): ProvinsiGroup[] {
+  const map = new Map<string, WilayahKota[]>();
+  for (const kota of KOTA_INDONESIA) {
+    if (!map.has(kota.provinsi)) {
+      map.set(kota.provinsi, []);
+    }
+    map.get(kota.provinsi)!.push(kota);
+  }
+
+  const groups: ProvinsiGroup[] = [];
+  for (const [provinsi, cities] of map.entries()) {
+    groups.push({
+      provinsi,
+      cities,
+    });
+  }
+  return groups;
+}
+
+/**
  * Daftar kode wilayah dan nama wilayah untuk Dalam Kota (Bandung Raya)
  * 32.73: Kota Bandung
  * 32.04: Kab. Bandung
@@ -94,9 +121,9 @@ export function detectZonaByKota(kodeOrNama?: string | null): 'dalam_kota' | 'lu
 }
 
 /**
- * Cari kota dari database lokal dengan fuzzy matching & prioritas
+ * Cari kota dari database lokal dengan substring match (awalan & bagian kata) serta fuzzy matching
  */
-export function searchKota(query: string, limit = 15): WilayahKota[] {
+export function searchKota(query: string, limit = 20): WilayahKota[] {
   const rawTrimmed = query.trim().toLowerCase();
   if (!rawTrimmed) return [];
 
@@ -127,36 +154,40 @@ export function searchKota(query: string, limit = 15): WilayahKota[] {
       continue;
     }
 
-    // 3. Prefix match nama bersih (misal "band" -> Bandung)
+    // 3. Prefix match nama bersih (misal "sura" -> Surabaya, Surakarta; "band" -> Bandung)
     if (normNama.startsWith(normQuery)) {
       results.push({ kota, score: 85 - (normNama.length - normQuery.length) });
       continue;
     }
 
-    // 4. Substring match nama bersih (misal "barat" -> Kab. Bandung Barat)
+    // 4. Substring match nama bersih (misal "mal" -> Kota Malang, Kab. Malang)
     if (normNama.includes(normQuery)) {
       results.push({ kota, score: 70 });
       continue;
     }
 
-    // 5. Match provinsi (misal "bali" -> Kota Denpasar dll)
+    // 5. Raw nama prefix match (misal "kota sura")
+    if (rawNama.startsWith(rawTrimmed) || rawNama.includes(rawTrimmed)) {
+      results.push({ kota, score: 65 });
+      continue;
+    }
+
+    // 6. Match provinsi (misal "bali" -> Kota Denpasar dll)
     if (provNama.includes(normQuery) || provNama.startsWith(normQuery)) {
       results.push({ kota, score: 50 });
       continue;
     }
 
-    // 6. Fuzzy match untuk salah ketik ringan (misal "surbaya" -> "surabaya")
-    // Hanya evaluasi jika panjang query >= 4 huruf
+    // 7. Fuzzy match untuk salah ketik ringan (misal "surbaya" -> "surabaya")
     if (normQuery.length >= 4) {
       const dist = levenshteinDistance(normQuery, normNama);
-      // Toleransi jarak 1 untuk query 4-5 huruf, toleransi 2 untuk query >= 6 huruf
       const maxDist = normQuery.length <= 5 ? 1 : 2;
       if (dist <= maxDist) {
         results.push({ kota, score: 60 - dist * 10 });
         continue;
       }
 
-      // Coba juga per kata di nama kota (misal "bandung" di "bandung barat")
+      // Coba per kata di nama kota
       const words = normNama.split(' ');
       let wordMatched = false;
       for (const w of words) {
