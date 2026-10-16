@@ -76,6 +76,7 @@ export default function BalasChatPage() {
   // Revisi Cepat State
   const [isRevising, setIsRevising] = useState(false);
   const [revisiInstruction, setRevisiInstruction] = useState('');
+  const [customRevisiText, setCustomRevisiText] = useState('');
   const [revisiSeconds, setRevisiSeconds] = useState(0);
   const revisiIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [revisiElapsed, setRevisiElapsed] = useState<number | null>(null);
@@ -799,9 +800,18 @@ export default function BalasChatPage() {
                 ))}
               </div>
             </div>
+            {(kanal === 'shopee' || kanal === 'tiktok') && (
+              <div className="p-2.5 bg-tint border border-line rounded-xl text-xs text-ink flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-accent shrink-0" />
+                <span>
+                  Guardrail Marketplace Aktif: Draf otomatis memblokir nomor WA, rekening bank, dan ajakan transaksi luar.
+                </span>
+              </div>
+            )}
 
             <button
               type="button"
+              id="btn-buat-draf"
               onClick={() => runPipeline()}
               disabled={isProcessing || (images.length === 0 && !pastedText.trim() && !extraction)}
               className="w-full min-h-[44px] bg-accent text-accent-ink rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-50 transition cursor-pointer shadow-none focus-visible:outline-2 focus-visible:outline-accent"
@@ -1016,6 +1026,7 @@ export default function BalasChatPage() {
               <div className="pt-2 flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
+                  id="btn-salin-semua"
                   onClick={handleCopyAll}
                   disabled={draftResult.angka_tidak_terverifikasi}
                   className="flex-1 min-h-[48px] bg-accent text-accent-ink rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-50 transition cursor-pointer shadow-none focus-visible:outline-2 focus-visible:outline-accent"
@@ -1088,6 +1099,34 @@ export default function BalasChatPage() {
                     </button>
                   ))}
                 </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (customRevisiText.trim()) {
+                      runRevisi(customRevisiText.trim());
+                      setCustomRevisiText('');
+                    }
+                  }}
+                  className="flex gap-2 pt-1"
+                >
+                  <input
+                    type="text"
+                    id="input-revisi-custom"
+                    value={customRevisiText}
+                    onChange={(e) => setCustomRevisiText(e.target.value)}
+                    placeholder="Tulis instruksi revisi manual, tekan Enter..."
+                    disabled={isRevising}
+                    className="flex-1 text-xs px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink placeholder:text-muted focus:bg-surface focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isRevising || !customRevisiText.trim()}
+                    className="min-h-[44px] px-4 py-2 bg-accent text-accent-ink rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer"
+                  >
+                    Revisi
+                  </button>
+                </form>
               </div>
             </div>
           )}
