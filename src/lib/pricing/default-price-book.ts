@@ -1,5 +1,4 @@
-import { PriceBookData, SkuKatalog } from '@/types/pricing';
-
+import { PriceBookData, PriceBookDataAdmin, SkuKatalog } from '@/types/pricing';
 // Generator helper untuk katalog SKU Putra Glass 2026
 const STANDARD_SHAPES_30_40_50 = [
   'rectangle',
@@ -247,3 +246,5 @@ export const defaultPriceBookV1: PriceBookData = {
     kebijakan_ongkir_50: 'Ongkir bisa dibagi dua (klien bayar minimal 50%) hanya dengan konfirmasi owner. Jangan ditawarkan sendiri; isi perlu_owner jika klien meminta.',
   },
 };
+
+

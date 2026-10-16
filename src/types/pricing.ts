@@ -43,7 +43,7 @@ export interface AddOnConfig {
 export interface BatasLogistik {
   list: number;
   batas_admin: number;
-  batas_owner: number;
+  batas_owner?: number;
 }
 
 export interface PriceBookData {
@@ -190,7 +190,8 @@ export interface HitungPenawaranOutput {
     status: 'ok' | 'warning_kuning' | 'error_merah';
     pesan?: string;
     batas_admin: number;
-    batas_owner: number;
+    batas_floor?: number;
+    batas_owner?: number;
     perlu_konfirmasi: boolean;
     dikonfirmasi_owner: boolean;
     alasan?: string;
@@ -202,7 +203,8 @@ export interface HitungPenawaranOutput {
     status: 'ok' | 'warning_kuning' | 'error_merah';
     pesan?: string;
     batas_admin: number;
-    batas_owner: number;
+    batas_floor?: number;
+    batas_owner?: number;
     perlu_konfirmasi: boolean;
     dikonfirmasi_owner: boolean;
     alasan?: string;

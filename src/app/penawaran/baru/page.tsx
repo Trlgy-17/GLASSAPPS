@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { defaultAdminPriceBookV1 } from '@/lib/pricing/admin-price-book';
 import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { parseRupiah, formatRupiah } from '@/lib/pricing/format-rupiah';
-import { CerminItemInput, PenawaranInput, PriceBookData } from '@/types/pricing';
-import { PenawaranDocument } from '@/lib/pdf/PenawaranDocument';
-import { pdf } from '@react-pdf/renderer';
+import { CerminItemInput, PenawaranInput, PriceBookData, PriceBookDataAdmin } from '@/types/pricing';
 import {
   Plus,
   Trash2,
@@ -37,10 +35,18 @@ interface LocalItemState {
   qty: number;
 }
 
-export default function PenawaranPage() {
-  const [config, setConfig] = useState<PriceBookData>(defaultPriceBookV1);
-  const [userRole, setUserRole] = useState<'owner' | 'admin'>('admin');
+function parseDimensionInput(val: string): number {
+  if (!val) return 0;
+  const sanitized = val.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+  if (!sanitized) return 0;
+  const num = parseFloat(sanitized);
+  return isNaN(num) ? 0 : num;
+}
 
+export default function PenawaranPage() {
+  const [config, setConfig] = useState<PriceBookData | PriceBookDataAdmin>(defaultAdminPriceBookV1);
+  const [userRole, setUserRole] = useState<'owner' | 'admin'>('admin');
+  const isSavingRef = useRef(false);
   // Header State
   const [nomorPenawaran] = useState('PG-Q-2610-0001');
   const [namaKlien, setNamaKlien] = useState('');
@@ -54,13 +60,12 @@ export default function PenawaranPage() {
   const batasKirim = isDalamKota ? config.logistik?.kirim_bandung : config.logistik?.kirim_luar_kota;
   const ongkirListPrice = batasKirim?.list || (isDalamKota ? 750000 : 1300000);
   const batasOngkirAdmin = batasKirim?.batas_admin || (isDalamKota ? 500000 : 1150000);
-  const batasOngkirOwner = batasKirim?.batas_owner || (isDalamKota ? 375000 : 650000);
+  const batasOngkirMin = Math.round(ongkirListPrice * 0.5);
 
   const batasPasang = isDalamKota ? config.logistik?.pasang_bandung : config.logistik?.pasang_luar_kota;
   const pasangListPrice = batasPasang?.list || (isDalamKota ? 800000 : 1300000);
   const batasPasangAdmin = batasPasang?.batas_admin || (isDalamKota ? 500000 : 1000000);
-  const batasPasangOwner = batasPasang?.batas_owner || (isDalamKota ? 300000 : 800000);
-
+  const batasPasangMin = isDalamKota ? 300000 : 800000;
   // Nilai Deal Ongkir
   const [ongkirDealVal, setOngkirDealVal] = useState<number | undefined>(undefined);
   const [ongkirInputText, setOngkirInputText] = useState('');
@@ -127,21 +132,27 @@ export default function PenawaranPage() {
         },
         ongkir_deal: ongkirDealVal,
         pasang_deal: pasangDealVal,
-        items: items.map((it) => ({
-          bentuk_kode: it.bentuk_kode,
-          panjang_mm: it.panjang_cm * 10,
-          lebar_mm: it.lebar_cm * 10,
-          lampu: it.lampu,
-          kontrol: it.kontrol,
-          frame: it.frame,
-          antifog: it.antifog,
-          sandblast: {
-            pakai: it.sandblast_pakai,
-            lebar_mm: it.sandblast_lebar_cm * 10,
-            jarak_tepi_mm: it.sandblast_tepi_cm * 10,
-          },
-          qty: it.qty,
-        })),
+        items: items.map((it) => {
+          const rawP = Number(it.panjang_cm);
+          const rawL = Number(it.lebar_cm);
+          const safeP = isNaN(rawP) || rawP <= 0 ? 60 : Math.round(rawP);
+          const safeL = isNaN(rawL) || rawL <= 0 ? 80 : Math.round(rawL);
+          return {
+            bentuk_kode: it.bentuk_kode || 'rectangle',
+            panjang_mm: safeP * 10,
+            lebar_mm: safeL * 10,
+            lampu: it.lampu,
+            kontrol: it.kontrol,
+            frame: it.frame,
+            antifog: it.antifog,
+            sandblast: {
+              pakai: it.sandblast_pakai,
+              lebar_mm: Math.max(20, Math.min(50, (it.sandblast_lebar_cm || 3) * 10)),
+              jarak_tepi_mm: Math.max(10, Math.min(50, (it.sandblast_tepi_cm || 2) * 10)),
+            },
+            qty: Math.max(1, Math.round(Number(it.qty) || 1)),
+          };
+        }),
       };
       return hitungPenawaran(payload, config);
     } catch (e) {
@@ -240,7 +251,8 @@ export default function PenawaranPage() {
   };
 
   const handleSimpanPenawaran = async (isUnduh: boolean) => {
-    if (!kalkulasi) return;
+    if (!kalkulasi || isSavingRef.current || isSavingDraft || isGeneratingPdf) return;
+    isSavingRef.current = true;
     if (isUnduh) setIsGeneratingPdf(true);
     else setIsSavingDraft(true);
     setSaveSuccessMsg(null);
@@ -286,25 +298,15 @@ export default function PenawaranPage() {
       }
 
       if (isUnduh) {
-        const doc = (
-          <PenawaranDocument
-            nomor={json.penawaran?.nomor || nomorPenawaran}
-            tanggal={new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-            berlakuSampai={new Date(Date.now() + 7 * 86400000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-            namaKlien={namaKlien.trim() || 'Klien Putra Glass'}
-            kotaKlien={kotaKlien.trim() || 'Bandung'}
-            kalkulasi={kalkulasi}
-            config={config}
-          />
-        );
-        const asPdf = pdf(doc);
-        const blob = await asPdf.toBlob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${json.penawaran?.nomor || nomorPenawaran}_${(namaKlien.trim() || 'Klien').replace(/\s+/g, '_')}.pdf`;
-        link.click();
-        URL.revokeObjectURL(url);
+        if (json.pdf_url) {
+          const link = document.createElement('a');
+          link.href = json.pdf_url;
+          link.download = `${json.penawaran?.nomor || nomorPenawaran}_${(namaKlien.trim() || 'Klien').replace(/\s+/g, '_')}.pdf`;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
         setSaveSuccessMsg(`Penawaran ${json.penawaran?.nomor} berhasil disimpan dengan status 'terkirim'!`);
       } else {
         setSaveSuccessMsg(`Penawaran ${json.penawaran?.nomor} berhasil disimpan sebagai 'draf'!`);
@@ -313,6 +315,7 @@ export default function PenawaranPage() {
       console.error('Error saving:', e);
       alert('Terjadi kesalahan saat menyimpan');
     } finally {
+      isSavingRef.current = false;
       setIsGeneratingPdf(false);
       setIsSavingDraft(false);
     }
@@ -723,12 +726,13 @@ export default function PenawaranPage() {
                           <label className="block text-xs font-semibold text-muted mb-1.5">
                             Panjang (cm)
                           </label>
+
                           <input
-                            type="number"
-                            min="15"
-                            max="300"
+                            type="text"
+                            inputMode="decimal"
+                            id={`input-panjang-${idx}`}
                             value={item.panjang_cm}
-                            onChange={(e) => updateItem(idx, { panjang_cm: Number(e.target.value) })}
+                            onChange={(e) => updateItem(idx, { panjang_cm: parseDimensionInput(e.target.value) })}
                             className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
                           />
                           {(item.panjang_cm < 15 || item.panjang_cm > 300) && (
@@ -741,13 +745,14 @@ export default function PenawaranPage() {
                             Lebar (cm)
                           </label>
                           <input
-                            type="number"
-                            min="15"
-                            max="300"
+                            type="text"
+                            inputMode="decimal"
+                            id={`input-lebar-${idx}`}
                             value={item.lebar_cm}
-                            onChange={(e) => updateItem(idx, { lebar_cm: Number(e.target.value) })}
+                            onChange={(e) => updateItem(idx, { lebar_cm: parseDimensionInput(e.target.value) })}
                             className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
                           />
+
                           {(item.lebar_cm < 15 || item.lebar_cm > 300) && (
                             <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
                           )}
@@ -967,15 +972,65 @@ export default function PenawaranPage() {
                     className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none"
                   />
                   <p className="text-[11px] text-muted">
-                    Batas Admin: {formatRupiah(batasOngkirAdmin)} • Batas Owner: {formatRupiah(batasOngkirOwner)}
+                    Batas Wewenang Admin: {formatRupiah(batasOngkirAdmin)}
                   </p>
 
                   {kalkulasi.ongkir.status === 'error_merah' && (
                     <p className="text-xs text-warn font-semibold mt-1">
-                      Minimal {formatRupiah(batasOngkirOwner)} (ongkir maksimal dibagi 2)
+                      Minimal {formatRupiah(batasOngkirMin)} (ongkir maksimal dibagi 2)
                     </p>
                   )}
+
+                  {kalkulasi.ongkir.perlu_konfirmasi && (
+                    <div className="p-3 bg-tint border border-line rounded-xl space-y-2 mt-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer">
+                        <input
+                          type="checkbox"
+                          id="check-konfirmasi-ongkir"
+                          checked={ongkirKonfirmasiOwner}
+                          onChange={(e) => setOngkirKonfirmasiOwner(e.target.checked)}
+                          className="w-4 h-4 rounded text-accent"
+                        />
+                        <span>Konfirmasi persetujuan owner</span>
+                      </label>
+                      {ongkirKonfirmasiOwner && (
+                        <input
+                          type="text"
+                          id="input-alasan-ongkir"
+                          value={ongkirAlasan}
+                          onChange={(e) => setOngkirAlasan(e.target.value)}
+                          placeholder="Alasan potongan (wajib diisi)"
+                          className="w-full text-xs px-2.5 py-1.5 min-h-[36px] border border-line rounded-lg bg-surface text-ink"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {kalkulasi.pasang.perlu_konfirmasi && (
+                  <div className="p-3 bg-tint border border-line rounded-xl space-y-2 mt-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id="check-konfirmasi-pasang"
+                        checked={pasangKonfirmasiOwner}
+                        onChange={(e) => setPasangKonfirmasiOwner(e.target.checked)}
+                        className="w-4 h-4 rounded text-accent"
+                      />
+                      <span>Konfirmasi persetujuan owner</span>
+                    </label>
+                    {pasangKonfirmasiOwner && (
+                      <input
+                        type="text"
+                        id="input-alasan-pasang"
+                        value={pasangAlasan}
+                        onChange={(e) => setPasangAlasan(e.target.value)}
+                        placeholder="Alasan potongan pasang (wajib diisi)"
+                        className="w-full text-xs px-2.5 py-1.5 min-h-[36px] border border-line rounded-lg bg-surface text-ink"
+                      />
+                    )}
+                  </div>
+                )}
 
                 {/* Pemasangan Checkbox */}
                 <div className="pt-2 border-t border-line/40 space-y-2">

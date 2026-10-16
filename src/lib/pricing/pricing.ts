@@ -1,5 +1,6 @@
 import {
   PriceBookData,
+  PriceBookDataAdmin,
   PenawaranInput,
   HitungPenawaranOutput,
   HitungItemOutput,
@@ -16,7 +17,7 @@ import {
  */
 export function hitungPenawaran(
   input: PenawaranInput,
-  config: PriceBookData
+  config: PriceBookData | PriceBookDataAdmin
 ): HitungPenawaranOutput {
   if (!input.items || input.items.length === 0) {
     throw new Error('Penawaran harus memiliki setidaknya satu item cermin');
@@ -45,10 +46,7 @@ export function hitungPenawaran(
   const batasKirim = isDalamKota
     ? config.logistik.kirim_bandung
     : config.logistik.kirim_luar_kota;
-  const batasKirimOwner =
-    batasKirim.batas_owner !== undefined
-      ? batasKirim.batas_owner
-      : Math.round(batasKirim.list * 0.5);
+  const batasKirimFloor = Math.round(batasKirim.list * 0.5);
 
   const ongkirList = batasKirim.list;
   let ongkirDeal = input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList;
@@ -60,11 +58,11 @@ export function hitungPenawaran(
   let ongkirDikonfirmasiOwner = false;
   let ongkirAlasan: string | undefined;
 
-  if (ongkirDeal < batasKirimOwner) {
+  if (ongkirDeal < batasKirimFloor) {
     ongkirStatus = 'error_merah';
-    ongkirPesan = `Minimal Rp${batasKirimOwner.toLocaleString('id-ID')} (ongkir maks. dibagi 2)`;
+    ongkirPesan = `Minimal Rp${batasKirimFloor.toLocaleString('id-ID')} (ongkir maks. dibagi 2)`;
     isValidUntukPdf = false;
-    errors.push(`Ongkir deal (Rp${ongkirDeal.toLocaleString('id-ID')}) di bawah batas mutlak owner (Rp${batasKirimOwner.toLocaleString('id-ID')})`);
+    errors.push(`Ongkir deal (Rp${ongkirDeal.toLocaleString('id-ID')}) di bawah batas minimum (Rp${batasKirimFloor.toLocaleString('id-ID')})`);
   } else if (ongkirDeal < batasKirim.batas_admin) {
     const kf = input.konfirmasi_owner?.ongkir;
     if (kf?.sudah_dikonfirmasi && kf.alasan && kf.alasan.trim().length > 0) {
@@ -91,6 +89,7 @@ export function hitungPenawaran(
   let pasangPerluKonfirmasi = false;
   let pasangDikonfirmasiOwner = false;
   let pasangAlasan: string | undefined;
+  let batasPasangFloor = 0;
 
   if (input.perlu_pasang) {
     const batasPasang = isDalamKota
@@ -100,16 +99,13 @@ export function hitungPenawaran(
     pasangList = batasPasang.list;
     pasangDeal = input.pasang_deal !== undefined ? input.pasang_deal : pasangList;
     potonganPasang = Math.max(0, pasangList - pasangDeal);
-    const batasPasangOwner =
-      batasPasang.batas_owner !== undefined
-        ? batasPasang.batas_owner
-        : (isDalamKota ? 300000 : 800000);
+    batasPasangFloor = isDalamKota ? 300000 : 800000;
 
-    if (pasangDeal < batasPasangOwner) {
+    if (pasangDeal < batasPasangFloor) {
       pasangStatus = 'error_merah';
-      pasangPesan = `Minimal Rp${batasPasangOwner.toLocaleString('id-ID')}`;
+      pasangPesan = `Minimal Rp${batasPasangFloor.toLocaleString('id-ID')}`;
       isValidUntukPdf = false;
-      errors.push(`Pasang deal (Rp${pasangDeal.toLocaleString('id-ID')}) di bawah batas mutlak owner (Rp${batasPasangOwner.toLocaleString('id-ID')})`);
+      errors.push(`Pasang deal (Rp${pasangDeal.toLocaleString('id-ID')}) di bawah batas minimum (Rp${batasPasangFloor.toLocaleString('id-ID')})`);
     } else if (pasangDeal < batasPasang.batas_admin) {
       const kf = input.konfirmasi_owner?.pasang;
       if (kf?.sudah_dikonfirmasi && kf.alasan && kf.alasan.trim().length > 0) {
@@ -148,7 +144,8 @@ export function hitungPenawaran(
       status: ongkirStatus,
       pesan: ongkirPesan,
       batas_admin: batasKirim.batas_admin,
-      batas_owner: batasKirimOwner,
+      batas_floor: batasKirimFloor,
+      ...(typeof window === 'undefined' ? { batas_owner: batasKirimFloor } : {}),
       perlu_konfirmasi: ongkirPerluKonfirmasi,
       dikonfirmasi_owner: ongkirDikonfirmasiOwner,
       alasan: ongkirAlasan,
@@ -160,7 +157,8 @@ export function hitungPenawaran(
       status: pasangStatus,
       pesan: pasangPesan,
       batas_admin: input.perlu_pasang ? (isDalamKota ? config.logistik.pasang_bandung.batas_admin : config.logistik.pasang_luar_kota.batas_admin) : 0,
-      batas_owner: input.perlu_pasang ? (isDalamKota ? (config.logistik.pasang_bandung.batas_owner || 300000) : (config.logistik.pasang_luar_kota.batas_owner || 800000)) : 0,
+      batas_floor: input.perlu_pasang ? batasPasangFloor : 0,
+      ...(typeof window === 'undefined' ? { batas_owner: input.perlu_pasang ? batasPasangFloor : 0 } : {}),
       perlu_konfirmasi: pasangPerluKonfirmasi,
       dikonfirmasi_owner: pasangDikonfirmasiOwner,
       alasan: pasangAlasan,
@@ -182,7 +180,7 @@ function hitungSingleItem(
   index: number,
   totalUnitInPenawaran: number,
   penawaranInput: PenawaranInput,
-  config: PriceBookData
+  config: PriceBookData | PriceBookDataAdmin
 ): HitungItemOutput {
   const segmen = penawaranInput.segmen;
   // Validasi Dimensi
@@ -288,9 +286,14 @@ function hitungSingleItem(
       if (segmen === 'B2B') {
         if (penawaranInput.tarif_cermin_b2b_deal !== undefined) {
           const dealTarif = penawaranInput.tarif_cermin_b2b_deal;
-          if (dealTarif < config.tarif_m2.premium_b2b_net_owner) {
+          const netOwner =
+            'premium_b2b_net_owner' in config.tarif_m2 &&
+            typeof (config.tarif_m2 as Record<string, unknown>).premium_b2b_net_owner === 'number'
+              ? ((config.tarif_m2 as Record<string, unknown>).premium_b2b_net_owner as number)
+              : 0;
+          if (netOwner > 0 && dealTarif < netOwner) {
             throw new Error(
-              `Tarif cermin B2B (Rp${dealTarif.toLocaleString('id-ID')}) berada di bawah batas mutlak owner (Rp${config.tarif_m2.premium_b2b_net_owner.toLocaleString('id-ID')})`
+              `Tarif cermin B2B (Rp${dealTarif.toLocaleString('id-ID')}) berada di bawah batas mutlak owner`
             );
           }
           if (dealTarif < config.tarif_m2.premium_b2b_list) {
@@ -393,7 +396,7 @@ function resolveAddOn(
   addonKey: string,
   panjang_mm: number,
   lebar_mm: number,
-  config: PriceBookData
+  config: PriceBookData | PriceBookDataAdmin
 ) {
   const addonCfg: AddOnConfig | undefined = config.add_on[addonKey];
   if (!addonCfg) {
