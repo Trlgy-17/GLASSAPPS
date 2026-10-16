@@ -2,6 +2,13 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  validateRupiahInDraft,
+  validateMarketplaceGuards,
+  validateForbiddenPhrases,
+  detectBrokenSentence,
+} from '@/lib/ai/validator';
 import {
   Upload,
   MessageSquare,
@@ -93,6 +100,7 @@ export default function BalasChatPage() {
 
   // UI Interactive States
   const [isEditingExtraction, setIsEditingExtraction] = useState(false);
+  const [editingBubbleIdx, setEditingBubbleIdx] = useState<number | null>(null);
   const [copiedBubbleIdx, setCopiedBubbleIdx] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [showConfirmSent, setShowConfirmSent] = useState(false);
@@ -468,6 +476,30 @@ export default function BalasChatPage() {
     setTimeout(() => setCopiedBubbleIdx(null), 2500);
   };
 
+  const handleUpdateBubbleText = (newText: string, bIdx: number) => {
+    if (!draftResult?.draf?.[activeDraftIdx]?.bubbles) return;
+    const updatedBubbles = [...draftResult.draf[activeDraftIdx].bubbles];
+    updatedBubbles[bIdx] = newText;
+
+    const calculatedNumbers = draftResult.angka_dipakai || [];
+    const rupVal = validateRupiahInDraft(updatedBubbles, calculatedNumbers, calculatedNumbers);
+    const mktVal = validateMarketplaceGuards(kanal, updatedBubbles);
+    const forbVal = validateForbiddenPhrases(updatedBubbles);
+    const sentVal = detectBrokenSentence(updatedBubbles);
+
+    const isInvalid = !rupVal.valid || !mktVal.valid || !forbVal.valid || sentVal.isBroken;
+
+    setDraftResult({
+      ...draftResult,
+      draf: draftResult.draf.map((d, dIdx) =>
+        dIdx === activeDraftIdx ? { ...d, bubbles: updatedBubbles } : d
+      ),
+      angka_tidak_terverifikasi: isInvalid,
+      error_validasi_angka: rupVal.errors,
+      pelanggaran_marketplace: mktVal.errors,
+      frasa_terlarang_ditemukan: forbVal.errors,
+    });
+  };
 
 
   const handleTandaiTerkirim = async () => {
@@ -964,7 +996,20 @@ export default function BalasChatPage() {
               {draftResult.discrepancy_warning && (
                 <div className="p-4 bg-warn-bg border border-warn text-warn rounded-[18px] text-sm flex items-center gap-2.5 font-bold shadow-none">
                   <AlertTriangle className="w-5 h-5 text-warn shrink-0" />
-                  <span>{draftResult.discrepancy_warning}</span>
+                  <span>Angka di percakapan berbeda dengan penawaran tersimpan. Cek rincian sebelum mengirim.</span>
+                </div>
+              )}
+
+              {/* Peringatan Kuning: Nomor Rekening Belum Diatur */}
+              {draftResult.rekening_kosong && (
+                <div className="p-4 bg-[#FFF9E6] dark:bg-[#2A2312] border border-[#E3A857] text-[#9A6700] dark:text-[#F3C474] rounded-[18px] text-sm flex items-center justify-between gap-3 shadow-none">
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-[#E3A857] shrink-0" />
+                    <span className="font-semibold">Nomor rekening belum diatur di Pengaturan. Kirim rekening manual ke klien.</span>
+                  </div>
+                  <Link href="/pengaturan/buku-harga" className="text-xs font-bold underline hover:opacity-80 shrink-0">
+                    Atur Sekarang
+                  </Link>
                 </div>
               )}
 
@@ -973,25 +1018,38 @@ export default function BalasChatPage() {
                 <div className="p-4 bg-[#FFF9E6] dark:bg-[#2A2312] border border-[#E3A857] text-[#9A6700] dark:text-[#F3C474] rounded-[18px] text-sm flex items-center justify-between gap-3 shadow-none">
                   <div className="flex items-center gap-2.5">
                     <ShieldAlert className="w-5 h-5 text-[#E3A857] shrink-0" />
-                    <div>
-                      <span className="font-bold block">Perlu Persetujuan Owner</span>
-                      <span className="text-xs opacity-90">{draftResult.alasan_perlu_owner || 'Permintaan potongan harga / bagi ongkir'}</span>
-                    </div>
+                    <span className="font-semibold">
+                      {draftResult.alasan_perlu_owner?.toLowerCase().includes('ongkir')
+                        ? 'Klien minta ongkir dibagi dua. Tanya owner dulu sebelum menjawab.'
+                        : draftResult.alasan_perlu_owner?.toLowerCase().includes('potongan') || draftResult.alasan_perlu_owner?.toLowerCase().includes('diskon')
+                        ? 'Klien minta potongan harga. Tanya owner dulu sebelum menjawab.'
+                        : 'Klien meminta negosiasi khusus. Tanya owner dulu sebelum menjawab.'}
+                    </span>
                   </div>
                   <span className="text-[11px] font-bold px-2.5 py-1 bg-[#E3A857]/20 rounded-lg shrink-0">
-                    Status Terkunci
+                    Terkunci
                   </span>
                 </div>
               )}
 
               {/* Peringatan Merah: Angka Tidak Terverifikasi / Frasa Terlarang */}
               {draftResult.angka_tidak_terverifikasi && (
-                <div className="p-4 bg-warn-bg border border-warn text-warn rounded-[18px] text-sm flex items-center gap-2.5 font-semibold shadow-none">
-                  <ShieldAlert className="w-5 h-5 text-warn shrink-0" />
-                  <div>
-                    <span className="font-bold block">Draf Memuat Angka Tidak Terverifikasi / Frasa Terlarang</span>
-                    <span className="text-xs">Tombol salin dinonaktifkan demi kepatuhan aturan harga dan SOP resmi.</span>
+                <div className="p-4 bg-warn-bg border border-warn text-warn rounded-[18px] text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-semibold shadow-none">
+                  <div className="flex items-center gap-2.5">
+                    <ShieldAlert className="w-5 h-5 text-warn shrink-0" />
+                    <span>
+                      {draftResult.frasa_terlarang_ditemukan && draftResult.frasa_terlarang_ditemukan.length > 0
+                        ? `Draf memuat kata yang dilarang (${draftResult.frasa_terlarang_ditemukan[0]}). Hapus kata tersebut agar tombol salin aktif.`
+                        : 'Ada angka yang tidak cocok dengan kalkulator. Edit gelembung di bawah agar tombol salin aktif.'}
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => runPipeline()}
+                    className="min-h-[36px] px-3.5 py-1.5 bg-warn text-white rounded-xl text-xs font-bold shrink-0 hover:opacity-90 cursor-pointer"
+                  >
+                    Tulis Ulang
+                  </button>
                 </div>
               )}
               {/* Kutipan Pesan Terakhir Klien */}
@@ -1031,26 +1089,47 @@ export default function BalasChatPage() {
                     }
                     return part;
                   });
-
+                  const isEditingThisBubble = editingBubbleIdx === bIdx;
                   return (
                     <div
                       key={bIdx}
-                      className="max-w-[90%] ml-auto p-4 bg-bubble text-ink rounded-2xl border border-rim/40 text-[15px] leading-relaxed relative group hover:border-rim transition"
+                      className="max-w-[90%] ml-auto p-4 bg-bubble text-ink rounded-2xl border border-rim/40 text-[15px] leading-relaxed relative group hover:border-rim transition space-y-2"
                     >
-                      <p className="whitespace-pre-wrap pr-10">{highlightedBubble}</p>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyBubble(bubble, bIdx)}
-                        disabled={draftResult.angka_tidak_terverifikasi}
-                        className="min-h-[44px] min-w-[44px] absolute top-2 right-2 text-muted hover:text-ink flex items-center justify-center rounded-lg transition cursor-pointer"
-                        title="Salin pesan ini"
-                      >
-                        {copiedBubbleIdx === bIdx ? (
-                          <Check className="w-4 h-4 text-ok" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
+                      {isEditingThisBubble ? (
+                        <textarea
+                          value={bubble}
+                          onChange={(e) => handleUpdateBubbleText(e.target.value, bIdx)}
+                          rows={3}
+                          className="w-full text-sm p-3 bg-surface border border-accent rounded-xl text-ink focus:outline-none"
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap pr-16">{highlightedBubble}</p>
+                      )}
+
+                      <div className="absolute top-2 right-2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingBubbleIdx(isEditingThisBubble ? null : bIdx)}
+                          className="w-8 h-8 text-muted hover:text-ink flex items-center justify-center rounded-lg transition cursor-pointer"
+                          title={isEditingThisBubble ? 'Selesai edit' : 'Edit teks gelembung ini'}
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBubble(bubble, bIdx)}
+                          disabled={draftResult.angka_tidak_terverifikasi}
+                          className="w-8 h-8 text-muted hover:text-ink flex items-center justify-center rounded-lg transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Salin pesan ini"
+                        >
+                          {copiedBubbleIdx === bIdx ? (
+                            <Check className="w-4 h-4 text-ok" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

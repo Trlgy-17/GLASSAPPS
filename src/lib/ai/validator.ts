@@ -167,18 +167,20 @@ export function validateForbiddenPhrases(bubbles: string[]): ValidationResult {
     'dijamin',
     '100%',
     'tidak akan rusak',
+    'adaptor sni',
+    'spare part secara gratis',
+    'secara gratis',
   ];
   for (const claim of forbiddenClaims) {
     if (fullText.includes(claim)) {
-      errors.push(`Draf memuat frasa klaim/promo terlarang: "${claim}"`);
+      errors.push(`Draf memuat frasa klaim/promo terlarang di luar KB: "${claim}"`);
     }
   }
 
-  // 4. Kata gratis di luar ketentuan garansi resmi
-  if (/\bgratis\b/i.test(fullText) && !/gratis biaya|part gratis|penggantian.*gratis|secara gratis/i.test(fullText)) {
-    errors.push('Draf memuat kata "gratis" di luar ketentuan garansi resmi');
+  // 4. Kata gratis di luar ketentuan resmi
+  if (/\bgratis\b/i.test(fullText)) {
+    errors.push('Draf memuat kata "gratis" yang tidak terdaftar di KB resmi');
   }
-
   // 5. Template CS kaku
   const csTemplates = [
     'terima kasih telah menghubungi kami',
@@ -197,4 +199,52 @@ export function validateForbiddenPhrases(bubbles: string[]): ValidationResult {
     valid: errors.length === 0,
     errors,
   };
+}
+
+/**
+ * Deteksi Kalimat Tidak Utuh / Janggal
+ */
+export function detectBrokenSentence(bubbles: string[]): { isBroken: boolean; reason?: string } {
+  for (let i = 0; i < bubbles.length; i++) {
+    const text = bubbles[i].trim();
+    if (!text) continue;
+
+    // 1. Cek kata sambung menggantung di akhir gelembung
+    const trailingConjunctionRegex = /\b(dan|atau|untuk|yang|di|ke|dengan|beserta|yaitu|adalah|karena|agar|supaya|seperti|sebesar|totalnya|harganya|ongkirnya|seharga|jadi)\s*[,.:-]?$/i;
+    if (trailingConjunctionRegex.test(text)) {
+      return {
+        isBroken: true,
+        reason: `Gelembung #${i + 1} berakhir dengan kata sambung menggantung tanpa kelanjutan klausa`,
+      };
+    }
+
+    // 2. Cek tanda baca menggantung (koma, titik dua, tanda hubung di akhir gelembung)
+    if (/[,:\-—]\s*$/.test(text)) {
+      return {
+        isBroken: true,
+        reason: `Gelembung #${i + 1} berakhir dengan tanda baca menggantung`,
+      };
+    }
+
+    // 3. Cek tanda kurung tidak seimbang
+    const openParens = (text.match(/\(/g) || []).length;
+    const closeParens = (text.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      return {
+        isBroken: true,
+        reason: `Gelembung #${i + 1} memiliki tanda kurung yang tidak tertutup`,
+      };
+    }
+
+    // 4. Cek tanda petik tidak seimbang
+    const quotes = (text.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
+      return {
+        isBroken: true,
+        reason: `Gelembung #${i + 1} memiliki tanda petik yang tidak tertutup`,
+      };
+    }
+  }
+
+  return { isBroken: false };
 }

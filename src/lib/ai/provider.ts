@@ -6,7 +6,7 @@ import { hitungPenawaran } from '../pricing/pricing';
 import { formatRupiah } from '../pricing/format-rupiah';
 import { PriceBookData } from '@/types/pricing';
 import { buildPrompts, BuildPromptParams } from './prompt-builder';
-import { validateRupiahInDraft, validateMarketplaceGuards, validateForbiddenPhrases, extractAllRupiahNumbers } from './validator';
+import { validateRupiahInDraft, validateMarketplaceGuards, validateForbiddenPhrases, extractAllRupiahNumbers, detectBrokenSentence } from './validator';
 import { createAdminClient } from '../supabase/server';
 
 // 1. Model Configuration dari Environment
@@ -321,6 +321,7 @@ export interface DraftReplyOutput {
   pelanggaran_marketplace?: string[];
   frasa_terlarang_ditemukan?: string[];
   discrepancy_warning?: string | null;
+  rekening_kosong?: boolean;
   model_used?: string;
   is_fallback?: boolean;
   ms_ttft?: number;
@@ -682,16 +683,66 @@ export async function executeUnifiedDraft(params: UnifiedDraftParams): Promise<U
   if (candidateModels.length === 0) {
     candidateModels.push(MODEL_FAST);
   }
-  const thinkingLvl = params.thinkingLevel ?? ThinkingLevel.LOW;
+  const thinkingLvl = params.thinkingLevel ?? ThinkingLevel.MINIMAL;
+
+  // Modularisasi KB berdasarkan maksud (intent) klien untuk memangkas token input & mempercepat TTFT
+  const chatLower = (params.pastedText || '').toLowerCase();
+  const isMarketplace = params.overrideKanal === 'tiktok' || params.overrideKanal === 'shopee';
+  const isNego = /mahal|kemahalan|diskon|kurang|potongan|nego|budget|anggaran|toko sebelah|murah|promo/.test(chatLower);
+  const isGaransi = /garansi|pecah|rusak|mati|tukar|retak|unboxing|asuransi|aman|komplain/.test(chatLower);
+  const isMerek = /merek|merk|brand|asahi|mulia|agc|pabrik/.test(chatLower);
+  const isOngkir = /ongkir|kirim|ekspedisi|kargo|alamat|kota|bandung|surabaya|jakarta|timika|balikpapan/.test(chatLower);
+  const isFollowup = /jadi deh|transfer|rekening|invoice|no rek|pesan sekarang|antrean|dp ke mana/.test(chatLower) || Boolean(params.klienLanjutan);
+
+  const docPdf = params.priceBook.dokumen_pdf;
+  const hasRekening = Boolean(docPdf?.bank_nomor && docPdf.bank_nomor.trim() && docPdf.bank_nomor !== '[belum diisi]');
+  const rekeningRule = hasRekening
+    ? `- Rekening pembayaran resmi: Bank ${docPdf?.bank_nama} nomor ${docPdf?.bank_nomor} a.n. ${docPdf?.bank_atas_nama}.`
+    : `- Rekening resmi belum diatur di Pengaturan. JANGAN PERNAH MENGARANG nomor rekening atau bank! Tulis persis: "nomor rekening saya kirimkan sebentar ya Kak".`;
+
+  const merekRule = isMerek
+    ? `- PERTANYAAN MEREK KACA: Jawab spesifikasi resminya (kaca cermin datar grade 1 tebal 5 mm, tepi bevel 10 mm keliling standar resmi) + "untuk merek saya cek dulu ke tim produksi ya Kak". DILARANG KERAS menyebut atau mengiyakan nama merek kaca (ASAHI, Mulia, AGC, Guardian)!`
+    : '';
+
+  const negoRule = isNego
+    ? `- TANGGA NEGO: Gali spesifikasi pembanding, lalu tawarkan opsi hemat: paket LED 1 warna basic (saklar biasa), tanpa sandblast, atau ukuran sedikit lebih kecil. JANGAN PERNAH menawarkan potongan harga atau bagi ongkir sendiri! Jika klien minta potongan/diskon/bagi ongkir, jawab: "saya bantu cek dulu ke tim ya Kak" dan set "perlu_owner": true.`
+    : '';
+
+  const ongkirRule = isOngkir
+    ? `- PENGIRIMAN:
+  * Jika area Bandung Raya (Bandung, Cimahi, Kab. Bandung, Bandung Barat): Selain menyebutkan ongkir Bandung [[ONGKIR]], SELALU tawarkan opsi: "atau bisa juga diambil langsung ke workshop kami di Bandung ya Kak (ongkir Rp0)".
+  * Jika kota tanpa zona di buku harga (misal Timika Papua): sampaikan "Untuk estimasi ongkos kirim ke [Kota] akan dicek dan dihitung oleh admin kargo kami ya Kak." tanpa menyebut angka!
+  * Klien minta ongkir dibagi dua (50:50): JANGAN setuju, jawab "saya bantu cek dulu ke tim ya Kak" dan set "perlu_owner": true.`
+    : '';
+
+  const garansiRule = isGaransi
+    ? `- GARANSI & SYARAT KLAIM: Garansi resmi 7 hari pengiriman (pecah/retak perjalanan) + 3 bulan fungsi kelistrikan LED & touchscreen. Syarat klaim WAJIB disebut: video unboxing utuh tanpa cut, foto resi, dan dilaporkan maksimal 7 hari setelah barang sampai. DILARANG janji "ganti baru tanpa ribet", tim teknisi akan memverifikasi video terlebih dahulu.`
+    : `- Garansi resmi: 7 hari fisik pengiriman + 3 bulan fungsi kelistrikan LED & touchscreen.`;
+
+  const marketplaceRule = isMarketplace
+    ? `- ATURAN KANAL MARKETPLACE (${params.overrideKanal}): DILARANG KERAS memuat nomor WhatsApp, nomor telepon, nomor rekening bank, atau link/ajakan transaksi di luar platform!`
+    : '';
+
   const unifiedSystemPrompt = `
 Kamu adalah Senior Sales & CS Putra Glass (cermin LED custom premium di Bandung).
-Tugasmu:
-1. Analisis teks dan/atau screenshot chat klien.
-2. PENTING - ATURAN 2 MODE KONTROL (JANGAN TERTUKAR):
-   - Mode "Produk Jadi" (SKU Katalog standar): Kontrol = Touchscreen (TC) / Sensor Tangan (ST) / Baterai (BT).
-   - Mode "Custom" (Ukuran bebas per m2): Paket = LED 3 Warna Premium (touchscreen kabel) / Sensor Tangan + Baterai (rechargeable) / LED 1 Warna Basic (saklar).
-   - Jika klien belum jelas memilih ukuran/model, tanyakan: "Mau model jadi (ukuran katalog) atau custom ukuran sesuai ruangan Kak?".
-3. Keluarkan blok SPEC di paling awal:
+Tugasmu: Analisis chat klien dan susun draf balasan WhatsApp/DM.
+
+FAKTA DASAR PRODUK:
+- Kaca cermin datar grade 1 tebal 5 mm (jernih, bebas bayangan ganda, BUKAN cermin cembung).
+- Tepi bevel 10 mm keliling STANDAR RESMI kami pada semua produk cermin (bukan opsi tambahan berbayar).
+- 2 Mode Pilihan:
+  A. Mode "Produk Jadi" (SKU Katalog): Touchscreen (TC) / Sensor Tangan (ST) / Baterai (BT).
+  B. Mode "Custom" (Bebas ukuran): LED 3 Warna Premium (touchscreen kabel) / Sensor Tangan + Baterai / LED 1 Warna Basic (saklar).
+
+${rekeningRule}
+${merekRule}
+${negoRule}
+${ongkirRule}
+${garansiRule}
+${marketplaceRule}
+
+Keluarkan blok SPEC di paling awal:
+<!--SPEC-->
 {
   "nama_klien": "Nama klien jika ada, atau null",
   "kota": "Nama kota jika ada, atau null",
@@ -716,7 +767,7 @@ Tugasmu:
 }
 <!--/SPEC-->
 
-3. Setelah itu keluarkan blok DRAFT balasan:
+Keluarkan blok DRAFT balasan:
 <!--DRAFT-->
 {
   "ringkasan_situasi": "1-2 kalimat untuk admin",
@@ -743,18 +794,9 @@ Tugasmu:
 
 ATURAN HARGA MUTLAK:
 - DILARANG KERAS menulis angka rupiah langsung (jangan tulis Rp840.000, 1.295.000, dll).
-- WAJIB memakai penanda persis:
-  [[HARGA_1]] untuk harga cermin
-  [[ONGKIR]] untuk ongkos kirim
-  [[PASANG]] untuk pasang (jika ada)
-  [[TOTAL]] untuk total penawaran
-  [[DP]] untuk DP 50%
-  [[PELUNASAN]] untuk pelunasan 50%
+- WAJIB memakai penanda persis: [[HARGA_1]], [[ONGKIR]], [[TOTAL]], [[DP]], [[PELUNASAN]].
 - Server kami yang akan menghitung nominal resmi dan mengganti penanda secara otomatis.
-- Jika ukuran belum diketahui, jangan menebak ukuran. Cukup tanyakan ukuran yang dibutuhkan.
-- Frasa terlarang: "100%", "dijamin pasti", "tidak akan rusak", "terima kasih telah menghubungi kami", "kami sangat senang", "solusi terbaik untuk kebutuhan anda".
-- Garansi resmi: 7 hari untuk pecah/retak perjalanan atau tidak sesuai + 3 bulan fungsi kelistrikan LED & touchscreen, berlaku baik untuk diambil sendiri maupun dikirim via ekspedisi.
-- Lokasi workshop: hanya sebut jika ada di Pengaturan (workshop kami di Bandung; jika klien tanya alamat lengkap, infokan admin akan konfirmasi titik jemput).
+- Frasa terlarang: "ASAHI", "Mulia", "AGC", "cembung", "diskon", "potongan", "promo", "khusus hari ini", "gratis", "ganti baru tanpa ribet", "dijamin", "100%", "adaptor SNI", "spare part secara gratis", "tidak akan rusak".
 `;
 
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
@@ -1028,9 +1070,96 @@ ATURAN HARGA MUTLAK:
   const allBubbles: string[] = [];
   (draftJson.draf || []).forEach((d: any) => (d.bubbles || []).forEach((b: string) => allBubbles.push(b)));
 
-  const rupiahValidation = validateRupiahInDraft(allBubbles, calculatedNumbers, calculatedNumbers);
-  const marketplaceValidation = validateMarketplaceGuards(params.overrideKanal || extractedSpec.kanal || 'whatsapp', allBubbles);
-  const forbiddenValidation = validateForbiddenPhrases(allBubbles);
+  let rupiahValidation = validateRupiahInDraft(allBubbles, calculatedNumbers, calculatedNumbers);
+  let marketplaceValidation = validateMarketplaceGuards(params.overrideKanal || extractedSpec.kanal || 'whatsapp', allBubbles);
+  let forbiddenValidation = validateForbiddenPhrases(allBubbles);
+  let sentenceCheck = detectBrokenSentence(allBubbles);
+
+  // Auto-rewrite otomatis SEKALI di latar belakang jika draf melanggar SOP atau kalimat terpotong
+  if (!rupiahValidation.valid || !marketplaceValidation.valid || !forbiddenValidation.valid || sentenceCheck.isBroken) {
+    const issues = [
+      ...rupiahValidation.errors,
+      ...marketplaceValidation.errors,
+      ...forbiddenValidation.errors,
+      ...(sentenceCheck.isBroken && sentenceCheck.reason ? [sentenceCheck.reason] : []),
+    ];
+
+    try {
+      const rewriteUserPrompt = `DRAF SEBELUMNYA:
+${allBubbles.join('\n\n')}
+
+DRAF DI ATAS DITOLAK KARENA PELANGGARAN ATURAN:
+${issues.map((s) => `- ${s}`).join('\n')}
+
+Tulis ulang draf balasan di atas dengan memperbaiki seluruh pelanggaran tersebut.
+Peraturan mutlak perbaikan:
+1. JANGAN PERNAH menyebut nama merek kaca apa pun (ASAHI, Mulia, AGC). Jika ditanya merek kaca, tulis persis: "untuk merek saya cek dulu ke tim produksi ya Kak".
+2. JANGAN PERNAH menawarkan diskon, potongan harga, gratis, promo, atau bagi ongkir sendiri. Jika klien meminta diskon/bagi ongkir, jawab: "saya bantu cek dulu ke tim ya Kak" dan set "perlu_owner": true.
+3. Pastikan setiap kalimat selesai tuntas tanpa kata menggantung.
+4. Gunakan penanda harga [[HARGA_1]], [[ONGKIR]], [[TOTAL]], [[DP]], [[PELUNASAN]].
+
+Keluarkan HANYA JSON blok DRAFT:
+<!--DRAFT-->
+{
+  "ringkasan_situasi": "Draf perbaikan otomatis",
+  "tahap": "${draftJson.tahap || 'penawaran'}",
+  "keberatan": [],
+  "segmen_terdeteksi": "${draftJson.segmen_terdeteksi || 'b2c'}",
+  "data_kurang": [],
+  "draf": [{"label": "Draf Perbaikan", "bubbles": ["...", "..."]}],
+  "catatan_internal": "Auto-rewrite diterapkan",
+  "perlu_owner": ${Boolean(draftJson.perlu_owner)},
+  "alasan_perlu_owner": "${draftJson.alasan_perlu_owner || ''}",
+  "langkah_berikutnya": "..."
+}
+<!--/DRAFT-->`;
+
+      const rewriteRes = await ai.models.generateContent({
+        model: modelUsed,
+        contents: [{ role: 'user', parts: [{ text: rewriteUserPrompt }] }],
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          maxOutputTokens: 800,
+        },
+      });
+
+      const rewriteTxt = rewriteRes.text || '';
+      const matchRewr = rewriteTxt.match(/<!--DRAFT-->([\s\S]*?)<!--\/DRAFT-->/) || rewriteTxt.match(/```json([\s\S]*?)```/);
+      if (matchRewr) {
+        const cleanRewr = (matchRewr[1] || rewriteTxt).replace(/<!--[\s\S]*?-->/g, '').trim();
+        const parsedRewr = JSON.parse(cleanRewr);
+        if (Array.isArray(parsedRewr.draf)) {
+          parsedRewr.draf.forEach((d: any) => {
+            if (Array.isArray(d.bubbles)) {
+              d.bubbles = d.bubbles.map(replacePlaceholders);
+            }
+          });
+          const newBubbles: string[] = [];
+          parsedRewr.draf.forEach((d: any) => (d.bubbles || []).forEach((b: string) => newBubbles.push(b)));
+
+          const newRupiah = validateRupiahInDraft(newBubbles, calculatedNumbers, calculatedNumbers);
+          const newMkt = validateMarketplaceGuards(params.overrideKanal || extractedSpec.kanal || 'whatsapp', newBubbles);
+          const newForb = validateForbiddenPhrases(newBubbles);
+          const newSent = detectBrokenSentence(newBubbles);
+
+          if (newRupiah.valid && newMkt.valid && newForb.valid && !newSent.isBroken) {
+            draftJson = parsedRewr;
+            allBubbles.length = 0;
+            allBubbles.push(...newBubbles);
+            rupiahValidation = newRupiah;
+            marketplaceValidation = newMkt;
+            forbiddenValidation = newForb;
+            sentenceCheck = newSent;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[AI Pipeline] Auto-rewrite gagal, mempertahankan draf awal:', e);
+    }
+  }
+
+  const isFallbackModel = modelUsed !== MODEL_MAIN;
+  const isRekeningKosong = !params.priceBook.dokumen_pdf?.bank_nomor || params.priceBook.dokumen_pdf.bank_nomor.trim() === '' || params.priceBook.dokumen_pdf.bank_nomor === '[belum diisi]';
 
   const finalDraftOutput: DraftReplyOutput = {
     ringkasan_situasi: draftJson.ringkasan_situasi || 'Kualifikasi',
@@ -1045,13 +1174,16 @@ ATURAN HARGA MUTLAK:
     alasan_perlu_owner: draftJson.alasan_perlu_owner || '',
     langkah_berikutnya: draftJson.langkah_berikutnya || 'Kirim penawaran ke klien',
     model_used: modelUsed,
+    is_fallback: isFallbackModel,
     ms_ttft: ttftMs,
     angka_tidak_terverifikasi: !rupiahValidation.valid || !marketplaceValidation.valid || !forbiddenValidation.valid,
     error_validasi_angka: rupiahValidation.errors,
     pelanggaran_marketplace: marketplaceValidation.errors,
     frasa_terlarang_ditemukan: forbiddenValidation.errors,
     discrepancy_warning: discrepancyWarning,
+    rekening_kosong: isRekeningKosong,
   };
+
 
   const finalExtraction: ExtractionOutput = {
     nama_klien: extractedSpec.nama_klien || null,
