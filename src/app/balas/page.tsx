@@ -109,9 +109,6 @@ export default function BalasChatPage() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.pastedText) setPastedText(parsed.pastedText);
-        if (Array.isArray(parsed.images) && parsed.images.length > 0) {
-          setImages(parsed.images);
-        }
         if (parsed.kanal) setKanal(parsed.kanal);
       }
     } catch (e) {
@@ -137,10 +134,10 @@ export default function BalasChatPage() {
   // Simpan input admin ke sessionStorage secara otomatis agar tidak hilang saat refresh
   useEffect(() => {
     try {
-      if (pastedText || images.length > 0) {
+      if (pastedText.trim()) {
         sessionStorage.setItem(
           'balas_chat_draft_input',
-          JSON.stringify({ pastedText, images, kanal })
+          JSON.stringify({ pastedText, kanal })
         );
       } else {
         sessionStorage.removeItem('balas_chat_draft_input');
@@ -148,7 +145,7 @@ export default function BalasChatPage() {
     } catch (e) {
       console.warn('Gagal menyimpan draf input:', e);
     }
-  }, [pastedText, images, kanal]);
+  }, [pastedText, kanal]);
 
   // Helper kompresi gambar
   const resizeImage = (file: File): Promise<ScreenshotItem> => {
