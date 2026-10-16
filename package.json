@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:security": "tsx scripts/verify-security.ts",
@@ -14,7 +14,10 @@
   },
   "overrides": {
     "tinypool": "^2.2.0",
-    "postcss": "^8.5.30"
+    "postcss": "^8.5.30",
+    "braces": "3.0.3",
+    "micromatch": "^4.0.8",
+    "fast-glob": "^3.3.3"
   },
   "dependencies": {
     "@google/genai": "^2.30.0",
@@ -34,12 +37,14 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "clsx": "^2.1.1",
+    "eslint": "^9.39.5",
     "lucide-react": "^1.57.0",
     "postcss": "^8.5.30",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.71.2",
     "vitest": "^4.1.12"
   }
 }

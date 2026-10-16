@@ -392,6 +392,16 @@ export default function BalasChatPage() {
     return () => window.removeEventListener('paste', handlePaste);
   }, [images, pastedText, runPipeline]);
 
+  const handleCopyAll = useCallback(() => {
+    if (!draftResult?.draf?.[activeDraftIdx]?.bubbles) return;
+    if (draftResult.angka_tidak_terverifikasi) return;
+    const fullText = draftResult.draf[activeDraftIdx].bubbles.join('\n\n');
+    navigator.clipboard.writeText(fullText);
+    setCopiedAll(true);
+    setShowConfirmSent(true);
+    setTimeout(() => setCopiedAll(false), 2500);
+  }, [draftResult, activeDraftIdx]);
+
   // Keyboard Handlers:
   // - Di dalam textarea: Enter = baris baru, Ctrl+Enter = Buat Draf
   // - Di luar textarea: Ctrl+Enter = Salin Draf
@@ -417,7 +427,7 @@ export default function BalasChatPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [draftResult, activeDraftIdx, pastedText, images, runPipeline]);
+  }, [draftResult, activeDraftIdx, pastedText, images, runPipeline, handleCopyAll]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -460,15 +470,7 @@ export default function BalasChatPage() {
     setTimeout(() => setCopiedBubbleIdx(null), 2500);
   };
 
-  const handleCopyAll = () => {
-    if (!draftResult?.draf?.[activeDraftIdx]?.bubbles) return;
-    if (draftResult.angka_tidak_terverifikasi) return;
-    const fullText = draftResult.draf[activeDraftIdx].bubbles.join('\n\n');
-    navigator.clipboard.writeText(fullText);
-    setCopiedAll(true);
-    setShowConfirmSent(true);
-    setTimeout(() => setCopiedAll(false), 2500);
-  };
+
 
   const handleTandaiTerkirim = async () => {
     setIsMarkingSent(true);

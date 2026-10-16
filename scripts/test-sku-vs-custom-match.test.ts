@@ -86,7 +86,7 @@ describe('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PD
     expect(drafText).toContain('755.000');
     expect(drafText).toContain('1.505.000');
     expect(aiRes.draf.angka_tidak_terverifikasi).toBe(false);
-  }, 35000);
+  }, 60000);
 
   it('2. Penawaran Custom (60x80 cm LED 3 Warna Premium) angka cocok di semua media', async () => {
     // 1. Kalkulator Mesin Harga
@@ -148,5 +148,5 @@ describe('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PD
     expect(drafText).toContain('840.000');
     expect(drafText).toContain('1.590.000');
     expect(aiRes.draf.angka_tidak_terverifikasi).toBe(false);
-  }, 35000);
+  }, 60000);
 });

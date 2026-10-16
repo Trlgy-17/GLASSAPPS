@@ -49,7 +49,7 @@ export function hitungPenawaran(
   const batasKirimFloor = Math.round(batasKirim.list * 0.5);
 
   const ongkirList = batasKirim.list;
-  let ongkirDeal = input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList;
+  const ongkirDeal = input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList;
   const potonganOngkir = Math.max(0, ongkirList - ongkirDeal);
 
   let ongkirStatus: 'ok' | 'warning_kuning' | 'error_merah' = 'ok';

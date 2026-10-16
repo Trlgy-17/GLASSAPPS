@@ -16,7 +16,7 @@ export function extractAllRupiahNumbers(text: string): number[] {
   const numbers: number[] = [];
 
   // 1. Format "X jt" atau "X,Y jt" / "X juta"
-  const jtRegex = /(\d+(?:[,\.]\d+)?)\s*(?:jt|juta)\b/gi;
+  const jtRegex = /(\d+(?:[,.]\d+)?)\s*(?:jt|juta)\b/gi;
   let jtMatch;
   while ((jtMatch = jtRegex.exec(text)) !== null) {
     const rawVal = jtMatch[1].replace(',', '.');
@@ -27,7 +27,7 @@ export function extractAllRupiahNumbers(text: string): number[] {
   }
 
   // 2. Format "Rp..." (misal Rp1.750.000, Rp 1.750.000,-, Rp. 1.750.000)
-  const rpRegex = /Rp\.?\s*([0-9\.]+)(?:,-)?/gi;
+  const rpRegex = /Rp\.?\s*([0-9.]+)(?:,-)?/gi;
   let rpMatch;
   while ((rpMatch = rpRegex.exec(text)) !== null) {
     const digitsOnly = rpMatch[1].replace(/\./g, '');
