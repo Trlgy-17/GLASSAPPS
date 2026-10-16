@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Navbar } from '@/components/layout/Navbar';
+import { AppShell } from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
-  title: 'Putra Glass - Kalkulator Penawaran',
-  description: 'Kalkulator Penawaran & PDF Cermin LED Custom Putra Glass',
+  title: 'Putra Glass - CS Assistant & Kalkulator Penawaran',
+  description: 'Aplikasi internal CS & Kalkulator Penawaran Cermin LED Custom Putra Glass',
 };
 
 export default function RootLayout({
@@ -13,10 +13,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id">
-      <body className="min-h-screen bg-[#F2F5F9] text-[#1B2233] antialiased">
-        <Navbar />
-        {children}
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('theme');
+                  if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="min-h-screen bg-bg text-ink antialiased">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

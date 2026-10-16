@@ -8,22 +8,24 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  Filter,
   AlertTriangle,
-  History,
   Tag,
   BarChart3,
-  User,
+  Calendar,
+  Layers,
+  Table as TableIcon,
 } from 'lucide-react';
 
-interface DashboardSummary {
+interface DasborSummary {
   dibuat: { jumlah: number; nilai: number };
   proses: { jumlah: number; nilai: number };
   deal: { jumlah: number; nilai: number };
-  batal: { jumlah: number; nilai: number; top_alasan: Array<{ alasan: string; jumlah: number }> };
+  batal: {
+    jumlah: number;
+    nilai: number;
+    top_alasan: Array<{ alasan: string; jumlah: number }>;
+  };
   closing_rate: number | null;
-  selesai_90h: number;
-  closing_rate_90h: number | null;
   proyeksi_omzet: number;
   median_hari_deal: number | null;
 }
@@ -34,14 +36,13 @@ interface FollowUpItem {
   nama_klien: string;
   kota: string;
   total_nilai: number;
-  status: string;
   hari_tanpa_perubahan: number;
   admin_nama: string;
+  status: string;
 }
 
 interface WeeklyChartItem {
   label_minggu: string;
-  minggu_ke: string;
   total_penawaran: number;
   total_deal: number;
 }
@@ -49,168 +50,120 @@ interface WeeklyChartItem {
 interface PotonganItem {
   id: string;
   aktor: string;
-  aksi: string;
   objek: string;
-  sebelum?: { nilai_list?: number };
-  sesudah?: { nilai_deal?: number };
+  sebelum: any;
+  sesudah: any;
   alasan: string;
   created_at: string;
-  users?: { nama: string; email: string };
 }
 
-interface PriceLogItem {
+interface PriceBookAuditLog {
   id: string;
   aktor: string;
   aksi: string;
-  objek: string;
-  sebelum?: unknown;
-  sesudah?: unknown;
-  alasan: string;
   created_at: string;
-  users?: { nama: string; email: string };
+  alasan: string;
+  sesudah: any;
 }
 
-interface AdminOption {
-  id: string;
-  nama: string;
-  email: string;
-}
-
-export default function OwnerDashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Filters
-  const [periode, setPeriode] = useState('bulan_ini');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [kanal, setKanal] = useState('all');
-  const [adminId, setAdminId] = useState('all');
-
-  // Data
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+export default function DasborPage() {
+  const [summary, setSummary] = useState<DasborSummary | null>(null);
   const [followUpList, setFollowUpList] = useState<FollowUpItem[]>([]);
   const [chartData, setChartData] = useState<WeeklyChartItem[]>([]);
   const [potonganList, setPotonganList] = useState<PotonganItem[]>([]);
-  const [priceLogs, setPriceLogs] = useState<PriceLogItem[]>([]);
-  const [admins, setAdmins] = useState<AdminOption[]>([]);
+  const [priceBookLogs, setPriceBookLogs] = useState<PriceBookAuditLog[]>([]);
+  const [admins, setAdmins] = useState<Array<{ id: string; nama: string; email: string }>>([]);
 
-  const fetchDashboard = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('periode', periode);
-      if (kanal !== 'all') params.set('kanal', kanal);
-      if (adminId !== 'all') params.set('admin_id', adminId);
-      if (periode === 'custom') {
-        if (startDate) params.set('start_date', startDate);
-        if (endDate) params.set('end_date', endDate);
-      }
-
-      const res = await fetch(`/api/dasbor?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSummary(data.summary);
-        setFollowUpList(data.follow_up || []);
-        setChartData(data.chart || []);
-        setPotonganList(data.potongan_minggu_ini || []);
-        setPriceLogs(data.perubahan_harga_terakhir || []);
-        setAdmins(data.admins || []);
-      }
-    } catch (err) {
-      console.error('Gagal mengambil data dasbor:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [rentang, setRentang] = useState<'minggu_ini' | 'bulan_ini' | 'bulan_lalu' | 'custom'>('bulan_ini');
+  const [kanal, setKanal] = useState<string>('all');
+  const [adminId, setAdminId] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showTableModal, setShowTableModal] = useState(false);
 
   useEffect(() => {
-    fetchDashboard();
-  }, [periode, kanal, adminId, startDate, endDate]);
+    async function fetchDasbor() {
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams({
+          rentang,
+          kanal: kanal === 'all' ? '' : kanal,
+          admin_id: adminId === 'all' ? '' : adminId,
+        });
 
-  // Hitung nilai tertinggi grafik untuk skala tinggi batang
-  const maxChartVal = Math.max(
-    1,
-    ...chartData.map((c) => Math.max(c.total_penawaran, c.total_deal))
-  );
+        const res = await fetch(`/api/dasbor?${params.toString()}`);
+        if (res.ok) {
+          const json = await res.json();
+          setSummary(json.summary);
+          setFollowUpList(json.follow_up || []);
+          setChartData(json.chart_data || []);
+          setPotonganList(json.potongan_minggu_ini || []);
+          setPriceBookLogs(json.perubahan_harga_terakhir || []);
+          if (json.admins) setAdmins(json.admins);
+        }
+      } catch (err) {
+        console.warn('Gagal memuat dasbor:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchDasbor();
+  }, [rentang, kanal, adminId]);
+
+  const maxChartVal = Math.max(1, ...chartData.map((c) => Math.max(c.total_penawaran, c.total_deal)));
+
+  const totalStatusCount = summary
+    ? summary.dibuat.jumlah + summary.proses.jumlah + summary.deal.jumlah + summary.batal.jumlah
+    : 1;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8 font-sans">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#E3E7EE]">
+    <div className="space-y-6">
+      {/* Top Header: Judul & Filter (30px/800) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-[#253254] flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-[#275087]" /> Dasbor Analitik Owner
-            </h1>
-            <span className="text-xs bg-[#253254] text-white px-2.5 py-0.5 rounded font-medium">
-              Read-Only
-            </span>
-          </div>
-          <p className="text-sm text-[#6B7385] mt-1">
-            Metrik penjualan real-time, closing rate, proyeksi omzet, dan kepatuhan harga
+          <h1 className="text-[30px] font-extrabold text-ink leading-tight flex items-center gap-3">
+            <TrendingUp className="w-7 h-7 text-accent" />
+            <span>Dasbor Owner</span>
+          </h1>
+          <p className="text-sm text-muted mt-1">
+            Metrik real-time closing rate, proyeksi omzet, dan kecepatan penawaran
           </p>
         </div>
 
-        {/* Filter Bar (Periode, Kanal, Admin) */}
-        <div className="flex flex-wrap items-center gap-2.5 bg-white p-2 rounded-xl border border-[#E3E7EE] shadow-sm text-xs">
-          <div className="flex items-center gap-1.5 px-2 text-[#6B7385]">
-            <Filter className="w-3.5 h-3.5" />
-            <span className="font-semibold">Filter:</span>
-          </div>
-
-          {/* 1. Filter Periode */}
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <select
-            value={periode}
-            onChange={(e) => setPeriode(e.target.value)}
-            className="px-2.5 py-1.5 bg-[#F2F5F9] border border-[#E3E7EE] rounded font-medium text-[#253254] focus:outline-none"
+            value={rentang}
+            onChange={(e) => setRentang(e.target.value as any)}
+            className="px-3.5 py-2 min-h-[44px] bg-surface border border-line rounded-xl text-xs font-semibold text-ink focus:outline-none"
           >
-            <option value="minggu_ini">Minggu Ini</option>
-            <option value="bulan_ini">Bulan Ini</option>
-            <option value="bulan_lalu">Bulan Lalu</option>
-            <option value="custom">Rentang Khusus</option>
+            <option value="minggu_ini">Minggu ini</option>
+            <option value="bulan_ini">Bulan ini</option>
+            <option value="bulan_lalu">Bulan lalu</option>
+            <option value="custom">90 hari terakhir</option>
           </select>
 
-          {periode === 'custom' && (
-            <div className="flex items-center gap-1">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-2 py-1 border border-[#E3E7EE] rounded text-xs"
-              />
-              <span className="text-[#98A0B0]">-</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-2 py-1 border border-[#E3E7EE] rounded text-xs"
-              />
-            </div>
-          )}
-
-          {/* 2. Filter Kanal */}
           <select
             value={kanal}
             onChange={(e) => setKanal(e.target.value)}
-            className="px-2.5 py-1.5 bg-[#F2F5F9] border border-[#E3E7EE] rounded font-medium text-[#253254] focus:outline-none"
+            className="px-3.5 py-2 min-h-[44px] bg-surface border border-line rounded-xl text-xs font-semibold text-ink focus:outline-none"
           >
-            <option value="all">Semua Kanal</option>
+            <option value="all">Semua kanal</option>
             <option value="whatsapp">WhatsApp</option>
             <option value="instagram">Instagram</option>
             <option value="tiktok">TikTok</option>
             <option value="shopee">Shopee</option>
           </select>
 
-          {/* 3. Filter Admin */}
           <select
             value={adminId}
             onChange={(e) => setAdminId(e.target.value)}
-            className="px-2.5 py-1.5 bg-[#F2F5F9] border border-[#E3E7EE] rounded font-medium text-[#253254] focus:outline-none"
+            className="px-3.5 py-2 min-h-[44px] bg-surface border border-line rounded-xl text-xs font-semibold text-ink focus:outline-none"
           >
-            <option value="all">Semua Admin</option>
+            <option value="all">Semua admin</option>
             {admins.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.email || a.nama}
+                {a.nama || a.email}
               </option>
             ))}
           </select>
@@ -218,328 +171,222 @@ export default function OwnerDashboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="py-20 text-center text-sm text-[#6B7385]">
+        <div className="py-24 text-center text-sm text-muted">
           Menghitung analitik di database...
         </div>
       ) : summary ? (
         <>
-          {/* Baris 1: Empat Kartu Status Utama */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* 1. Dibuat */}
-            <div className="bg-white p-5 rounded-xl border border-[#E3E7EE] shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold text-[#6B7385] uppercase tracking-wider">
-                <span>Penawaran Dibuat</span>
-                <FileText className="w-4 h-4 text-[#275087]" />
-              </div>
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-bold tabular-nums text-[#253254]">
-                  {summary.dibuat.jumlah}
-                </span>
-                <span className="text-xs tabular-nums font-semibold text-[#6B7385]">
-                  {formatRupiah(summary.dibuat.nilai)}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#98A0B0]">Total dokumen masuk pada periode</p>
+          {/* 1. Ringkasan dalam 1 Panel Bersekat */}
+          <div className="bg-surface border border-line rounded-[20px] p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-line shadow-none">
+            {/* Nilai Deal */}
+            <div className="p-4 sm:p-5 space-y-1.5">
+              <span className="text-xs font-semibold text-muted block">Nilai deal</span>
+              <span className="text-[28px] font-extrabold text-ok tabular-nums leading-tight block">
+                {formatRupiah(summary.deal.nilai)}
+              </span>
+              <p className="text-xs text-muted">
+                {summary.deal.jumlah} pesanan deal (DP / lunas)
+              </p>
             </div>
 
-            {/* 2. Proses */}
-            <div className="bg-white p-5 rounded-xl border border-[#E3E7EE] shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold text-blue-700 uppercase tracking-wider">
-                <span>Sedang Proses</span>
-                <Clock className="w-4 h-4 text-blue-600" />
-              </div>
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-bold tabular-nums text-blue-900">
-                  {summary.proses.jumlah}
-                </span>
-                <span className="text-xs tabular-nums font-semibold text-blue-700">
-                  {formatRupiah(summary.proses.nilai)}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#6B7385]">Status Terkirim &amp; Nego aktif</p>
+            {/* Sedang Berjalan */}
+            <div className="p-4 sm:p-5 space-y-1.5">
+              <span className="text-xs font-semibold text-muted block">Sedang berjalan</span>
+              <span className="text-[28px] font-extrabold text-accent tabular-nums leading-tight block">
+                {formatRupiah(summary.proses.nilai)}
+              </span>
+              <p className="text-xs text-muted">
+                {summary.proses.jumlah} penawaran (terkirim / nego)
+              </p>
             </div>
 
-            {/* 3. Deal */}
-            <div className="bg-white p-5 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold text-emerald-800 uppercase tracking-wider">
-                <span>Deal (DP / Lunas)</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-bold tabular-nums text-emerald-900">
-                  {summary.deal.jumlah}
-                </span>
-                <span className="text-xs tabular-nums font-bold text-emerald-700">
-                  {formatRupiah(summary.deal.nilai)}
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-700">Konfirmasi DP tanda jadi diterima</p>
-            </div>
-
-            {/* 4. Batal */}
-            <div className="bg-white p-5 rounded-xl border border-red-200 bg-red-50/10 shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold text-red-800 uppercase tracking-wider">
-                <span>Batal</span>
-                <XCircle className="w-4 h-4 text-red-600" />
-              </div>
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-bold tabular-nums text-red-900">
-                  {summary.batal.jumlah}
-                </span>
-                <span className="text-xs tabular-nums font-semibold text-red-700">
-                  {formatRupiah(summary.batal.nilai)}
-                </span>
-              </div>
-              <div className="text-[10px] text-[#6B7385] pt-1">
-                {summary.batal.top_alasan.length > 0 ? (
-                  <span>Alasan: {summary.batal.top_alasan.map((a) => `${a.alasan} (${a.jumlah})`).join(', ')}</span>
-                ) : (
-                  <span>Belum ada pembatalan</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Baris 2: Kartu Metrik Strategis */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Closing Rate */}
-            <div className="bg-white p-5 rounded-xl border border-[#E3E7EE] shadow-sm space-y-2">
-              <span className="text-xs font-bold text-[#6B7385] uppercase tracking-wider block">
-                Closing Rate Periode
+            <div className="p-4 sm:p-5 space-y-1.5">
+              <span className="text-xs font-semibold text-muted block">Closing rate</span>
+              <span className="text-[28px] font-extrabold text-ink tabular-nums leading-tight block">
+                {summary.closing_rate !== null ? `${summary.closing_rate}%` : '—'}
               </span>
-              <div className="flex items-baseline gap-2 pt-1">
-                <span className="text-3xl font-extrabold tabular-nums text-[#253254]">
-                  {summary.closing_rate !== null ? `${summary.closing_rate}%` : '–'}
-                </span>
-                <span className="text-[11px] text-[#6B7385]">
-                  dari deal + batal + kadaluwarsa
-                </span>
-              </div>
-              <div className="w-full bg-[#F2F5F9] h-2 rounded-full overflow-hidden mt-2">
-                <div
-                  className="bg-[#275087] h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, summary.closing_rate || 0)}%` }}
-                />
-              </div>
+              <p className="text-xs text-muted">
+                dari deal + batal pada periode
+              </p>
             </div>
 
-            {/* Proyeksi Omzet Bulan Ini */}
-            <div className="bg-white p-5 rounded-xl border border-[#E3E7EE] shadow-sm space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-[#6B7385] uppercase tracking-wider">
-                  Proyeksi Omzet Bulan Ini
-                </span>
-                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded">
-                  perkiraan
-                </span>
-              </div>
-              <div className="pt-1">
-                <span className="text-2xl font-bold tabular-nums text-[#253254] block">
-                  {formatRupiah(summary.proyeksi_omzet)}
-                </span>
-                <span className="text-[11px] text-[#6B7385] mt-1 block">
-                  {summary.closing_rate_90h !== null
-                    ? `Nilai deal + (proses × ${summary.closing_rate_90h}% rate 90h)`
-                    : 'Proyeksi aktif setelah 10 penawaran selesai'}
-                </span>
-              </div>
-            </div>
-
-            {/* Median Hari Deal */}
-            <div className="bg-white p-5 rounded-xl border border-[#E3E7EE] shadow-sm space-y-2">
-              <span className="text-xs font-bold text-[#6B7385] uppercase tracking-wider block">
-                Kecepatan Closing (Median)
+            {/* Kecepatan Closing */}
+            <div className="p-4 sm:p-5 space-y-1.5">
+              <span className="text-xs font-semibold text-muted block">Kecepatan closing</span>
+              <span className="text-[28px] font-extrabold text-ink tabular-nums leading-tight block">
+                {summary.median_hari_deal !== null ? `${summary.median_hari_deal} hari` : '—'}
               </span>
-              <div className="flex items-baseline gap-2 pt-1">
-                <span className="text-3xl font-extrabold tabular-nums text-[#253254]">
-                  {summary.median_hari_deal !== null ? summary.median_hari_deal : '–'}
-                </span>
-                {summary.median_hari_deal !== null && (
-                  <span className="text-xs font-semibold text-[#1B2233]">Hari</span>
-                )}
-                <span className="text-[11px] text-[#6B7385] ml-auto">
-                  Terkirim → Deal DP
-                </span>
-              </div>
-              <p className="text-[11px] text-[#98A0B0] pt-1">Rata-rata siklus pertimbangan klien</p>
+              <p className="text-xs text-muted">
+                median waktu dari terkirim ke deal
+              </p>
             </div>
           </div>
 
-          {/* Baris 3: Tabel Perlu Follow-Up & Potongan Minggu Ini */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Tabel Perlu Follow-Up (7 / 12) */}
-            <div className="lg:col-span-7 bg-white p-6 rounded-xl border border-[#E3E7EE] shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-[#F2F5F9] pb-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <h3 className="font-bold text-sm text-[#253254]">
-                    Perlu Follow-Up (Tanpa Update ≥ 3 Hari)
-                  </h3>
-                </div>
-                <span className="text-xs text-[#6B7385] tabular-nums font-semibold">
-                  {followUpList.length} Penawaran
-                </span>
-              </div>
-
-              {followUpList.length === 0 ? (
-                <p className="text-xs text-[#6B7385] py-8 text-center">
-                  Semua penawaran aktif telah di-follow up dalam 3 hari terakhir.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-[#E3E7EE] text-[#98A0B0] uppercase text-[10px] font-bold">
-                        <th className="py-2">Nomor</th>
-                        <th className="py-2">Klien &amp; Kota</th>
-                        <th className="py-2 text-right">Nilai</th>
-                        <th className="py-2 text-center">Diam</th>
-                        <th className="py-2 text-right">Admin</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#F2F5F9]">
-                      {followUpList.map((item) => (
-                        <tr key={item.id} className="hover:bg-[#F2F5F9]/60">
-                          <td className="py-2.5 font-bold text-[#253254]">
-                            {item.nomor}
-                          </td>
-                          <td className="py-2.5">
-                            <span className="font-medium text-[#1B2233] block">{item.nama_klien}</span>
-                            <span className="text-[10px] text-[#6B7385]">{item.kota}</span>
-                          </td>
-                          <td className="py-2.5 text-right tabular-nums font-bold text-[#253254]">
-                            {formatRupiah(item.total_nilai)}
-                          </td>
-                          <td className="py-2.5 text-center">
-                            <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-bold text-[10px] tabular-nums">
-                              {item.hari_tanpa_perubahan} Hari
-                            </span>
-                          </td>
-                          <td className="py-2.5 text-right text-[#6B7385]">
-                            {item.admin_nama}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          {/* 2. Bar Status Bertingkat (Draf / Terkirim / Nego / Deal / Batal) */}
+          <div className="bg-surface border border-line rounded-[20px] p-6 space-y-4 shadow-none">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h2 className="text-[17px] font-bold text-ink">Status Penawaran</h2>
+              <span className="text-xs text-muted font-medium tabular-nums">
+                Total {summary.dibuat.jumlah} penawaran masuk
+              </span>
             </div>
 
-            {/* Potongan Minggu Ini (5 / 12) */}
-            <div className="lg:col-span-5 bg-white p-6 rounded-xl border border-[#E3E7EE] shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-[#F2F5F9] pb-3">
-                <div className="flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-[#275087]" />
-                  <h3 className="font-bold text-sm text-[#253254]">
-                    Potongan Minggu Ini (Audit Log)
-                  </h3>
-                </div>
-                <span className="text-xs bg-[#F2F5F9] text-[#253254] font-bold px-2 py-0.5 rounded tabular-nums">
-                  {potonganList.length} Diskon
-                </span>
-              </div>
-
-              {potonganList.length === 0 ? (
-                <p className="text-xs text-[#6B7385] py-8 text-center">
-                  Tidak ada potongan di bawah batas admin minggu ini.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {potonganList.map((item) => {
-                    const listVal = item.sebelum?.nilai_list || 0;
-                    const dealVal = item.sesudah?.nilai_deal || 0;
-                    const selisih = Math.max(0, listVal - dealVal);
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="p-3 bg-[#F2F5F9] rounded-lg border border-[#E3E7EE] text-xs space-y-1"
-                      >
-                        <div className="flex justify-between items-center font-bold text-[#253254]">
-                          <span className="capitalize">{item.objek?.split(':')[2] || item.objek}</span>
-                          <span className="tabular-nums text-red-600">-{formatRupiah(selisih)}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-[#6B7385]">
-                          <span>Admin: {item.users?.email || item.aktor}</span>
-                          <span className="tabular-nums">Deal: {formatRupiah(dealVal)}</span>
-                        </div>
-                        <p className="text-[11px] text-[#1B2233] italic pt-1 border-t border-[#E3E7EE]">
-                          "{item.alasan}"
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            {/* Segmented Bar */}
+            <div className="w-full h-3.5 bg-raised rounded-full overflow-hidden flex">
+              <div
+                className="bg-muted transition-all duration-300"
+                style={{ width: `${Math.max(2, (summary.dibuat.jumlah / totalStatusCount) * 100)}%` }}
+                title={`Draf: ${summary.dibuat.jumlah}`}
+              />
+              <div
+                className="bg-accent transition-all duration-300"
+                style={{ width: `${Math.max(2, (summary.proses.jumlah / totalStatusCount) * 100)}%` }}
+                title={`Proses: ${summary.proses.jumlah}`}
+              />
+              <div
+                className="bg-ok transition-all duration-300"
+                style={{ width: `${Math.max(2, (summary.deal.jumlah / totalStatusCount) * 100)}%` }}
+                title={`Deal: ${summary.deal.jumlah}`}
+              />
+              <div
+                className="bg-warn transition-all duration-300"
+                style={{ width: `${Math.max(2, (summary.batal.jumlah / totalStatusCount) * 100)}%` }}
+                title={`Batal: ${summary.batal.jumlah}`}
+              />
             </div>
-          </div>
 
-          {/* Baris 4: Grafik Batang Tren 8 Minggu */}
-          <div className="bg-white p-6 rounded-xl border border-[#E3E7EE] shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F2F5F9] pb-3">
+            {/* Legenda & Angka */}
+            <div className="flex flex-wrap items-center gap-6 pt-1 text-xs">
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#275087]" />
-                <h3 className="font-bold text-sm text-[#253254]">
-                  Tren Penawaran vs Deal Mingguan (8 Minggu Terakhir)
-                </h3>
+                <span className="w-3 h-3 rounded-full bg-muted" />
+                <span className="text-muted">Draf:</span>
+                <span className="font-bold text-ink tabular-nums">{summary.dibuat.jumlah}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-accent" />
+                <span className="text-muted">Proses (Terkirim / Nego):</span>
+                <span className="font-bold text-ink tabular-nums">{summary.proses.jumlah}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-ok" />
+                <span className="text-muted">Deal:</span>
+                <span className="font-bold text-ink tabular-nums">{summary.deal.jumlah}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-warn" />
+                <span className="text-muted">Batal / Kadaluwarsa:</span>
+                <span className="font-bold text-ink tabular-nums">{summary.batal.jumlah}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Grafik Mingguan: 2 Batang (--chart-1 penawaran, --chart-2 deal) */}
+          <div className="bg-surface border border-line rounded-[20px] p-6 space-y-4 shadow-none">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
+              <div>
+                <h2 className="text-[17px] font-bold text-ink flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-accent" />
+                  <span>Tren Penawaran vs Deal Mingguan</span>
+                </h2>
+                <p className="text-xs text-muted mt-0.5">8 minggu terakhir</p>
               </div>
 
-              {/* Legend */}
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-[#275087]" />
-                  <span className="text-[#6B7385]">Penawaran Dibuat</span>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-chart-1" />
+                    <span className="text-muted">Penawaran</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-chart-2" />
+                    <span className="text-muted">Deal</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-emerald-600" />
-                  <span className="text-[#6B7385]">Deal (DP / Lunas)</span>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowTableModal(!showTableModal)}
+                  className="min-h-[44px] px-3.5 py-1.5 bg-raised hover:bg-tint text-ink border border-line rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <TableIcon className="w-4 h-4" />
+                  <span>{showTableModal ? 'Tutup tabel' : 'Lihat tabel'}</span>
+                </button>
               </div>
             </div>
 
+            {/* Modal Tabel jika tombol 'Lihat tabel' diklik */}
+            {showTableModal && (
+              <div className="p-4 bg-raised border border-line rounded-[18px] overflow-x-auto text-xs">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-line text-muted text-xs font-semibold">
+                      <th className="py-2">Minggu</th>
+                      <th className="py-2 text-right">Penawaran Dibuat</th>
+                      <th className="py-2 text-right">Deal (DP / Lunas)</th>
+                      <th className="py-2 text-right">Rasio Deal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line/40">
+                    {chartData.map((c, i) => {
+                      const ratio = c.total_penawaran > 0 ? Math.round((c.total_deal / c.total_penawaran) * 100) : 0;
+                      return (
+                        <tr key={i} className="hover:bg-surface">
+                          <td className="py-2.5 font-semibold text-ink">{c.label_minggu}</td>
+                          <td className="py-2.5 text-right font-bold text-chart-1 tabular-nums">{c.total_penawaran}</td>
+                          <td className="py-2.5 text-right font-bold text-chart-2 tabular-nums">{c.total_deal}</td>
+                          <td className="py-2.5 text-right font-semibold text-muted tabular-nums">{ratio}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Grafik Batang */}
             {chartData.length === 0 ? (
-              <p className="text-xs text-[#6B7385] py-8 text-center">Data grafik belum cukup</p>
+              <p className="text-xs text-muted py-8 text-center">Data grafik belum cukup</p>
             ) : (
               <div className="pt-6 pb-2">
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-4 items-end h-44">
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-4 items-end h-48">
                   {chartData.map((c, i) => {
-                    const penawaranHeightPercent = Math.round((c.total_penawaran / maxChartVal) * 100);
-                    const dealHeightPercent = Math.round((c.total_deal / maxChartVal) * 100);
+                    const penawaranHeight = Math.round((c.total_penawaran / maxChartVal) * 100);
+                    const dealHeight = Math.round((c.total_deal / maxChartVal) * 100);
 
                     return (
                       <div key={i} className="flex flex-col items-center h-full justify-end group">
-                        {/* Area Batang Kembar */}
-                        <div className="flex items-end justify-center gap-1.5 w-full h-32 px-1 border-b border-[#E3E7EE]">
+                        <div className="flex items-end justify-center gap-1.5 w-full h-36 px-1 border-b border-line">
                           {/* Batang 1: Penawaran */}
                           <div className="flex flex-col items-center flex-1 h-full justify-end">
-                            <span className="text-[10px] font-bold tabular-nums text-[#275087] mb-1">
+                            <span className="text-[11px] font-bold tabular-nums text-chart-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               {c.total_penawaran}
                             </span>
                             <div
-                              className="w-full bg-[#275087] rounded-t transition-all duration-500 hover:brightness-110"
+                              className="w-full bg-chart-1 rounded-t transition-all duration-300 hover:brightness-110"
                               style={{
-                                height: c.total_penawaran > 0 ? `${Math.max(8, (penawaranHeightPercent * 0.8))}%` : '2px',
+                                height: c.total_penawaran > 0 ? `${Math.max(10, penawaranHeight * 0.85)}%` : '2px',
                               }}
+                              title={`Penawaran: ${c.total_penawaran}`}
                             />
                           </div>
 
                           {/* Batang 2: Deal */}
                           <div className="flex flex-col items-center flex-1 h-full justify-end">
-                            <span className="text-[10px] font-bold tabular-nums text-emerald-700 mb-1">
+                            <span className="text-[11px] font-bold tabular-nums text-chart-2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               {c.total_deal}
                             </span>
                             <div
-                              className="w-full bg-emerald-600 rounded-t transition-all duration-500 hover:brightness-110"
+                              className="w-full bg-chart-2 rounded-t transition-all duration-300 hover:brightness-110"
                               style={{
-                                height: c.total_deal > 0 ? `${Math.max(8, (dealHeightPercent * 0.8))}%` : '2px',
+                                height: c.total_deal > 0 ? `${Math.max(10, dealHeight * 0.85)}%` : '2px',
                               }}
+                              title={`Deal: ${c.total_deal}`}
                             />
                           </div>
                         </div>
 
-                        {/* Label Minggu */}
-                        <span className="mt-2 text-[10px] font-semibold text-[#6B7385] whitespace-nowrap">
+                        <span className="mt-2.5 text-xs font-semibold text-muted whitespace-nowrap">
                           {c.label_minggu}
                         </span>
                       </div>
@@ -550,58 +397,132 @@ export default function OwnerDashboardPage() {
             )}
           </div>
 
-          {/* Baris 5: Panel Perubahan Harga Terakhir (Audit Log) */}
-          <div className="bg-white p-6 rounded-xl border border-[#E3E7EE] shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-[#F2F5F9] pb-3">
-              <div className="flex items-center gap-2">
-                <History className="w-4 h-4 text-[#275087]" />
-                <h3 className="font-bold text-sm text-[#253254]">
-                  Perubahan Harga Terakhir (Audit Log)
+          {/* 4. Tabel: Perlu Follow-Up & Potongan Minggu Ini */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Tabel Perlu Follow-Up (7 / 12) */}
+            <div className="lg:col-span-7 bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <h3 className="text-[17px] font-bold text-ink flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-warn" />
+                  <span>Perlu follow-up</span>
                 </h3>
+                <span className="text-xs text-muted tabular-nums font-semibold">
+                  {followUpList.length} penawaran (≥ 3 hari tanpa update)
+                </span>
               </div>
-              <span className="text-xs text-[#6B7385]">Riwayat versi buku harga</span>
+
+              {followUpList.length === 0 ? (
+                <p className="text-sm text-muted py-8 text-center">
+                  Semua penawaran aktif telah di-follow up dalam 3 hari terakhir.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-line text-muted text-xs font-semibold">
+                        <th className="py-2.5">Nomor</th>
+                        <th className="py-2.5">Klien &amp; Kota</th>
+                        <th className="py-2.5 text-right">Nilai</th>
+                        <th className="py-2.5 text-center">Diam</th>
+                        <th className="py-2.5 text-right">Admin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line/40">
+                      {followUpList.map((item) => (
+                        <tr key={item.id} className="hover:bg-raised transition">
+                          <td className="py-3 font-bold text-accent">{item.nomor}</td>
+                          <td className="py-3">
+                            <span className="font-semibold text-ink block">{item.nama_klien}</span>
+                            <span className="text-xs text-muted">{item.kota}</span>
+                          </td>
+                          <td className="py-3 text-right tabular-nums font-bold text-ink">
+                            {formatRupiah(item.total_nilai)}
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className="inline-block px-2.5 py-1 bg-warn-bg text-warn border border-warn/30 rounded-lg font-bold text-xs tabular-nums">
+                              {item.hari_tanpa_perubahan} hari
+                            </span>
+                          </td>
+                          <td className="py-3 text-right text-muted text-xs">{item.admin_nama}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
-            {priceLogs.length === 0 ? (
-              <p className="text-xs text-[#6B7385] py-4 text-center">
-                Belum ada riwayat perubahan buku harga tercatat.
-              </p>
+            {/* Potongan Minggu Ini (5 / 12) */}
+            <div className="lg:col-span-5 bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <h3 className="text-[17px] font-bold text-ink flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-accent" />
+                  <span>Potongan minggu ini</span>
+                </h3>
+                <span className="text-xs text-muted tabular-nums font-semibold">
+                  {potonganList.length} diskon
+                </span>
+              </div>
+
+              {potonganList.length === 0 ? (
+                <p className="text-sm text-muted py-8 text-center">
+                  Tidak ada potongan di bawah batas admin minggu ini.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {potonganList.map((item) => {
+                    const listVal = item.sebelum?.nilai_list || 0;
+                    const dealVal = item.sesudah?.nilai_deal || 0;
+                    const selisih = Math.max(0, listVal - dealVal);
+
+                    return (
+                      <div key={item.id} className="p-3.5 bg-raised rounded-xl border border-line text-sm space-y-1.5">
+                        <div className="flex justify-between items-center font-bold text-ink">
+                          <span className="capitalize">{item.objek?.split(':')[2] || item.objek}</span>
+                          <span className="tabular-nums text-warn">-{formatRupiah(selisih)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted">
+                          <span>Oleh: {item.aktor}</span>
+                          <span className="tabular-nums">{new Date(item.created_at).toLocaleDateString('id-ID')}</span>
+                        </div>
+                        <p className="text-xs text-muted italic pt-1 border-t border-line">
+                          &ldquo;{item.alasan}&rdquo;
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Perubahan Harga Terakhir (Audit Log) */}
+          <div className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
+            <h3 className="text-[17px] font-bold text-ink">Perubahan Harga Terakhir</h3>
+            {priceBookLogs.length === 0 ? (
+              <p className="text-sm text-muted py-6 text-center">Belum ada riwayat audit buku harga</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-[#E3E7EE] text-[#98A0B0] uppercase text-[10px] font-bold">
-                      <th className="py-2">Waktu</th>
-                      <th className="py-2">Pengubah</th>
-                      <th className="py-2">Objek</th>
-                      <th className="py-2">Alasan / Catatan Perubahan</th>
+                    <tr className="border-b border-line text-muted text-xs font-semibold">
+                      <th className="py-2.5">Waktu</th>
+                      <th className="py-2.5">Aktor</th>
+                      <th className="py-2.5">Aksi</th>
+                      <th className="py-2.5">Catatan Perubahan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F2F5F9]">
-                    {priceLogs.map((log) => {
-                      const dateStr = new Date(log.created_at).toLocaleString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
-
-                      return (
-                        <tr key={log.id} className="hover:bg-[#F2F5F9]/50">
-                          <td className="py-2.5 font-medium tabular-nums text-[#6B7385]">{dateStr}</td>
-                          <td className="py-2.5 font-semibold text-[#1B2233]">
-                            {log.users?.email || log.aktor}
-                          </td>
-                          <td className="py-2.5 font-bold text-[#275087] uppercase">
-                            {log.objek}
-                          </td>
-                          <td className="py-2.5 text-[#1B2233] italic">
-                            "{log.alasan}"
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  <tbody className="divide-y divide-line/40">
+                    {priceBookLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-raised transition">
+                        <td className="py-3 text-xs text-muted tabular-nums">
+                          {new Date(log.created_at).toLocaleString('id-ID')}
+                        </td>
+                        <td className="py-3 font-semibold text-ink">{log.aktor}</td>
+                        <td className="py-3 font-semibold text-accent">{log.aksi}</td>
+                        <td className="py-3 text-muted text-xs">{log.alasan || 'Pembaruan parameter buku harga'}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

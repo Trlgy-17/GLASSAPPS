@@ -10,13 +10,11 @@ import {
   Filter,
   Download,
   Plus,
-  Copy,
   Clock,
   CheckCircle,
   XCircle,
   AlertCircle,
   ChevronDown,
-  Calendar,
 } from 'lucide-react';
 
 interface PenawaranRow {
@@ -53,7 +51,9 @@ export default function PenawaranListPage() {
   const loadQuotes = async () => {
     setIsLoading(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (user) {
       const { data: profile } = await supabase.from('users').select('peran').eq('id', user.id).single();
@@ -66,7 +66,6 @@ export default function PenawaranListPage() {
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      // Periksa status kadaluwarsa otomatis jika valid_until lewat & masih draf/terkirim/nego
       const nowStr = new Date().toISOString().split('T')[0];
       const normalized = (data as unknown as PenawaranRow[]).map((q) => {
         if (['draf', 'terkirim', 'nego'].includes(q.status) && q.valid_until < nowStr) {
@@ -83,7 +82,6 @@ export default function PenawaranListPage() {
     loadQuotes();
   }, []);
 
-  // Update Status Penawaran via PATCH /api/penawaran/[id]/status
   const handleUpdateStatus = async (
     quoteId: string,
     newStatus: string,
@@ -122,7 +120,6 @@ export default function PenawaranListPage() {
     }
   };
 
-  // Filter List
   const filteredQuotes = quotes.filter((q) => {
     const matchesSearch =
       (q.leads?.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,54 +130,71 @@ export default function PenawaranListPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const getStatusBadge = (status: PenawaranRow['status']) => {
+    switch (status) {
+      case 'deal':
+      case 'lunas':
+        return 'bg-ok-bg text-ok border-ok/30';
+      case 'terkirim':
+      case 'nego':
+        return 'bg-tint text-accent border-accent/30';
+      case 'batal':
+      case 'kadaluwarsa':
+        return 'bg-warn-bg text-warn border-warn/30';
+      default:
+        return 'bg-raised text-muted border-line';
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[#E3E7EE]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
-          <h1 className="text-2xl font-bold text-[#253254] flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#275087]" /> Daftar Penawaran
+          <h1 className="text-[30px] font-extrabold text-ink leading-tight flex items-center gap-3">
+            <FileText className="w-7 h-7 text-accent" />
+            <span>Daftar Penawaran</span>
           </h1>
-          <p className="text-sm text-[#6B7385] mt-1">
+          <p className="text-sm text-muted mt-1">
             {userRole === 'owner'
-              ? 'Monitoring riwayat penawaran klien Putra Glass (Mode Baca Saja)'
-              : 'Kelola status dan buat penawaran custom cermin LED'}
+              ? 'Monitoring riwayat penawaran klien Putra Glass (mode baca saja)'
+              : 'Kelola status dan riwayat penawaran custom cermin LED'}
           </p>
         </div>
 
         {userRole === 'admin' && (
           <Link
             href="/penawaran/baru"
-            className="flex items-center gap-2 bg-[#253254] hover:bg-[#1f2845] text-white font-medium text-xs px-4 py-2 rounded shadow-sm transition"
+            className="min-h-[44px] px-5 py-2.5 bg-accent text-accent-ink rounded-xl font-bold text-xs flex items-center gap-2 hover:opacity-95 transition shadow-none cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Buat Penawaran Baru
+            <span>Buat Penawaran Baru</span>
           </Link>
         )}
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-[#E3E7EE] shadow-sm mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
+      <div className="bg-surface p-4 rounded-[20px] border border-line shadow-none flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-[#98A0B0] absolute left-3 top-3" />
+          <Search className="w-4 h-4 text-muted absolute left-3.5 top-3.5" />
           <input
             type="text"
             placeholder="Cari nomor, nama klien, atau kota..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-xs pl-9 pr-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white focus:outline-none"
+            className="w-full text-xs pl-10 pr-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4 text-[#6B7385]" />
-          <span className="text-xs text-[#6B7385] whitespace-nowrap">Status:</span>
+        <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <Filter className="w-4 h-4 text-muted" />
+          <span className="text-xs text-muted whitespace-nowrap">Status:</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white"
+            className="text-xs px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none"
           >
-            <option value="all">Semua Status</option>
+            <option value="all">Semua status</option>
             <option value="draf">Draf</option>
             <option value="terkirim">Terkirim</option>
             <option value="nego">Nego</option>
@@ -194,26 +208,26 @@ export default function PenawaranListPage() {
 
       {/* Tabel Penawaran */}
       {isLoading ? (
-        <div className="text-center py-12 text-[#6B7385] text-sm">Memuat data penawaran...</div>
+        <div className="text-center py-16 text-muted text-sm">Memuat data penawaran...</div>
       ) : filteredQuotes.length === 0 ? (
-        <div className="bg-white p-12 text-center rounded-xl border border-[#E3E7EE] text-[#6B7385] text-sm">
+        <div className="bg-surface p-16 text-center rounded-[20px] border border-line text-muted text-sm">
           Tidak ada penawaran yang cocok dengan pencarian.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-[#E3E7EE] shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-[20px] border border-line shadow-none overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-sm">
               <thead>
-                <tr className="bg-[#F2F5F9] border-b border-[#E3E7EE] text-[#98A0B0] uppercase text-[10px] font-bold">
-                  <th className="py-3 px-4">Nomor &amp; Waktu</th>
-                  <th className="py-3 px-4">Klien &amp; Kota</th>
-                  <th className="py-3 px-4">Kanal</th>
-                  <th className="py-3 px-4 text-right">Total Nilai</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
+                <tr className="bg-raised border-b border-line text-muted text-xs font-semibold">
+                  <th className="py-3.5 px-5">Nomor &amp; Waktu</th>
+                  <th className="py-3.5 px-5">Klien &amp; Kota</th>
+                  <th className="py-3.5 px-5">Kanal</th>
+                  <th className="py-3.5 px-5 text-right">Total Nilai</th>
+                  <th className="py-3.5 px-5 text-center">Status</th>
+                  <th className="py-3.5 px-5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#F2F5F9]">
+              <tbody className="divide-y divide-line/40">
                 {filteredQuotes.map((q) => {
                   const dateStr = new Date(q.created_at).toLocaleDateString('id-ID', {
                     day: 'numeric',
@@ -222,43 +236,34 @@ export default function PenawaranListPage() {
                   });
 
                   return (
-                    <tr key={q.id} className="hover:bg-[#F2F5F9]/60 transition">
-                      <td className="py-3 px-4">
-                        <span className="font-mono font-bold text-[#253254] block">{q.nomor}</span>
-                        <span className="text-[10px] text-[#6B7385]">{dateStr}</span>
+                    <tr key={q.id} className="hover:bg-raised transition">
+                      <td className="py-4 px-5">
+                        <span className="font-bold text-accent block">{q.nomor}</span>
+                        <span className="text-xs text-muted tabular-nums">{dateStr}</span>
                       </td>
 
-                      <td className="py-3 px-4">
-                        <span className="font-semibold text-[#1B2233] block">{q.leads?.nama || 'Klien'}</span>
-                        <span className="text-[10px] text-[#6B7385]">{q.leads?.kota || '-'}</span>
+                      <td className="py-4 px-5">
+                        <span className="font-semibold text-ink block">{q.leads?.nama || 'Klien'}</span>
+                        <span className="text-xs text-muted">{q.leads?.kota || '-'}</span>
                       </td>
 
-                      <td className="py-3 px-4 capitalize text-[#6B7385] font-medium">
+                      <td className="py-4 px-5 capitalize text-muted text-xs font-medium">
                         {q.kanal || 'whatsapp'}
                       </td>
 
-                      <td className="py-3 px-4 text-right font-mono font-bold text-[#253254]">
+                      <td className="py-4 px-5 text-right tabular-nums font-bold text-ink">
                         {formatRupiah(Number(q.total_nilai || q.ringkasan_json?.total || 0))}
                       </td>
 
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-4 px-5 text-center">
                         {userRole === 'admin' ? (
-                          /* Dropdown status satu klik untuk Admin */
-                          <div className="inline-block relative">
+                          <div className="relative inline-block">
                             <select
                               value={q.status}
                               onChange={(e) => handleUpdateStatus(q.id, e.target.value)}
-                              className={`text-[11px] font-bold px-2 py-1 rounded border focus:outline-none cursor-pointer ${
-                                q.status === 'deal' || q.status === 'lunas'
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                  : q.status === 'terkirim'
-                                  ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                  : q.status === 'nego'
-                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                  : q.status === 'batal'
-                                  ? 'bg-red-50 text-red-800 border-red-300'
-                                  : 'bg-gray-100 text-gray-800 border-gray-300'
-                              }`}
+                              className={`text-xs font-bold px-3 py-1.5 rounded-lg border appearance-none pr-7 cursor-pointer focus:outline-none ${getStatusBadge(
+                                q.status
+                              )}`}
                             >
                               <option value="draf">Draf</option>
                               <option value="terkirim">Terkirim</option>
@@ -268,35 +273,29 @@ export default function PenawaranListPage() {
                               <option value="batal">Batal</option>
                               <option value="kadaluwarsa">Kadaluwarsa</option>
                             </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-2.5 pointer-events-none opacity-60" />
                           </div>
                         ) : (
-                          /* Badge statis untuk Owner */
                           <span
-                            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                              q.status === 'deal' || q.status === 'lunas'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : q.status === 'terkirim'
-                                ? 'bg-blue-100 text-blue-800'
-                                : q.status === 'nego'
-                                ? 'bg-amber-100 text-amber-800'
-                                : q.status === 'batal'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
+                            className={`inline-block px-3 py-1 text-xs font-bold rounded-lg border capitalize ${getStatusBadge(
+                              q.status
+                            )}`}
                           >
                             {q.status}
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3 px-4 text-right space-x-2">
-                        <Link
+                      <td className="py-4 px-5 text-right">
+                        <a
                           href={`/api/penawaran/${q.id}/pdf`}
                           target="_blank"
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#275087] hover:underline"
+                          rel="noopener noreferrer"
+                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-2 text-muted hover:text-accent rounded-xl hover:bg-raised transition cursor-pointer"
+                          title="Unduh PDF Penawaran"
                         >
-                          <Download className="w-3.5 h-3.5" /> Unduh PDF
-                        </Link>
+                          <Download className="w-4 h-4" />
+                        </a>
                       </td>
                     </tr>
                   );
@@ -307,84 +306,71 @@ export default function PenawaranListPage() {
         </div>
       )}
 
-      {/* Modal Input Tanggal DP (Deal) */}
+      {/* Modal Dialog: Konfirmasi Deal */}
       {dealModalQuoteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-xl shadow-lg border border-[#E3E7EE] max-w-sm w-full p-5 space-y-4">
-            <h3 className="font-bold text-sm text-[#253254] flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-600" /> Konfirmasi Status Deal (DP)
-            </h3>
-            <p className="text-xs text-[#6B7385]">
-              Masukkan tanggal pembayaran DP dari bukti transfer klien:
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-surface border border-line rounded-[20px] max-w-sm w-full p-6 space-y-4 shadow-none">
+            <h3 className="font-bold text-ink text-base">Konfirmasi Deal Penawaran</h3>
+            <p className="text-xs text-muted">
+              Masukkan tanggal kesepakatan deal / transfer DP untuk penghitungan metrik sales:
             </p>
-            <div>
-              <label className="block text-xs font-semibold mb-1">Tanggal DP:</label>
-              <input
-                type="date"
-                required
-                value={dealDateInput}
-                onChange={(e) => setDealDateInput(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-[#E3E7EE] rounded"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <input
+              type="date"
+              value={dealDateInput}
+              onChange={(e) => setDealDateInput(e.target.value)}
+              className="w-full text-xs p-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
+            />
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setDealModalQuoteId(null)}
-                className="px-3 py-1.5 text-xs text-[#6B7385] hover:bg-gray-100 rounded"
+                className="min-h-[44px] px-4 py-2 text-xs font-semibold text-muted hover:text-ink cursor-pointer"
               >
                 Batal
               </button>
               <button
-                onClick={() =>
-                  handleUpdateStatus(dealModalQuoteId, 'deal', { deal_at: new Date(dealDateInput).toISOString() })
-                }
-                className="px-4 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded"
+                type="button"
+                onClick={() => handleUpdateStatus(dealModalQuoteId, 'deal', { deal_at: dealDateInput })}
+                className="min-h-[44px] px-4 py-2 bg-ok text-white text-xs font-bold rounded-xl hover:opacity-95 cursor-pointer"
               >
-                Konfirmasi Deal
+                Simpan Deal
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Input Alasan Batal */}
+      {/* Modal Dialog: Konfirmasi Batal */}
       {batalModalQuoteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-xl shadow-lg border border-[#E3E7EE] max-w-sm w-full p-5 space-y-4">
-            <h3 className="font-bold text-sm text-[#253254] flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-red-600" /> Penawaran Dibatalkan
-            </h3>
-            <p className="text-xs text-[#6B7385]">
-              Pilih alasan utama klien membatalkan pesanan untuk analitik dasbor owner:
-            </p>
-            <div>
-              <label className="block text-xs font-semibold mb-1">Alasan Pembatalan:</label>
-              <select
-                value={alasanBatalInput}
-                onChange={(e) => setAlasanBatalInput(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
-              >
-                <option value="harga">Harga cermin dianggap mahal</option>
-                <option value="ongkir">Ongkir terlalu mahal</option>
-                <option value="lokasi">Lokasi jauh / takut pecah</option>
-                <option value="waktu produksi">Waktu produksi terlalu lama</option>
-                <option value="menghilang">Klien menghilang / ghosting</option>
-                <option value="pilih toko lain">Pilih toko lain</option>
-                <option value="lainnya">Lainnya</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-surface border border-line rounded-[20px] max-w-sm w-full p-6 space-y-4 shadow-none">
+            <h3 className="font-bold text-ink text-base">Konfirmasi Pembatalan</h3>
+            <p className="text-xs text-muted">Pilih alasan penolakan/pembatalan klien:</p>
+            <select
+              value={alasanBatalInput}
+              onChange={(e) => setAlasanBatalInput(e.target.value)}
+              className="w-full text-xs p-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
+            >
+              <option value="harga">Harga terlalu tinggi / anggaran tidak masuk</option>
+              <option value="ongkir">Ongkir terlalu mahal</option>
+              <option value="lokasi">Lokasi workshop terlalu jauh</option>
+              <option value="waktu_produksi">Waktu produksi terlalu lama</option>
+              <option value="menghilang">Klien menghilang / ghosting</option>
+              <option value="toko_lain">Memilih toko lain</option>
+              <option value="lainnya">Lainnya</option>
+            </select>
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setBatalModalQuoteId(null)}
-                className="px-3 py-1.5 text-xs text-[#6B7385] hover:bg-gray-100 rounded"
+                className="min-h-[44px] px-4 py-2 text-xs font-semibold text-muted hover:text-ink cursor-pointer"
               >
                 Batal
               </button>
               <button
-                onClick={() =>
-                  handleUpdateStatus(batalModalQuoteId, 'batal', { alasan_batal: alasanBatalInput })
-                }
-                className="px-4 py-1.5 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded"
+                type="button"
+                onClick={() => handleUpdateStatus(batalModalQuoteId, 'batal', { alasan_batal: alasanBatalInput })}
+                className="min-h-[44px] px-4 py-2 bg-warn text-white text-xs font-bold rounded-xl hover:opacity-95 cursor-pointer"
               >
                 Simpan Pembatalan
               </button>

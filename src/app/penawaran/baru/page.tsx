@@ -19,6 +19,7 @@ import {
   Lock,
   AlertTriangle,
   RotateCcw,
+  Copy,
 } from 'lucide-react';
 
 interface LocalItemState {
@@ -39,7 +40,7 @@ export default function PenawaranPage() {
   const [config, setConfig] = useState<PriceBookData>(defaultPriceBookV1);
   const [userRole, setUserRole] = useState<'owner' | 'admin'>('admin');
 
-  // Header State: Form mulai KOSONG (placeholder abu-abu "contoh: Kak Rina")
+  // Header State
   const [nomorPenawaran] = useState('PG-Q-2610-0001');
   const [namaKlien, setNamaKlien] = useState('');
   const [kotaKlien, setKotaKlien] = useState('Surabaya');
@@ -59,21 +60,21 @@ export default function PenawaranPage() {
   const batasPasangAdmin = batasPasang?.batas_admin || (isDalamKota ? 500000 : 1000000);
   const batasPasangOwner = batasPasang?.batas_owner || (isDalamKota ? 300000 : 800000);
 
-  // Nilai Deal Ongkir (Integer Rupiah)
+  // Nilai Deal Ongkir
   const [ongkirDealVal, setOngkirDealVal] = useState<number | undefined>(undefined);
   const [ongkirInputText, setOngkirInputText] = useState('');
   const [isOngkirFocused, setIsOngkirFocused] = useState(false);
   const [ongkirKonfirmasiOwner, setOngkirKonfirmasiOwner] = useState(false);
   const [ongkirAlasan, setOngkirAlasan] = useState('');
 
-  // Nilai Deal Pasang (Integer Rupiah)
+  // Nilai Deal Pasang
   const [pasangDealVal, setPasangDealVal] = useState<number | undefined>(undefined);
   const [pasangInputText, setPasangInputText] = useState('');
   const [isPasangFocused, setIsPasangFocused] = useState(false);
   const [pasangKonfirmasiOwner, setPasangKonfirmasiOwner] = useState(false);
   const [pasangAlasan, setPasangAlasan] = useState('');
 
-  // Items State (Default Bagian 6: 60x80 cm, Premium, sensor+baterai, antifog, Surabaya luar kota)
+  // Items State
   const [items, setItems] = useState<LocalItemState[]>([
     {
       bentuk_kode: 'rectangle',
@@ -94,129 +95,76 @@ export default function PenawaranPage() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Load Buku Harga Aktif dari API (/api/buku-harga)
+  // Ambil buku harga aktif & peran user
   useEffect(() => {
-    async function loadPriceBook() {
+    async function loadData() {
       try {
         const res = await fetch('/api/buku-harga');
         if (res.ok) {
           const json = await res.json();
-          if (json.price_book) {
-            setConfig(json.price_book);
-            setUserRole(json.role || 'admin');
-          }
+          if (json.price_book) setConfig(json.price_book);
+          if (json.role === 'admin') setUserRole('admin');
         }
-      } catch (err) {
-        console.warn('Gagal memuat buku harga dari API, menggunakan fallback v1:', err);
+      } catch (e) {
+        console.warn('Gagal memuat buku harga aktif, memakai fallback v1:', e);
       }
     }
-    loadPriceBook();
+    loadData();
   }, []);
 
-  // Effective Deal Values (Kolom kosong = default harga list, bukan 0)
-  const effectiveOngkirDeal = ongkirDealVal !== undefined ? ongkirDealVal : ongkirListPrice;
-  const effectivePasangDeal = pasangDealVal !== undefined ? pasangDealVal : pasangListPrice;
-
-  // Transform UI items ke Input Mesin Harga
-  const penawaranInput: PenawaranInput = useMemo(() => {
-    const formattedItems: CerminItemInput[] = items.map((it) => ({
-      bentuk_kode: it.bentuk_kode,
-      panjang_mm: Math.round(it.panjang_cm * 10),
-      lebar_mm: Math.round(it.lebar_cm * 10),
-      lampu: it.lampu,
-      kontrol: it.kontrol,
-      frame: it.frame,
-      antifog: it.antifog,
-      sandblast: {
-        pakai: it.sandblast_pakai,
-        lebar_mm: it.sandblast_pakai ? Math.round(it.sandblast_lebar_cm * 10) : undefined,
-        jarak_tepi_mm: it.sandblast_pakai ? Math.round(it.sandblast_tepi_cm * 10) : undefined,
-      },
-      qty: it.qty,
-    }));
-
-    return {
-      items: formattedItems,
-      zona,
-      perlu_pasang: perluPasang,
-      ongkir_deal: effectiveOngkirDeal,
-      pasang_deal: effectivePasangDeal,
-      segmen,
-      user_role: userRole,
-      throw_on_item_error: false, // Jangan pernah throw untuk UI
-      konfirmasi_owner: {
-        ongkir: {
-          sudah_dikonfirmasi: ongkirKonfirmasiOwner,
-          alasan: ongkirAlasan,
-        },
-        pasang: {
-          sudah_dikonfirmasi: pasangKonfirmasiOwner,
-          alasan: pasangAlasan,
-        },
-      },
-    };
-  }, [
-    items,
-    zona,
-    perluPasang,
-    effectiveOngkirDeal,
-    effectivePasangDeal,
-    ongkirKonfirmasiOwner,
-    ongkirAlasan,
-    pasangKonfirmasiOwner,
-    pasangAlasan,
-    segmen,
-    userRole,
-  ]);
-
-  // Kalkulasi Real-Time: TIDAK BOLEH THROW, Total selalu tampil
+  // Hitung penawaran via pricing.ts
   const kalkulasi = useMemo(() => {
     try {
-      return hitungPenawaran(penawaranInput, config);
-    } catch (err: unknown) {
-      console.error('Kalkulasi error fallback:', err);
+      const payload: PenawaranInput = {
+        segmen,
+        zona,
+        perlu_pasang: perluPasang,
+        konfirmasi_owner: {
+          ongkir: ongkirKonfirmasiOwner ? { sudah_dikonfirmasi: true, alasan: ongkirAlasan } : undefined,
+          pasang: pasangKonfirmasiOwner ? { sudah_dikonfirmasi: true, alasan: pasangAlasan } : undefined,
+        },
+        ongkir_deal: ongkirDealVal,
+        pasang_deal: pasangDealVal,
+        items: items.map((it) => ({
+          bentuk_kode: it.bentuk_kode,
+          panjang_mm: it.panjang_cm * 10,
+          lebar_mm: it.lebar_cm * 10,
+          lampu: it.lampu,
+          kontrol: it.kontrol,
+          frame: it.frame,
+          antifog: it.antifog,
+          sandblast: {
+            pakai: it.sandblast_pakai,
+            lebar_mm: it.sandblast_lebar_cm * 10,
+            jarak_tepi_mm: it.sandblast_tepi_cm * 10,
+          },
+          qty: it.qty,
+        })),
+      };
+      return hitungPenawaran(payload, config);
+    } catch (e) {
+      console.warn('Error perhitungan:', e);
       return null;
     }
-  }, [penawaranInput, config]);
+  }, [
+    items,
+    segmen,
+    zona,
+    perluPasang,
+    ongkirDealVal,
+    ongkirKonfirmasiOwner,
+    ongkirAlasan,
+    pasangDealVal,
+    pasangKonfirmasiOwner,
+    pasangAlasan,
+    config,
+  ]);
 
-  // Handlers input rupiah ongkir (Validasi saat Blur)
-  const handleOngkirBlur = () => {
-    setIsOngkirFocused(false);
-    if (!ongkirInputText.trim()) {
-      setOngkirDealVal(undefined); // Kembali ke default list
-    } else {
-      const parsed = parseRupiah(ongkirInputText, ongkirListPrice);
-      setOngkirDealVal(parsed);
-    }
-  };
-
-  const handleOngkirFocus = () => {
-    setIsOngkirFocused(true);
-    setOngkirInputText(effectiveOngkirDeal.toString());
-  };
-
-  // Handlers input rupiah pasang (Validasi saat Blur)
-  const handlePasangBlur = () => {
-    setIsPasangFocused(false);
-    if (!pasangInputText.trim()) {
-      setPasangDealVal(undefined); // Kembali ke default list
-    } else {
-      const parsed = parseRupiah(pasangInputText, pasangListPrice);
-      setPasangDealVal(parsed);
-    }
-  };
-
-  const handlePasangFocus = () => {
-    setIsPasangFocused(true);
-    setPasangInputText(effectivePasangDeal.toString());
-  };
-
-  // Handler Items
-  const updateItem = (index: number, updates: Partial<LocalItemState>) => {
+  const updateItem = (index: number, fields: Partial<LocalItemState>) => {
     setItems((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], ...updates };
-      return copy;
+      const next = [...prev];
+      next[index] = { ...next[index], ...fields };
+      return next;
     });
   };
 
@@ -226,7 +174,7 @@ export default function PenawaranPage() {
       {
         bentuk_kode: 'rectangle',
         panjang_cm: 60,
-        lebar_cm: 40,
+        lebar_cm: 80,
         lampu: '3_warna',
         kontrol: 'touchscreen',
         frame: 'tanpa',
@@ -244,11 +192,52 @@ export default function PenawaranPage() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Unduh PDF (Hanya aktif jika kalkulasi valid untuk PDF)
-  const isPdfDownloadEnabled = Boolean(kalkulasi && kalkulasi.is_valid_untuk_pdf && !isGeneratingPdf);
+  const isPdfDownloadEnabled = Boolean(
+    kalkulasi &&
+      kalkulasi.ongkir.status !== 'error_merah' &&
+      kalkulasi.pasang.status !== 'error_merah' &&
+      (!kalkulasi.ongkir.perlu_konfirmasi || (ongkirKonfirmasiOwner && ongkirAlasan.trim())) &&
+      (!kalkulasi.pasang.perlu_konfirmasi || (pasangKonfirmasiOwner && pasangAlasan.trim()))
+  );
+
+  const handleOngkirFocus = () => {
+    setIsOngkirFocused(true);
+    setOngkirInputText(ongkirDealVal !== undefined ? ongkirDealVal.toString() : '');
+  };
+
+  const handleOngkirBlur = () => {
+    setIsOngkirFocused(false);
+    const parsed = parseRupiah(ongkirInputText);
+    setOngkirDealVal(parsed !== undefined ? parsed : undefined);
+  };
+
+  const handlePasangFocus = () => {
+    setIsPasangFocused(true);
+    setPasangInputText(pasangDealVal !== undefined ? pasangDealVal.toString() : '');
+  };
+
+  const handlePasangBlur = () => {
+    setIsPasangFocused(false);
+    const parsed = parseRupiah(pasangInputText);
+    setPasangDealVal(parsed !== undefined ? parsed : undefined);
+  };
+
+  const handleCopyRingkasanWa = () => {
+    if (!kalkulasi) return;
+    const text =
+      `*PENAWARAN RESMI PUTRA GLASS*\n` +
+      `Klien: ${namaKlien.trim() || 'Klien'}\n` +
+      `Kota: ${kotaKlien.trim() || 'Bandung'}\n` +
+      `Total: *${formatRupiah(kalkulasi.total)}*\n` +
+      `DP 50%: *${formatRupiah(kalkulasi.dp_50)}*\n` +
+      `Pelunasan: *${formatRupiah(kalkulasi.pelunasan)}*\n` +
+      `Garansi resmi 7 hari pengiriman + 3 bulan fungsi kelistrikan LED & touchscreen.`;
+    navigator.clipboard.writeText(text);
+    alert('Ringkasan penawaran berhasil disalin untuk WhatsApp!');
+  };
 
   const handleSimpanPenawaran = async (isUnduh: boolean) => {
-    if (!kalkulasi || !isPdfDownloadEnabled) return;
+    if (!kalkulasi) return;
     if (isUnduh) setIsGeneratingPdf(true);
     else setIsSavingDraft(true);
     setSaveSuccessMsg(null);
@@ -258,18 +247,38 @@ export default function PenawaranPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lead_id: '00000000-0000-0000-0000-000000000001',
           nama_klien: namaKlien.trim() || 'Klien Putra Glass',
-          kota_klien: kotaKlien.trim() || 'Surabaya',
+          kota_klien: kotaKlien.trim() || 'Bandung',
           kanal: 'whatsapp',
-          is_unduh_pdf: isUnduh,
-          penawaran_input: penawaranInput,
+          segmen,
+          zona,
+          perlu_pasang: perluPasang,
+          items: items.map((it) => ({
+            bentuk_kode: it.bentuk_kode,
+            panjang_mm: it.panjang_cm * 10,
+            lebar_mm: it.lebar_cm * 10,
+            lampu: it.lampu,
+            kontrol: it.kontrol,
+            frame: it.frame,
+            antifog: it.antifog,
+            sandblast: {
+              pakai: it.sandblast_pakai,
+              lebar_mm: it.sandblast_lebar_cm * 10,
+              jarak_tepi_mm: it.sandblast_tepi_cm * 10,
+            },
+            qty: it.qty,
+          })),
+          is_unduh: isUnduh,
+          ongkir_deal: kalkulasi.ongkir.deal,
+          pasang_deal: kalkulasi.pasang.deal,
+          alasan_ongkir: ongkirAlasan,
+          alasan_pasang: pasangAlasan,
         }),
       });
 
       const json = await res.json();
       if (!res.ok) {
-        alert(`Gagal menyimpan: ${json.error || 'Terjadi kesalahan'}`);
+        alert(json.error || 'Gagal menyimpan');
         return;
       }
 
@@ -307,66 +316,68 @@ export default function PenawaranPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="space-y-6">
       {/* Top Bar Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 mb-6 border-b border-[#E3E7EE]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-[#253254]">Kalkulator Penawaran</h1>
-            <span className="text-xs bg-[#253254] text-white px-2 py-0.5 rounded font-mono">
-              {nomorPenawaran}
-            </span>
-            <span className="text-xs bg-[#BFCBD9] text-[#253254] px-2 py-0.5 rounded font-medium">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[30px] font-extrabold text-ink leading-tight">
+              Kalkulator Penawaran
+            </h1>
+            <span className="text-xs px-2.5 py-1 bg-surface border border-line rounded-lg text-muted font-semibold">
               Buku Harga v{config.versi} (Live)
             </span>
           </div>
-          <p className="text-sm text-[#6B7385] mt-1">
+          <p className="text-sm text-muted mt-1">
             Penghitungan instan &amp; penawaran PDF resmi Putra Glass
           </p>
         </div>
 
-        <div className="mt-4 md:mt-0 flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
+            type="button"
             id="btn-simpan-penawaran"
             onClick={() => handleSimpanPenawaran(false)}
             disabled={!isPdfDownloadEnabled || isSavingDraft || userRole === 'owner'}
-            className="flex items-center gap-1.5 bg-white border border-[#BFCBD9] hover:bg-[#F2F5F9] text-[#253254] font-medium text-xs px-3.5 py-2 rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            className="min-h-[44px] px-4 py-2 bg-surface border border-line text-ink hover:bg-raised rounded-xl text-xs font-semibold flex items-center gap-2 transition cursor-pointer disabled:opacity-40"
           >
-            <FileText className="w-4 h-4 text-[#275087]" />
-            {isSavingDraft ? 'Menyimpan...' : 'Simpan Penawaran (Draf)'}
+            <FileText className="w-4 h-4 text-accent" />
+            <span>{isSavingDraft ? 'Menyimpan...' : 'Simpan Draf'}</span>
           </button>
 
           <button
+            type="button"
             id="btn-download-pdf"
             onClick={() => handleSimpanPenawaran(true)}
             disabled={!isPdfDownloadEnabled || isGeneratingPdf || userRole === 'owner'}
-            className="flex items-center gap-2 bg-[#253254] hover:bg-[#1f2845] text-white font-medium text-xs px-4 py-2 rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            className="min-h-[44px] px-5 py-2 bg-accent text-accent-ink rounded-xl text-xs font-bold flex items-center gap-2 hover:opacity-95 transition cursor-pointer disabled:opacity-40"
           >
             <Download className="w-4 h-4" />
-            {isGeneratingPdf ? 'Membuat PDF...' : 'Unduh Penawaran PDF'}
+            <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh Penawaran PDF'}</span>
           </button>
         </div>
       </div>
 
       {saveSuccessMsg && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-300 rounded text-emerald-900 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-4 bg-ok-bg border border-ok/30 rounded-[18px] text-ok text-sm flex items-center gap-2.5">
+          <CheckCircle2 className="w-5 h-5 text-ok shrink-0" />
           <span>{saveSuccessMsg}</span>
         </div>
       )}
 
-      {/* Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Kolom Kiri: Form Input Item (7 / 12) */}
+      {/* Grid Layout 2 Kolom */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Kolom Kiri: Form Input (7 / 12) */}
         <div className="lg:col-span-7 space-y-6">
           {/* Data Klien & Pengiriman */}
-          <div className="bg-white p-5 rounded-lg border border-[#E3E7EE] shadow-sm">
-            <h2 className="text-xs font-bold text-[#253254] uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Info className="w-4 h-4 text-[#275087]" /> Informasi Klien &amp; Tujuan
+          <div className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
+            <h2 className="text-[17px] font-bold text-ink flex items-center gap-2">
+              <Info className="w-4 h-4 text-accent" /> Informasi Klien &amp; Tujuan
             </h2>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   Nama Klien
                 </label>
                 <input
@@ -375,12 +386,12 @@ export default function PenawaranPage() {
                   value={namaKlien}
                   onChange={(e) => setNamaKlien(e.target.value)}
                   placeholder="contoh: Kak Rina"
-                  className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] placeholder:text-[#98A0B0] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#275087]"
+                  className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink placeholder:text-muted/60 focus:bg-surface focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   Kota Tujuan
                 </label>
                 <input
@@ -388,12 +399,12 @@ export default function PenawaranPage() {
                   value={kotaKlien}
                   onChange={(e) => setKotaKlien(e.target.value)}
                   placeholder="contoh: Surabaya"
-                  className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#275087]"
+                  className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   Zona Pengiriman
                 </label>
                 <select
@@ -401,9 +412,9 @@ export default function PenawaranPage() {
                   onChange={(e) => {
                     const newZona = e.target.value as 'dalam_kota' | 'luar_kota';
                     setZona(newZona);
-                    setOngkirDealVal(undefined); // Reset ke list zona baru
+                    setOngkirDealVal(undefined);
                   }}
-                  className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white"
+                  className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
                   <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
                   <option value="dalam_kota">Bandung Raya (List: Rp750.000)</option>
@@ -411,13 +422,13 @@ export default function PenawaranPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   Segmen Klien
                 </label>
                 <select
                   value={segmen}
                   onChange={(e) => setSegmen(e.target.value as 'B2C' | 'B2B')}
-                  className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white"
+                  className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
                   <option value="B2C">B2C (Retail)</option>
                   <option value="B2B">B2B (Proyek / Desainer)</option>
@@ -426,49 +437,43 @@ export default function PenawaranPage() {
             </div>
           </div>
 
-          {/* Daftar Item Cermin */}
+          {/* Rincian Cermin Items */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-[#253254] flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#275087]" /> Rincian Cermin ({items.length})
+              <h2 className="text-[17px] font-bold text-ink flex items-center gap-2">
+                <FileText className="w-4 h-4 text-accent" /> Rincian Cermin ({items.length})
               </h2>
               <button
+                type="button"
                 onClick={addItem}
-                className="flex items-center gap-1.5 text-xs bg-[#253254] text-white px-3 py-1.5 rounded hover:bg-[#1f2845] transition cursor-pointer"
+                className="min-h-[44px] flex items-center gap-2 text-xs bg-accent text-accent-ink px-4 py-2 rounded-xl font-bold hover:opacity-95 transition cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Cermin
+                <Plus className="w-4 h-4" /> Tambah Cermin
               </button>
             </div>
 
             {items.map((item, idx) => {
-              const currentShape = config.master_bentuk.find((b) => b.kode === item.bentuk_kode);
-              const bolehAluminium = Boolean(currentShape?.boleh_aluminium);
-              const calculatedItem = kalkulasi?.items[idx];
-              const itemErrors = calculatedItem?.errors || [];
+              const bentukDef = config.master_bentuk.find((b) => b.kode === item.bentuk_kode);
+              const bolehAluminium = bentukDef?.boleh_aluminium ?? false;
 
               return (
-                <div
-                  key={idx}
-                  className="bg-white p-5 rounded-lg border border-[#E3E7EE] shadow-sm relative space-y-4"
-                >
-                  <div className="flex justify-between items-center pb-2 border-b border-[#F2F5F9]">
-                    <span className="font-bold text-sm text-[#253254]">
-                      Cermin #{idx + 1}
-                    </span>
+                <div key={idx} className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-line">
+                    <span className="font-bold text-ink text-sm">Cermin #{idx + 1}</span>
                     {items.length > 1 && (
                       <button
+                        type="button"
                         onClick={() => removeItem(idx)}
-                        className="text-red-500 hover:text-red-700 text-xs flex items-center gap-1 cursor-pointer"
+                        className="text-warn hover:opacity-80 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        <Trash2 className="w-4 h-4" /> Hapus
                       </button>
                     )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Bentuk */}
                     <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                      <label className="block text-xs font-semibold text-muted mb-1.5">
                         Bentuk Cermin
                       </label>
                       <select
@@ -478,13 +483,10 @@ export default function PenawaranPage() {
                           const shapeDef = config.master_bentuk.find((b) => b.kode === newKode);
                           updateItem(idx, {
                             bentuk_kode: newKode,
-                            frame:
-                              item.frame === 'aluminium' && !shapeDef?.boleh_aluminium
-                                ? 'tanpa'
-                                : item.frame,
+                            frame: item.frame === 'aluminium' && !shapeDef?.boleh_aluminium ? 'tanpa' : item.frame,
                           });
                         }}
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
+                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
                       >
                         {config.master_bentuk.map((b) => (
                           <option key={b.kode} value={b.kode}>
@@ -494,9 +496,8 @@ export default function PenawaranPage() {
                       </select>
                     </div>
 
-                    {/* Dimensi */}
                     <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                      <label className="block text-xs font-semibold text-muted mb-1.5">
                         Panjang (cm)
                       </label>
                       <input
@@ -504,15 +505,16 @@ export default function PenawaranPage() {
                         min="15"
                         max="300"
                         value={item.panjang_cm}
-                        onChange={(e) =>
-                          updateItem(idx, { panjang_cm: Number(e.target.value) })
-                        }
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
+                        onChange={(e) => updateItem(idx, { panjang_cm: Number(e.target.value) })}
+                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
                       />
+                      {(item.panjang_cm < 15 || item.panjang_cm > 300) && (
+                        <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
+                      <label className="block text-xs font-semibold text-muted mb-1.5">
                         Lebar (cm)
                       </label>
                       <input
@@ -520,196 +522,189 @@ export default function PenawaranPage() {
                         min="15"
                         max="300"
                         value={item.lebar_cm}
-                        onChange={(e) =>
-                          updateItem(idx, { lebar_cm: Number(e.target.value) })
-                        }
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
+                        onChange={(e) => updateItem(idx, { lebar_cm: Number(e.target.value) })}
+                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink tabular-nums"
                       />
-                    </div>
-                  </div>
-
-                  {/* Varian, Lampu, Kontrol, Frame */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
-                        Lampu LED
-                      </label>
-                      <select
-                        value={item.lampu}
-                        onChange={(e) =>
-                          updateItem(idx, { lampu: e.target.value as '3_warna' | '1_warna' })
-                        }
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
-                      >
-                        <option value="3_warna">LED 3 Warna (Premium)</option>
-                        <option value="1_warna">LED 1 Warna (Varian Basic)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
-                        Jenis Kontrol
-                      </label>
-                      <select
-                        value={item.kontrol}
-                        onChange={(e) =>
-                          updateItem(idx, {
-                            kontrol: e.target.value as LocalItemState['kontrol'],
-                          })
-                        }
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
-                      >
-                        <option value="touchscreen">Touchscreen Kabel (Default)</option>
-                        <option value="touchscreen_baterai">Touchscreen + Baterai (+150k)</option>
-                        <option value="sensor">Sensor Tangan (+100k)</option>
-                        <option value="sensor_baterai">Sensor Tangan + Baterai (+250k)</option>
-                        <option value="saklar">Saklar Biasa (Varian Basic)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#6B7385] mb-1">
-                        Frame Luar
-                      </label>
-                      <select
-                        value={item.frame}
-                        onChange={(e) =>
-                          updateItem(idx, { frame: e.target.value as LocalItemState['frame'] })
-                        }
-                        className="w-full text-sm px-3 py-2 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
-                      >
-                        <option value="tanpa">Tanpa Frame (Frameless Bevel)</option>
-                        <option value="hpl">Frame HPL (+200k)</option>
-                        <option
-                          value="aluminium"
-                          disabled={!bolehAluminium}
-                          className={!bolehAluminium ? 'text-gray-400 bg-gray-100' : ''}
-                        >
-                          Frame Aluminium (+400k) {!bolehAluminium ? '(Hanya Persegi)' : ''}
-                        </option>
-                      </select>
-                      {!bolehAluminium && item.frame === 'aluminium' && (
-                        <p className="text-[10px] text-red-600 mt-1 font-medium">
-                          Aluminium hanya untuk bentuk persegi siku.
-                        </p>
+                      {(item.lebar_cm < 15 || item.lebar_cm > 300) && (
+                        <p className="text-xs text-warn mt-1 font-medium">Ukuran standar 15–300 cm</p>
                       )}
                     </div>
                   </div>
 
-                  {/* Add-ons & Sandblast */}
-                  <div className="pt-3 border-t border-[#F2F5F9] flex flex-wrap items-center gap-6">
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={item.antifog}
-                        onChange={(e) => updateItem(idx, { antifog: e.target.checked })}
-                        className="rounded text-[#253254]"
-                      />
-                      Antifog Pad (+Rp200.000)
+                  {/* KONTROL LAMPU: 3 Pilihan Kartu dengan Keterangan */}
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-xs font-semibold text-muted">
+                      Pilihan Kontrol Lampu:
                     </label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen' })}
+                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                          item.lampu === '3_warna' && item.kontrol === 'touchscreen'
+                            ? 'border-accent bg-tint text-ink'
+                            : 'border-line bg-raised text-muted hover:bg-surface'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-ink text-sm">LED 3 Warna (Premium)</p>
+                          {item.lampu === '3_warna' && item.kontrol === 'touchscreen' && (
+                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted mt-1 leading-snug">
+                          Warm, Natural, Cool White dengan tombol touchscreen kabel
+                        </p>
+                      </button>
 
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={item.sandblast_pakai}
-                        onChange={(e) =>
-                          updateItem(idx, { sandblast_pakai: e.target.checked })
-                        }
-                        className="rounded text-[#253254]"
-                      />
-                      Garis Sandblast
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen_baterai' })}
+                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                          item.kontrol === 'touchscreen_baterai' || item.kontrol === 'sensor_baterai'
+                            ? 'border-accent bg-tint text-ink'
+                            : 'border-line bg-raised text-muted hover:bg-surface'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-ink text-sm">Sensor Tangan + Baterai</p>
+                          {(item.kontrol === 'touchscreen_baterai' || item.kontrol === 'sensor_baterai') && (
+                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted mt-1 leading-snug">
+                          Tanpa colokan listrik, cas Type-C tahan 2–3 minggu
+                        </p>
+                      </button>
 
-                    <div className="flex items-center gap-2 ml-auto">
-                      <span className="text-xs font-semibold text-[#6B7385]">Qty:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.qty}
-                        onChange={(e) =>
-                          updateItem(idx, { qty: Math.max(1, Number(e.target.value)) })
-                        }
-                        className="w-16 text-center text-sm px-2 py-1 border border-[#E3E7EE] rounded bg-[#F2F5F9]"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, { lampu: '1_warna', kontrol: 'saklar' })}
+                        className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                          item.lampu === '1_warna' || item.kontrol === 'saklar'
+                            ? 'border-accent bg-tint text-ink'
+                            : 'border-line bg-raised text-muted hover:bg-surface'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-ink text-sm">LED 1 Warna Saklar (Basic)</p>
+                          {(item.lampu === '1_warna' || item.kontrol === 'saklar') && (
+                            <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted mt-1 leading-snug">
+                          1 warna lampu dengan saklar dinding standar
+                        </p>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Error spesifik item jika ada */}
-                  {itemErrors.length > 0 && (
-                    <div className="p-2.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-                      {itemErrors.map((err, eIdx) => (
-                        <p key={eIdx}>• {err}</p>
-                      ))}
+                  {/* Frame Luar & Addons */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted mb-1.5">
+                        Frame Luar
+                      </label>
+                      <select
+                        value={item.frame}
+                        onChange={(e) => updateItem(idx, { frame: e.target.value as any })}
+                        className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink"
+                      >
+                        <option value="tanpa">Tanpa Frame (Frameless Bevel)</option>
+                        <option value="hpl">Frame HPL (+200k)</option>
+                        <option value="aluminium" disabled={!bolehAluminium}>
+                          Frame Aluminium (+400k) {!bolehAluminium ? '(Hanya Persegi)' : ''}
+                        </option>
+                      </select>
+                      {!bolehAluminium && item.frame === 'aluminium' && (
+                        <p className="text-xs text-warn mt-1 font-medium">
+                          Aluminium hanya untuk bentuk persegi siku.
+                        </p>
+                      )}
                     </div>
-                  )}
+
+                    <div className="flex flex-col justify-end space-y-2 pb-1">
+                      <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer min-h-[36px]">
+                        <input
+                          type="checkbox"
+                          checked={item.antifog}
+                          onChange={(e) => updateItem(idx, { antifog: e.target.checked })}
+                          className="w-4 h-4 rounded text-accent"
+                        />
+                        <span>Antifog Pad (+Rp200.000)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer min-h-[36px]">
+                        <input
+                          type="checkbox"
+                          checked={item.sandblast_pakai}
+                          onChange={(e) => updateItem(idx, { sandblast_pakai: e.target.checked })}
+                          className="w-4 h-4 rounded text-accent"
+                        />
+                        <span>Garis Sandblast (+Rp100.000/m)</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Kolom Kanan: Ringkasan Harga & Nego Deals (5 / 12 Sticky) */}
-        <div className="lg:col-span-5 sticky top-6 space-y-4">
+        {/* Kolom Kanan: Ringkasan Harga (5 / 12 Sticky) */}
+        <div className="lg:col-span-5 sticky top-20 space-y-4">
           {kalkulasi && (
-            <div className="bg-white rounded-lg border border-[#E3E7EE] shadow-sm p-5 space-y-5">
-              <div className="flex items-center justify-between border-b border-[#E3E7EE] pb-3">
-                <h3 className="font-bold text-[#253254] text-base flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#E3A857]" /> Ringkasan Penawaran
+            <div className="bg-surface rounded-[20px] border border-line shadow-none p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-line pb-4">
+                <h3 className="font-bold text-ink text-[17px] flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-accent" /> Ringkasan Penawaran
                 </h3>
-                <span className="text-xs text-[#6B7385]">
+                <span className="text-xs text-muted font-medium tabular-nums">
                   Total {kalkulasi.total_unit} unit
                 </span>
               </div>
 
-              {/* Breakdown Per Item */}
-              <div className="space-y-2.5">
-                {kalkulasi.items.map((it, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-[#F2F5F9] rounded border border-[#E3E7EE] text-xs space-y-1"
-                  >
-                    <div className="flex justify-between items-start font-semibold text-[#253254]">
-                      <span>
-                        Cermin #{idx + 1} ({it.panjang_mm / 10} × {it.lebar_mm / 10} cm)
-                      </span>
-                      <span className="font-mono">
-                        {formatRupiah(it.subtotal_item)}
-                      </span>
-                    </div>
-
-                    <div className="text-[11px] text-[#6B7385] flex justify-between">
-                      <span>
-                        {it.is_sku ? (
-                          <span className="text-emerald-700 font-medium">SKU: {it.sku_kode}</span>
-                        ) : (
-                          `Custom (${it.luas_m2_display} m² @ ${formatRupiah(it.tarif_m2_dipakai)})`
-                        )}
-                      </span>
-                      <span>
-                        {it.qty > 1 ? `@ ${formatRupiah(it.harga_satuan_item)} × ${it.qty}` : ''}
-                      </span>
-                    </div>
-
-                    {it.add_on_breakdown.length > 0 && (
-                      <div className="text-[10px] text-[#6B7385] pt-1 border-t border-[#E3E7EE]">
-                        Add-on: {it.add_on_breakdown.map((a) => `${a.label} (+${formatRupiah(a.total)})`).join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ))}
+              {/* Total Penawaran 36px/800 */}
+              <div className="space-y-1">
+                <span className="text-xs font-semibold text-muted block">Total Penawaran:</span>
+                <span id="label-total-penawaran" className="text-[36px] font-extrabold text-ink leading-tight tabular-nums block">
+                  {formatRupiah(kalkulasi.total)}
+                </span>
               </div>
 
-              {/* Biaya Pengiriman & Pemasangan */}
-              <div className="space-y-4 pt-3 border-t border-[#E3E7EE]">
-                {/* 1. INPUT ONGKIR DEAL */}
-                <div>
-                  <div className="flex justify-between items-center text-xs mb-1">
-                    <span className="font-semibold text-[#6B7385] flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-[#253254]" /> Ongkir Deal (List: {formatRupiah(ongkirListPrice)}):
+              {/* DP 50% & Pelunasan */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="p-3.5 bg-tint rounded-xl border border-line/40 space-y-1">
+                  <span className="block text-xs font-semibold text-accent">DP 50%</span>
+                  <span className="text-lg font-bold tabular-nums text-ink block">
+                    {formatRupiah(kalkulasi.dp_50)}
+                  </span>
+                  <span className="block text-[11px] text-muted">untuk mulai produksi</span>
+                </div>
+
+                <div className="p-3.5 bg-raised rounded-xl border border-line space-y-1">
+                  <span className="block text-xs font-semibold text-muted">Pelunasan</span>
+                  <span className="text-lg font-bold tabular-nums text-ink block">
+                    {formatRupiah(kalkulasi.pelunasan)}
+                  </span>
+                  <span className="block text-[11px] text-muted">sebelum barang dikirim</span>
+                </div>
+              </div>
+
+              {/* Rincian Subtotal, Ongkir, Pasang */}
+              <div className="space-y-3 pt-3 border-t border-line text-sm">
+                <div className="flex justify-between items-center text-muted">
+                  <span>Subtotal Cermin:</span>
+                  <span className="font-semibold text-ink tabular-nums">{formatRupiah(kalkulasi.subtotal_cermin)}</span>
+                </div>
+
+                {/* Ongkir Deal Input */}
+                <div className="space-y-1.5 pt-2 border-t border-line/40">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-accent" /> Ongkir Deal (List: {formatRupiah(ongkirListPrice)}):
                     </span>
-                    <span className="font-mono font-semibold">
-                      {formatRupiah(kalkulasi.ongkir.deal)}
-                    </span>
+                    <span className="font-bold text-ink tabular-nums">{formatRupiah(kalkulasi.ongkir.deal)}</span>
                   </div>
 
                   <input
@@ -720,269 +715,61 @@ export default function PenawaranPage() {
                     onBlur={handleOngkirBlur}
                     onChange={(e) => setOngkirInputText(e.target.value)}
                     placeholder={`Default: ${formatRupiah(ongkirListPrice)}`}
-                    className="w-full text-xs px-3 py-1.5 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white focus:outline-none"
+                    className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none"
                   />
-                  <div className="text-[10px] text-[#6B7385] mt-0.5">
+                  <p className="text-[11px] text-muted">
                     Batas Admin: {formatRupiah(batasOngkirAdmin)} • Batas Owner: {formatRupiah(batasOngkirOwner)}
-                  </div>
+                  </p>
 
-                  {/* KONDISI PERINGATAN ONGKIR */}
-                  {/* KONDISI A: MERAH (< batas_owner) */}
                   {kalkulasi.ongkir.status === 'error_merah' && (
-                    <div
-                      id="box-ongkir-merah"
-                      className="mt-2 p-3 bg-red-50 border border-red-300 rounded text-xs text-red-800 space-y-2"
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-bold">
-                            Minimal {formatRupiah(batasOngkirOwner)} (ongkir maks. dibagi 2)
-                          </p>
-                          <p className="text-[11px] mt-0.5">
-                            Ongkir tidak dapat dinego di bawah 50% harga list.
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <button
-                          type="button"
-                          id="btn-pakai-ongkir-min"
-                          onClick={() => {
-                            setOngkirDealVal(batasOngkirOwner);
-                            setOngkirInputText(batasOngkirOwner.toString());
-                          }}
-                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer transition shadow-sm"
-                        >
-                          Pakai {formatRupiah(batasOngkirOwner)}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* KONDISI B: DI BAWAH BATAS ADMIN (Input & Checkbox SELALU TAMPIL, Berubah Hijau Saat Sah) */}
-                  {kalkulasi.ongkir.deal < batasOngkirAdmin && kalkulasi.ongkir.status !== 'error_merah' && (
-                    <div
-                      id="box-ongkir-kuning"
-                      className={`mt-2 p-3 rounded text-xs border space-y-2.5 transition-colors ${
-                        kalkulasi.ongkir.dikonfirmasi_owner
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                          : 'bg-amber-50 border-amber-300 text-amber-950'
-                      }`}
-                    >
-                      <div className="flex items-start gap-1.5">
-                        {kalkulasi.ongkir.dikonfirmasi_owner ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        )}
-                        <div>
-                          <p className="font-bold">
-                            {kalkulasi.ongkir.dikonfirmasi_owner
-                              ? 'Potongan Ongkir Dikonfirmasi Owner (Sah)'
-                              : 'Di bawah batas admin. Konfirmasi owner?'}
-                          </p>
-                          <p className="text-[11px] opacity-80 mt-0.5">
-                            {kalkulasi.ongkir.dikonfirmasi_owner
-                              ? 'Potongan sah. Tombol unduh PDF aktif.'
-                              : 'Centang konfirmasi dan isi alasan agar penawaran sah.'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-current/20 space-y-2">
-                        <label className="flex items-center gap-2 font-bold cursor-pointer">
-                          <input
-                            id="checkbox-konfirmasi-ongkir"
-                            type="checkbox"
-                            checked={ongkirKonfirmasiOwner}
-                            onChange={(e) => setOngkirKonfirmasiOwner(e.target.checked)}
-                            className="rounded text-emerald-700"
-                          />
-                          Sudah dikonfirmasi owner
-                        </label>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5">
-                            Alasan konfirmasi (wajib):
-                          </label>
-                          <input
-                            id="input-alasan-ongkir"
-                            type="text"
-                            required
-                            placeholder="Misal: Klien komitmen DP hari ini"
-                            value={ongkirAlasan}
-                            onChange={(e) => setOngkirAlasan(e.target.value)}
-                            className="w-full text-xs px-2.5 py-1.5 bg-white border border-current/30 rounded focus:outline-none focus:ring-1 focus:ring-current text-[#1B2233]"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <p className="text-xs text-warn font-semibold mt-1">
+                      Minimal {formatRupiah(batasOngkirOwner)} (ongkir maksimal dibagi 2)
+                    </p>
                   )}
                 </div>
 
-                {/* 2. INPUT PASANG DEAL */}
-                <div>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <label className="flex items-center gap-1.5 font-semibold text-[#6B7385] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={perluPasang}
-                        onChange={(e) => setPerluPasang(e.target.checked)}
-                        className="rounded"
-                      />
-                      Perlu Pemasangan
-                    </label>
-                    {perluPasang && (
-                      <span className="font-mono font-semibold">
-                        {formatRupiah(kalkulasi.pasang.deal)}
-                      </span>
-                    )}
-                  </div>
-
-                  {perluPasang && (
-                    <>
-                      <input
-                        id="input-pasang-deal"
-                        type="text"
-                        value={isPasangFocused ? pasangInputText : formatRupiah(kalkulasi.pasang.deal)}
-                        onFocus={handlePasangFocus}
-                        onBlur={handlePasangBlur}
-                        onChange={(e) => setPasangInputText(e.target.value)}
-                        placeholder={`Default: ${formatRupiah(pasangListPrice)}`}
-                        className="w-full text-xs px-3 py-1.5 border border-[#E3E7EE] rounded bg-[#F2F5F9] focus:bg-white focus:outline-none"
-                      />
-                      <div className="text-[10px] text-[#6B7385] mt-0.5">
-                        Batas Admin: {formatRupiah(batasPasangAdmin)} • Batas Owner: {formatRupiah(batasPasangOwner)}
-                      </div>
-
-                      {/* Pasang Merah */}
-                      {kalkulasi.pasang.status === 'error_merah' && (
-                        <div
-                          id="box-pasang-merah"
-                          className="mt-2 p-3 bg-red-50 border border-red-300 rounded text-xs text-red-800 space-y-2"
-                        >
-                          <div className="flex items-start gap-1.5">
-                            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                            <div>
-                              <p className="font-bold">
-                                Minimal {formatRupiah(batasPasangOwner)}
-                              </p>
-                              <p className="text-[11px] mt-0.5">
-                                Jasa pasang tidak dapat dinego di bawah batas owner.
-                              </p>
-                            </div>
-                          </div>
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPasangDealVal(batasPasangOwner);
-                                setPasangInputText(batasPasangOwner.toString());
-                              }}
-                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer"
-                            >
-                              Pakai {formatRupiah(batasPasangOwner)}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* PASANG: DI BAWAH BATAS ADMIN (Input & Checkbox SELALU TAMPIL, Berubah Hijau Saat Sah) */}
-                      {kalkulasi.pasang.deal < batasPasangAdmin && kalkulasi.pasang.status !== 'error_merah' && (
-                        <div
-                          id="box-pasang-kuning"
-                          className={`mt-2 p-3 rounded text-xs border space-y-2.5 transition-colors ${
-                            kalkulasi.pasang.dikonfirmasi_owner
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                              : 'bg-amber-50 border-amber-300 text-amber-950'
-                          }`}
-                        >
-                          <div className="flex items-start gap-1.5">
-                            {kalkulasi.pasang.dikonfirmasi_owner ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                            ) : (
-                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                            )}
-                            <div>
-                              <p className="font-bold">
-                                {kalkulasi.pasang.dikonfirmasi_owner
-                                  ? 'Potongan Pemasangan Dikonfirmasi Owner (Sah)'
-                                  : 'Di bawah batas admin. Konfirmasi owner?'}
-                              </p>
-                              <p className="text-[11px] opacity-80 mt-0.5">
-                                {kalkulasi.pasang.dikonfirmasi_owner
-                                  ? 'Potongan sah. Tombol unduh PDF aktif.'
-                                  : 'Centang konfirmasi dan isi alasan agar penawaran sah.'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-current/20 space-y-2">
-                            <label className="flex items-center gap-2 font-bold cursor-pointer">
-                              <input
-                                id="checkbox-konfirmasi-pasang"
-                                type="checkbox"
-                                checked={pasangKonfirmasiOwner}
-                                onChange={(e) => setPasangKonfirmasiOwner(e.target.checked)}
-                                className="rounded text-emerald-700"
-                              />
-                              Sudah dikonfirmasi owner
-                            </label>
-
-                            <div>
-                              <label className="block text-[11px] font-semibold mb-0.5">
-                                Alasan konfirmasi (wajib):
-                              </label>
-                              <input
-                                id="input-alasan-pasang"
-                                type="text"
-                                required
-                                placeholder="Misal: Pasang paket 2 unit..."
-                                value={pasangAlasan}
-                                onChange={(e) => setPasangAlasan(e.target.value)}
-                                className="w-full text-xs px-2.5 py-1.5 bg-white border border-current/30 rounded focus:outline-none focus:ring-1 focus:ring-current text-[#1B2233]"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
+                {/* Pemasangan Checkbox */}
+                <div className="pt-2 border-t border-line/40 space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer min-h-[36px]">
+                    <input
+                      type="checkbox"
+                      checked={perluPasang}
+                      onChange={(e) => {
+                        setPerluPasang(e.target.checked);
+                        setPasangDealVal(undefined);
+                      }}
+                      className="w-4 h-4 rounded text-accent"
+                    />
+                    <span>Perlu Pemasangan Teknisi</span>
+                  </label>
                 </div>
               </div>
 
-              {/* Total & DP Final (SELALU TAMPIL) */}
-              <div className="pt-4 border-t-2 border-[#253254] space-y-3">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-sm font-bold text-[#253254]">TOTAL PENAWARAN:</span>
-                  <span id="label-total-penawaran" className="text-2xl font-bold font-mono text-[#253254]">
-                    {formatRupiah(kalkulasi.total)}
-                  </span>
-                </div>
+              {/* Tombol Aksi: PDF + Salin Ringkasan WhatsApp */}
+              <div className="space-y-2.5 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={handleCopyRingkasanWa}
+                  className="w-full min-h-[48px] bg-surface hover:bg-raised text-ink border border-line rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-none"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>Salin Ringkasan untuk WhatsApp</span>
+                </button>
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <div className="p-3 bg-[#253254] text-white rounded">
-                    <span className="block text-[10px] font-bold text-[#BFCBD9]">DP 50%</span>
-                    <span className="text-base font-bold font-mono">
-                      {formatRupiah(kalkulasi.dp_50)}
-                    </span>
-                    <span className="block text-[9px] text-[#BFCBD9]">untuk mulai produksi</span>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => handleSimpanPenawaran(true)}
+                  disabled={!isPdfDownloadEnabled || isGeneratingPdf || userRole === 'owner'}
+                  className="w-full min-h-[48px] bg-accent text-accent-ink rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-40 transition cursor-pointer shadow-none"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh Penawaran PDF</span>
+                </button>
+              </div>
 
-                  <div className="p-3 bg-[#F2F5F9] border border-[#E3E7EE] rounded">
-                    <span className="block text-[10px] font-bold text-[#98A0B0]">PELUNASAN</span>
-                    <span className="text-base font-bold font-mono text-[#253254]">
-                      {formatRupiah(kalkulasi.pelunasan)}
-                    </span>
-                    <span className="block text-[9px] text-[#6B7385]">sebelum barang dikirim</span>
-                  </div>
-                </div>
-
-                <div className="text-[11px] text-[#6B7385] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Garansi 7 hari pecah/tidak sesuai · fungsi LED &amp; touchscreen 3 bulan</span>
-                </div>
+              <div className="text-xs text-muted flex items-center gap-2 pt-1">
+                <CheckCircle2 className="w-4 h-4 text-ok shrink-0" />
+                <span>Garansi 7 hari pecah perjalanan · fungsi LED 3 bulan</span>
               </div>
             </div>
           )}

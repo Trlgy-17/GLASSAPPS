@@ -5,55 +5,162 @@
   src: url('/fonts/plus-jakarta-sans-latin-400-normal.woff') format('woff');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'PlusJakartaSans';
   src: url('/fonts/plus-jakarta-sans-latin-500-normal.woff') format('woff');
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'PlusJakartaSans';
   src: url('/fonts/plus-jakarta-sans-latin-600-normal.woff') format('woff');
   font-weight: 600;
   font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'PlusJakartaSans';
   src: url('/fonts/plus-jakarta-sans-latin-700-normal.woff') format('woff');
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'PlusJakartaSans';
   src: url('/fonts/plus-jakarta-sans-latin-800-normal.woff') format('woff');
   font-weight: 800;
   font-style: normal;
+  font-display: swap;
 }
 
 :root {
-  --navy: #253254;
-  --blue: #275087;
-  --steel: #BFCBD9;
-  --grey: #A6A6A6;
+  --bg: #EEF2F6;
+  --surface: #FFFFFF;
+  --raised: #F5F7FA;
   --ink: #1B2233;
-  --muted: #6B7385;
-  --faint: #98A0B0;
-  --line: #E3E7EE;
-  --tint: #F2F5F9;
-  --tint2: #E8EEF5;
-  --amber: #E3A857;
+  --muted: #5A6478;
+  --line: #D8DFE8;
+  --accent: #275087;
+  --accent-ink: #FFFFFF;
+  --tint: #E6EEF8;
+  --rail: #253254;
+  --rail-ink: #D3DCEA;
+  --ok: #2F7D57;
+  --ok-bg: #E3F2EA;
+  --warn: #7A4F0C;
+  --warn-bg: #FBF0DC;
+  --bubble: #E4EDF9;
+  --rim: #B8CDEA;
+  --led: #6E9BE0;
+  --chart-1: #3F6DB5;
+  --chart-2: #C27A22;
+}
+
+.dark {
+  --bg: #0D1320;
+  --surface: #141C2B;
+  --raised: #1A2436;
+  --ink: #E6ECF4;
+  --muted: #9AA7BC;
+  --line: #27324A;
+  --accent: #8DB0E6;
+  --accent-ink: #0D1320;
+  --tint: #1C2A42;
+  --rail: #090E18;
+  --rail-ink: #C3CEDF;
+  --ok: #6CCB9C;
+  --ok-bg: #15302A;
+  --warn: #E9B865;
+  --warn-bg: #2E2518;
+  --bubble: #1F2E49;
+  --rim: rgba(169, 200, 255, 0.45);
+  --led: #CFE0FF;
+  --chart-1: #5A88D2;
+  --chart-2: #BC8035;
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-tint: var(--tint);
+  --color-rail: var(--rail);
+  --color-rail-ink: var(--rail-ink);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-bubble: var(--bubble);
+  --color-rim: var(--rim);
+  --color-led: var(--led);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
 }
 
 body {
-  background-color: var(--tint);
+  background-color: var(--bg);
   color: var(--ink);
   font-family: 'PlusJakartaSans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
 }
 
 .tabular-nums {
-  font-family: 'PlusJakartaSans', sans-serif;
   font-variant-numeric: tabular-nums;
   -webkit-font-feature-settings: "tnum" 1;
   font-feature-settings: "tnum" 1;
+}
+
+/* Panel Draf Cermin LED */
+.cermin-led-panel {
+  position: relative;
+  border-radius: 28px;
+  border: 1px solid var(--rim);
+  background-color: var(--surface);
+  box-shadow: none;
+}
+
+.led-line {
+  position: absolute;
+  top: 0;
+  left: 48px;
+  right: 48px;
+  height: 2px;
+  background-color: var(--led);
+  box-shadow: 0 0 14px var(--led);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.led-pulse {
+  animation: ledPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ledPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 16px var(--led);
+  }
+  50% {
+    opacity: 0.3;
+    box-shadow: 0 0 4px var(--led);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .led-pulse {
+    animation: none;
+    opacity: 1;
+  }
 }
