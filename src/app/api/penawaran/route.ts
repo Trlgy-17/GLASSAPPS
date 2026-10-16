@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   const priceBookId = pbRow?.id || '00000000-0000-0000-0000-000000000001';
 
   const body = await req.json();
-  const { lead_id, penawaran_input, nama_klien, kota_klien, kanal, is_unduh_pdf } = body;
+  const { lead_id, penawaran_input, nama_klien, kota_klien, kode_wilayah, kanal, is_unduh_pdf } = body;
   const initialStatus = is_unduh_pdf ? 'terkirim' : 'draf';
   const terkirimAt = is_unduh_pdf ? new Date().toISOString() : null;
 
@@ -151,11 +151,26 @@ export async function POST(req: NextRequest) {
       ringkasan_json: {
         total_unit: kalkulasi.total_unit,
         subtotal_cermin: kalkulasi.subtotal_cermin,
-        ongkir: kalkulasi.ongkir,
-        pasang: kalkulasi.pasang,
+        ongkir: {
+          list: kalkulasi.ongkir.list,
+          deal: kalkulasi.ongkir.deal,
+          potongan: kalkulasi.ongkir.potongan,
+          status: kalkulasi.ongkir.status,
+          alasan: kalkulasi.ongkir.alasan,
+          di_bawah_net: kalkulasi.ongkir.di_bawah_net,
+        },
+        pasang: {
+          list: kalkulasi.pasang.list,
+          deal: kalkulasi.pasang.deal,
+          potongan: kalkulasi.pasang.potongan,
+          status: kalkulasi.pasang.status,
+          alasan: kalkulasi.pasang.alasan,
+        },
         total: kalkulasi.total,
         dp_50: kalkulasi.dp_50,
         pelunasan: kalkulasi.pelunasan,
+        kota_klien: (kota_klien || 'Bandung').trim(),
+        kode_wilayah: kode_wilayah || penawaran_input?.kode_wilayah || null,
       },
       status: initialStatus,
       kanal: kanal || 'whatsapp',

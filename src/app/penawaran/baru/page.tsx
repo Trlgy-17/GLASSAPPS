@@ -1,10 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { defaultAdminPriceBookV1 } from '@/lib/pricing/admin-price-book';
 import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { parseRupiah, formatRupiah } from '@/lib/pricing/format-rupiah';
+import { detectZonaByKota } from '@/lib/wilayah/kota';
 import { CerminItemInput, PenawaranInput, PriceBookData, PriceBookDataAdmin } from '@/types/pricing';
+
+// Lazy load CityCombobox agar bundle JS awal tetap kecil (<= 200 KB)
+const CityCombobox = dynamic(
+  () => import('@/components/ui/city-combobox').then((mod) => mod.CityCombobox),
+  { ssr: false }
+);
 import {
   Plus,
   Trash2,
@@ -51,6 +59,8 @@ export default function PenawaranPage() {
   const [nomorPenawaran] = useState('PG-Q-2610-0001');
   const [namaKlien, setNamaKlien] = useState('');
   const [kotaKlien, setKotaKlien] = useState('Surabaya');
+  const [kodeWilayah, setKodeWilayah] = useState<string | undefined>('35.78');
+  const [isCustomKota, setIsCustomKota] = useState(false);
   const [segmen, setSegmen] = useState<'B2C' | 'B2B'>('B2C');
   const [zona, setZona] = useState<'dalam_kota' | 'luar_kota'>('luar_kota');
   const [perluPasang, setPerluPasang] = useState(false);
@@ -248,11 +258,13 @@ export default function PenawaranPage() {
         body: JSON.stringify({
           nama_klien: namaKlien.trim() || 'Klien Putra Glass',
           kota_klien: kotaKlien.trim() || 'Bandung',
+          kode_wilayah: kodeWilayah,
           kanal: 'whatsapp',
           is_unduh_pdf: isUnduh,
           penawaran_input: {
             segmen,
             zona,
+            kode_wilayah: kodeWilayah,
             perlu_pasang: perluPasang,
             ongkir_deal: kalkulasi.ongkir.deal,
             pasang_deal: kalkulasi.pasang.deal,
@@ -394,13 +406,24 @@ export default function PenawaranPage() {
                 <label className="block text-xs font-semibold text-muted mb-1.5">
                   Kota Tujuan
                 </label>
-                <input
-                  type="text"
+                <CityCombobox
                   value={kotaKlien}
-                  onChange={(e) => setKotaKlien(e.target.value)}
-                  placeholder="contoh: Surabaya"
-                  className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent"
+                  kodeWilayah={kodeWilayah}
+                  onChange={({ nama, kode, isCustom }) => {
+                    setKotaKlien(nama);
+                    setKodeWilayah(kode);
+                    setIsCustomKota(Boolean(isCustom));
+                    const autoZona = detectZonaByKota(kode || nama);
+                    setZona(autoZona);
+                    setOngkirInputText('');
+                  }}
+                  placeholder="Ketik atau pilih kabupaten/kota..."
                 />
+                {isCustomKota && (
+                  <p className="text-[11px] text-warn font-medium mt-1">
+                    Kota tidak dikenal di master Kemendagri, ongkir isi manual.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -408,6 +431,7 @@ export default function PenawaranPage() {
                   Zona Pengiriman
                 </label>
                 <select
+                  id="select-zona-pengiriman"
                   value={zona}
                   onChange={(e) => {
                     const newZona = e.target.value as 'dalam_kota' | 'luar_kota';
@@ -954,38 +978,57 @@ export default function PenawaranPage() {
                     <span className="font-extrabold text-ink tabular-nums text-sm">{formatRupiah(kalkulasi.ongkir.deal)}</span>
                   </div>
 
-                  {/* Toggle Cepat Zona Pengiriman */}
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-raised rounded-xl border border-line text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setZona('dalam_kota');
-                        setOngkirInputText('');
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
-                        isDalamKota
-                          ? 'bg-surface text-accent font-bold shadow-xs'
-                          : 'text-muted hover:text-ink'
-                      }`}
-                    >
-                      Dalam kota
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setZona('luar_kota');
-                        setOngkirInputText('');
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
-                        !isDalamKota
-                          ? 'bg-surface text-accent font-bold shadow-xs'
-                          : 'text-muted hover:text-ink'
-                      }`}
-                    >
-                      Luar kota
-                    </button>
-                  </div>
 
+                  {/* Toggle Cepat Zona Pengiriman */}
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-raised rounded-xl border border-line text-xs font-semibold">
+                      <button
+                        type="button"
+                        id="btn-zona-dalam-kota"
+                        onClick={() => {
+                          setZona('dalam_kota');
+                          setOngkirInputText('');
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
+                          isDalamKota
+                            ? 'bg-surface text-accent font-bold shadow-xs'
+                            : 'text-muted hover:text-ink'
+                        }`}
+                      >
+                        Dalam kota
+                      </button>
+                      <button
+                        type="button"
+                        id="btn-zona-luar-kota"
+                        onClick={() => {
+                          setZona('luar_kota');
+                          setOngkirInputText('');
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
+                          !isDalamKota
+                            ? 'bg-surface text-accent font-bold shadow-xs'
+                            : 'text-muted hover:text-ink'
+                        }`}
+                      >
+                        Luar kota
+                      </button>
+                    </div>
+
+                    {/* Opsi khusus Dalam Kota: Ambil Sendiri di Workshop (Rp0) */}
+                    {isDalamKota && (
+                      <button
+                        type="button"
+                        onClick={() => setOngkirInputText('0')}
+                        className={`w-full py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition text-center cursor-pointer ${
+                          ongkirDealVal === 0
+                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                            : 'border-line/60 bg-raised/50 text-muted hover:text-ink'
+                        }`}
+                      >
+                        Ambil sendiri di workshop (Rp0)
+                      </button>
+                    )}
+                  </div>
                   <input
                     id="input-ongkir-deal"
                     type="text"

@@ -1,8 +1,16 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { matchKotaFromText, WilayahKota } from '@/lib/wilayah/kota';
+
+// Lazy load CityCombobox agar bundle JS awal tetap kecil
+const CityCombobox = dynamic(
+  () => import('@/components/ui/city-combobox').then((mod) => mod.CityCombobox),
+  { ssr: false }
+);
 import {
   validateRupiahInDraft,
   validateMarketplaceGuards,
@@ -106,6 +114,7 @@ export default function BalasChatPage() {
   const [showConfirmSent, setShowConfirmSent] = useState(false);
   const [isMarkingSent, setIsMarkingSent] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
+  const [cityCandidates, setCityCandidates] = useState<WilayahKota[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -264,6 +273,21 @@ export default function BalasChatPage() {
           setActualModel(json.model_used || json.draf?.model_used || null);
           if (json.extraction?.platform) {
             setKanal(json.extraction.platform);
+          }
+
+          // Otomatis cocokkan kota hasil baca AI ke master Kemendagri
+          if (json.extraction?.kota) {
+            const match = matchKotaFromText(json.extraction.kota);
+            if (match.matchedKota) {
+              setExtraction((prev) => (prev ? { ...prev, kota: match.matchedKota!.nama } : prev));
+              setCityCandidates([]);
+            } else if (match.candidates.length > 1) {
+              setCityCandidates(match.candidates);
+            } else {
+              setCityCandidates([]);
+            }
+          } else {
+            setCityCandidates([]);
           }
         } else {
           setFriendlyError(
@@ -942,26 +966,59 @@ export default function BalasChatPage() {
                     </button>
                   </div>
 
+                  {/* Konfirmasi Pilihan Kota jika AI tidak yakin (2-3 kandidat) */}
+                  {cityCandidates.length > 0 && !isEditingExtraction && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2 mt-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                        <AlertTriangle className="w-4 h-4 text-warn" />
+                        <span>AI mendeteksi kota &ldquo;{extraction.kota}&rdquo;. Pilih kota yang benar:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {cityCandidates.map((cand) => (
+                          <button
+                            key={cand.kode}
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...extraction, kota: cand.nama };
+                              setExtraction(updated);
+                              setCityCandidates([]);
+                              runPipeline(undefined, undefined, undefined, updated);
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-surface border border-line rounded-lg hover:border-accent hover:text-accent transition cursor-pointer"
+                          >
+                            {cand.nama} <span className="text-[10px] text-muted">({cand.provinsi})</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setCityCandidates([])}
+                          className="px-2 py-1.5 text-xs text-muted hover:text-ink cursor-pointer"
+                        >
+                          Abaikan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Form Ubah Data jika dibuka */}
                   {isEditingExtraction && (
                     <div className="pt-3 border-t border-line space-y-3">
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-xs text-muted mb-1">Nama Klien</label>
                           <input
                             type="text"
                             value={extraction.nama_klien || ''}
                             onChange={(e) => setExtraction({ ...extraction, nama_klien: e.target.value })}
-                            className="w-full text-xs p-2 bg-surface border border-line rounded-lg text-ink"
+                            className="w-full text-xs p-2.5 min-h-[44px] bg-surface border border-line rounded-xl text-ink font-semibold"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-muted mb-1">Kota</label>
-                          <input
-                            type="text"
+                          <label className="block text-xs text-muted mb-1">Kabupaten / Kota</label>
+                          <CityCombobox
                             value={extraction.kota || ''}
-                            onChange={(e) => setExtraction({ ...extraction, kota: e.target.value })}
-                            className="w-full text-xs p-2 bg-surface border border-line rounded-lg text-ink"
+                            onChange={({ nama }) => setExtraction({ ...extraction, kota: nama })}
+                            placeholder="Ketik/pilih kota..."
                           />
                         </div>
                         <div>
@@ -969,7 +1026,7 @@ export default function BalasChatPage() {
                           <select
                             value={kanal}
                             onChange={(e) => setKanal(e.target.value)}
-                            className="w-full text-xs p-2 bg-surface border border-line rounded-lg text-ink"
+                            className="w-full text-xs p-2.5 min-h-[44px] bg-surface border border-line rounded-xl text-ink font-semibold"
                           >
                             <option value="whatsapp">WhatsApp</option>
                             <option value="instagram">Instagram</option>
