@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Hanya admin yang boleh membuat draf balasan' }, { status: 403 });
   }
 
-  const rateLimit = checkAiRateLimit(user.id, 20);
+  const rateLimit = await checkAiRateLimit(user.id, 'draf', 20);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },

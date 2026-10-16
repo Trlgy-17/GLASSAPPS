@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   const durasiAuth = Date.now() - tAuth0;
 
   // Periksa batas request per user (20 request / menit)
-  const rateLimit = checkAiRateLimit(user.id, 20);
+  const rateLimit = await checkAiRateLimit(user.id, 'proses', 20);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },

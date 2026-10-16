@@ -1,6 +1,8 @@
+import { createAdminClient } from '@/lib/supabase/server';
+
 /**
- * In-memory sliding window rate limiter per user ID untuk API AI
- * Membatasi panggilan AI hingga 20 request per menit per user ID
+ * Penyimpanan Rate Limiter AI terdistribusi (tabel public.ai_rate_limits di Supabase)
+ * Memastikan batasan 20 request/menit per user tetap konsisten di multi-instance / serverless deployment.
  */
 interface RateLimitEntry {
   timestamps: number[];
@@ -8,20 +10,7 @@ interface RateLimitEntry {
 
 const userCallBuckets = new Map<string, RateLimitEntry>();
 
-// Bersihkan data lama tiap 5 menit
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const cutoff = Date.now() - 60_000;
-    for (const [userId, entry] of userCallBuckets.entries()) {
-      entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
-      if (entry.timestamps.length === 0) {
-        userCallBuckets.delete(userId);
-      }
-    }
-  }, 5 * 60_000);
-}
-
-export function checkAiRateLimit(
+function checkInMemoryRateLimit(
   userId: string,
   limitPerMinute = 20
 ): { allowed: boolean; remaining: number; retryAfterSec?: number } {
@@ -49,6 +38,35 @@ export function checkAiRateLimit(
     allowed: true,
     remaining: limitPerMinute - entry.timestamps.length,
   };
+}
+
+export async function checkAiRateLimit(
+  userId: string,
+  endpoint = 'balas',
+  limitPerMinute = 20
+): Promise<{ allowed: boolean; remaining: number; retryAfterSec?: number }> {
+  try {
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient.rpc('check_and_record_ai_rate_limit', {
+      p_user_id: userId,
+      p_endpoint: endpoint,
+      p_limit: limitPerMinute,
+      p_window_seconds: 60,
+    });
+
+    if (!error && data && typeof data === 'object') {
+      const resp = data as Record<string, unknown>;
+      return {
+        allowed: Boolean(resp.allowed),
+        remaining: Number(resp.remaining || 0),
+        retryAfterSec: typeof resp.retry_after_sec === 'number' ? resp.retry_after_sec : undefined,
+      };
+    }
+  } catch (err) {
+    console.warn('[RateLimiter] Fallback ke in-memory:', err);
+  }
+
+  return checkInMemoryRateLimit(userId, limitPerMinute);
 }
 
 const ALLOWED_MIME_TYPES: Record<string, true> = {

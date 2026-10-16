@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (userData?.peran !== 'admin') {
     return NextResponse.json({ error: 'Hanya admin yang boleh melakukan ekstraksi chat' }, { status: 403 });
   }
-  const rateLimit = checkAiRateLimit(user.id, 20);
+  const rateLimit = await checkAiRateLimit(user.id, 'ekstrak', 20);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },
