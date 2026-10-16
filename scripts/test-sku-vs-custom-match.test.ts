@@ -77,7 +77,7 @@ describe('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PD
       pastedText: 'Halo saya mau pesan model jadi Rectangle 40x60 ST pakai sensor tangan dan sandblast kirim ke Bandung berapa totalnya?',
       overrideKanal: 'whatsapp',
       priceBook: defaultPriceBookV1,
-      modelName: 'gemini-3.6-flash',
+      modelName: 'gemini-3.5-flash-lite',
       thinkingLevel: ThinkingLevel.MINIMAL,
     });
     const drafText = (aiRes.draf.draf?.[0]?.bubbles || []).join('\n\n');
@@ -139,7 +139,7 @@ describe('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PD
       pastedText: 'Halo mau custom cermin ukuran 60x80 cm paket LED 3 warna premium touch screen kirim ke Bandung berapa ya totalnya?',
       overrideKanal: 'whatsapp',
       priceBook: defaultPriceBookV1,
-      modelName: 'gemini-3.6-flash',
+      modelName: 'gemini-3.5-flash-lite',
       thinkingLevel: ThinkingLevel.MINIMAL,
     });
     const drafText = (aiRes.draf.draf?.[0]?.bubbles || []).join('\n\n');
