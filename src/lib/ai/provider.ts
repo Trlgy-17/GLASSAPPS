@@ -646,7 +646,7 @@ export async function executeUnifiedDraft(params: UnifiedDraftParams): Promise<U
   const t0 = Date.now();
   const ai = getAIClient();
   const candidateModels = params.modelName
-    ? [params.modelName, MODEL_FAST]
+    ? [params.modelName, ...DRAFT_MODELS.filter((m) => m !== params.modelName)]
     : DRAFT_MODELS.filter(isModelAvailable);
   if (candidateModels.length === 0) {
     candidateModels.push(MODEL_FAST);
@@ -779,9 +779,13 @@ ATURAN HARGA MUTLAK:
       if (accumulated.trim().length > 0) {
         break; // Berhasil!
       }
-    } catch (tryErr) {
-      console.warn(`Model ${modelToTry} gagal:`, tryErr);
-      recordModelFailure(modelToTry);
+    } catch (tryErr: unknown) {
+      const errStatus = tryErr && typeof tryErr === 'object' && 'status' in tryErr ? tryErr.status : undefined;
+      const errMsg = tryErr instanceof Error ? tryErr.message : String(tryErr);
+      console.warn(`Model ${modelToTry} gagal:`, errMsg);
+      if (errStatus !== 503) {
+        recordModelFailure(modelToTry);
+      }
       if (modelToTry === candidateModels[candidateModels.length - 1]) {
         throw tryErr;
       }
