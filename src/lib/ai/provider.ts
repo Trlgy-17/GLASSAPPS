@@ -1211,6 +1211,20 @@ Keluarkan HANYA JSON blok DRAFT:
     bagian_tidak_terbaca: [],
     catatan: extractedSpec.catatan || '',
   };
+  await logAICall({
+    model: modelUsed,
+    endpoint: 'unifiedDraft',
+    langkah: 'draf_terpadu',
+    durasi_ms: durasiMs,
+    ms_ttft: ttftMs,
+    status: 'success',
+    metadata: {
+      is_fallback: isFallbackModel,
+      rekening_kosong: isRekeningKosong,
+      perlu_owner: Boolean(draftJson.perlu_owner),
+      angka_tidak_terverifikasi: finalDraftOutput.angka_tidak_terverifikasi,
+    },
+  });
 
   return {
     extraction: finalExtraction,

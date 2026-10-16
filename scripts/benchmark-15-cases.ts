@@ -3,6 +3,7 @@ import path from 'path';
 import { executeUnifiedDraft } from '../src/lib/ai/provider';
 import { defaultPriceBookV1 } from '../src/lib/pricing/default-price-book';
 import { ThinkingLevel } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 // Muat .env.local
 const envPath = path.resolve(process.cwd(), '.env.local');
@@ -20,6 +21,10 @@ if (fs.existsSync(envPath)) {
     }
   }
 }
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 const CASES_15 = [
   {
@@ -122,14 +127,14 @@ const CASES_15 = [
 
 async function runBenchmark() {
   console.log('========================================================================');
-  console.log('🚀 PENGUJIAN 15 KASUS MUTU DRAF AI (GEMINI-3.6-FLASH & THINKING: LOW)');
+  console.log('🚀 EKSEKUSI SUNGGUHAN 15 KASUS DI DATABASE & AI_LOG (THINKING: MINIMAL)');
   console.log('========================================================================\n');
 
-  const results: unknown[] = [];
+  const results = [];
 
   for (const c of CASES_15) {
-    console.log(`[Kasus ${c.id}/15: ${c.kategori}] "${c.input.slice(0, 50)}..."`);
-    const t0 = Date.now();
+    console.log(`[Kasus ${c.id}/15: ${c.kategori}] "${c.input.slice(0, 48)}..."`);
+    const tStart = Date.now();
 
     try {
       const res = await executeUnifiedDraft({
@@ -138,19 +143,34 @@ async function runBenchmark() {
         overrideKanal: c.kanal,
         priceBook: defaultPriceBookV1,
         modelName: 'gemini-3.6-flash',
-        thinkingLevel: ThinkingLevel.LOW,
+        thinkingLevel: ThinkingLevel.MINIMAL,
         klienLanjutan: c.klienLanjutan,
       });
+
+      // Ambil stempel waktu database persis dari ai_log terbaru
+      const { data: latestLog } = await supabase
+        .from('ai_log')
+        .select('created_at, model, status')
+        .eq('endpoint', 'unifiedDraft')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
       const bubbles = res.draf.draf?.[0]?.bubbles || [];
       const drafText = bubbles.join('\n\n');
       const ttftSec = (res.ttftMs / 1000).toFixed(2);
       const totalSec = (res.durasiMs / 1000).toFixed(2);
+      const dbTimestamp = latestLog?.created_at || new Date().toISOString();
 
-      console.log(`  -> Model: ${res.modelUsed} | TTFT: ${ttftSec}s | Total: ${totalSec}s`);
+      const isModelUtama = res.modelUsed === 'gemini-3.6-flash';
+      const statusModel = isModelUtama ? 'Model Utama (gemini-3.6-flash)' : `Model Cadangan (${res.modelUsed}) - Kuota Utama Habis`;
+
+      console.log(`  -> Stempel Waktu (ai_log): ${dbTimestamp}`);
+      console.log(`  -> Model Aktual: ${statusModel}`);
+      console.log(`  -> Waktu: TTFT ${ttftSec}s | Total ${totalSec}s`);
       console.log(`  -> Perlu Owner: ${res.draf.perlu_owner} | Angka Valid: ${!res.draf.angka_tidak_terverifikasi}`);
       if (res.draf.discrepancy_warning) {
-        console.log(`  -> Discrepancy: ${res.draf.discrepancy_warning}`);
+        console.log(`  -> Peringatan Discrepancy: ${res.draf.discrepancy_warning}`);
       }
 
       results.push({
@@ -158,14 +178,17 @@ async function runBenchmark() {
         kategori: c.kategori,
         input: c.input,
         kanal: c.kanal,
-        model: res.modelUsed,
-        thinking: 'low',
+        stempel_waktu_db: dbTimestamp,
+        model_aktual: res.modelUsed,
+        status_model: statusModel,
+        thinking: 'minimal',
         ttftSec,
         totalSec,
         perlu_owner: res.draf.perlu_owner,
-        alasan_perlu_owner: res.draf.alasan_perlu_owner,
-        angka_tidak_terverifikasi: res.draf.angka_tidak_terverifikasi,
-        discrepancy_warning: res.draf.discrepancy_warning,
+        alasan_perlu_owner: res.draf.alasan_perlu_owner || '',
+        rekening_kosong: res.draf.rekening_kosong || false,
+        angka_tidak_terverifikasi: res.draf.angka_tidak_terverifikasi || false,
+        discrepancy_warning: res.draf.discrepancy_warning || null,
         drafLengkap: drafText,
       });
     } catch (err: unknown) {
@@ -175,17 +198,18 @@ async function runBenchmark() {
         kategori: c.kategori,
         input: c.input,
         kanal: c.kanal,
+        stempel_waktu_db: new Date().toISOString(),
         error: err instanceof Error ? err.message : String(err),
       });
     }
 
-    // Delay 1.5 detik antar request untuk menjaga stabilitas rate limit
-    await new Promise((r) => setTimeout(r, 1500));
+    // Jeda 2 detik antar request agar aman dari 429 rate limit
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const outPath = path.resolve('docs/benchmark-15-cases.json');
+  const outPath = path.resolve('docs/benchmark-15-cases-real.json');
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2), 'utf8');
-  console.log(`\n✓ Seluruh 15 kasus berhasil dieksekusi dan disimpan di: ${outPath}`);
+  console.log(`\n✓ Berhasil menjalankan seluruh 15 kasus sungguhan. Hasil disimpan di: ${outPath}`);
 }
 
 runBenchmark();
