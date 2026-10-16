@@ -57,9 +57,10 @@ export async function POST(req: NextRequest) {
     zona: body.zona || 'dalam_kota',
     perlu_pasang: Boolean(body.perlu_pasang),
     ongkir_deal: body.ongkir_deal,
+    ongkir_aktual: body.ongkir_aktual,
+    alasan_potongan_ongkir: body.alasan_ongkir,
     pasang_deal: body.pasang_deal,
     konfirmasi_owner: {
-      ongkir: body.alasan_ongkir ? { sudah_dikonfirmasi: true, alasan: body.alasan_ongkir } : undefined,
       pasang: body.alasan_pasang ? { sudah_dikonfirmasi: true, alasan: body.alasan_pasang } : undefined,
     },
     items: body.items,
@@ -181,14 +182,14 @@ export async function POST(req: NextRequest) {
     alasan: is_unduh_pdf ? 'Unduh PDF otomatis menandai terkirim' : 'Simpan draf awal',
     oleh: user.id,
   });
-  if (kalkulasi.ongkir.dikonfirmasi_owner) {
+  if (kalkulasi.ongkir.potongan > 0) {
     await adminClient.from('audit_log').insert({
       aktor: user.id,
       aksi: 'KONFIRMASI_POTONGAN',
       objek: `penawaran:${quoteNumber}:ongkir`,
       sebelum: { nilai_list: kalkulasi.ongkir.list },
       sesudah: { nilai_deal: kalkulasi.ongkir.deal },
-      alasan: kalkulasi.ongkir.alasan || 'Konfirmasi langsung owner',
+      alasan: `${kalkulasi.ongkir.di_bawah_net ? '[DI BAWAH NET] ' : ''}${kalkulasi.ongkir.alasan || 'Potongan ongkir wewenang admin'}`,
     });
   }
 

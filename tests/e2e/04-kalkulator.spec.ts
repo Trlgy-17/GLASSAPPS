@@ -242,13 +242,13 @@ test.describe('A.4 Kalkulator Penawaran - 20 Kombinasi Rumus & Input Ekstrim', (
     },
     // 16. Ongkir Deal Dibagi 2 (Rp375.000) dengan konfirmasi owner
     {
-      nama: '16. Ongkir Bandung Dibagi 2 (375k) Konfirmasi Owner',
+      nama: '16. Ongkir Bandung Dibagi 2 (375k) Wajib Alasan Admin',
       input: {
         segmen: 'B2C',
         zona: 'dalam_kota',
         perlu_pasang: false,
         ongkir_deal: 375_000,
-        konfirmasi_owner: { ongkir: { sudah_dikonfirmasi: true, alasan: 'Promo langganan' } },
+        alasan_potongan_ongkir: 'Promo langganan',
         items: [{ bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, lampu: '3_warna', kontrol: 'touchscreen', qty: 1 }],
       },
       expectedTotal: 840_000 + 375_000,
@@ -370,32 +370,38 @@ test.describe('A.4 Kalkulator Penawaran - 20 Kombinasi Rumus & Input Ekstrim', (
     await expect(labelTotal).toBeVisible();
   });
 
-  test('Uji UI: Ongkir dibagi 2 wajib centang konfirmasi owner dan mengisi alasan', async ({ page }) => {
+  test('Uji UI: Ongkir dibagi 2 (Rp650.000) boleh oleh admin tanpa izin owner, wajib isi alasan potongan', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/penawaran/baru');
 
     const inputOngkirDeal = page.locator('#input-ongkir-deal');
-    // Masukkan ongkir deal di bawah batas admin (misal Rp650.000 / dibagi 2 luar kota)
+    // Masukkan ongkir deal di bawah list (misal Rp650.000 / dibagi 2 luar kota)
     await inputOngkirDeal.fill('650000');
     await inputOngkirDeal.blur();
 
-    // Checkbox konfirmasi owner harus muncul otomatis
+    // Checkbox konfirmasi owner ongkir HARUS TIDAK ADA (dihapus sesuai aturan baru)
     const checkKonfirmasi = page.locator('#check-konfirmasi-ongkir');
-    await expect(checkKonfirmasi).toBeVisible();
+    await expect(checkKonfirmasi).toHaveCount(0);
 
-    // Tombol Unduh PDF harus nonaktif jika belum dicentang & belum ada alasan
+    // Field alasan potongan ongkir wajib muncul
+    const inputAlasan = page.locator('#input-alasan-ongkir');
+    await expect(inputAlasan).toBeVisible();
+
+    // Tombol Unduh PDF harus nonaktif jika belum ada alasan
     const btnDownload = page.locator('#btn-download-pdf');
     await expect(btnDownload).toBeDisabled();
 
-    // Centang konfirmasi owner
-    await checkKonfirmasi.check();
-
-    // Input alasan wajib muncul
-    const inputAlasan = page.locator('#input-alasan-ongkir');
-    await expect(inputAlasan).toBeVisible();
-    await inputAlasan.fill('Disetujui owner karena langganan hotel');
+    // Isi alasan potongan ongkir
+    await inputAlasan.fill('Bagi dua pengiriman luar kota disetujui admin');
 
     // Tombol Unduh PDF harus menjadi aktif
     await expect(btnDownload).toBeEnabled();
+
+    // Uji penolakan di bawah 50%: masukkan Rp600.000
+    await inputOngkirDeal.fill('600000');
+    await page.click('#label-total-penawaran');
+    const pesanDitolak = page.locator('#error-ongkir-ditolak');
+    await expect(pesanDitolak).toBeVisible({ timeout: 5000 });
+    await expect(pesanDitolak).toContainText('Ongkir maksimal dibagi dua, klien bayar minimal Rp650.000.');
   });
 });

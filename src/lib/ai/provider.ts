@@ -1025,7 +1025,9 @@ ATURAN HARGA MUTLAK:
 
   // Ekstrak blok DRAFT
   let draftJson: any = null;
-  const draftMatch = accumulated.match(/<!--DRAFT-->([\s\S]*?)<!--\/DRAFT-->/);
+  const draftMatch =
+    accumulated.match(/<!--\s*DRAFT\s*-->([\s\S]*?)<!--\s*\/DRAFT\s*-->/i) ||
+    accumulated.match(/```json\s*<!--\s*DRAFT\s*-->([\s\S]*?)<!--\s*\/DRAFT\s*-->/i);
   if (draftMatch) {
     try {
       draftJson = JSON.parse(draftMatch[1].trim());
@@ -1034,14 +1036,24 @@ ATURAN HARGA MUTLAK:
 
   if (!draftJson) {
     try {
-      const cleanJson = accumulated.replace(/<!--[\s\S]*?-->/g, '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const cleanJson = accumulated
+        .replace(/<!--\s*SPEC\s*-->[\s\S]*?<!--\s*\/SPEC\s*-->/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
       draftJson = JSON.parse(cleanJson);
     } catch {
+      const cleanFallbackText = accumulated
+        .replace(/<!--\s*SPEC\s*-->[\s\S]*?<!--\s*\/SPEC\s*-->/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/```[a-z]*[\s\S]*?```/gi, '')
+        .trim();
       draftJson = {
         ringkasan_situasi: 'Draf respon klien',
         tahap: 'kualifikasi',
         keberatan: [],
-        draf: [{ label: 'Dorong DP', bubbles: [accumulated.replace(/<!--[\s\S]*?-->/g, '').trim()] }],
+        draf: [{ label: 'Dorong DP', bubbles: [cleanFallbackText || 'Halo Kak, ada yang bisa kami bantu terkait cermin Putra Glass?'] }],
       };
     }
   }

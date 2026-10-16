@@ -54,20 +54,16 @@ export async function GET() {
   const safeLogistik = {
     kirim_bandung: {
       list: priceBook.logistik.kirim_bandung.list,
-      batas_admin: priceBook.logistik.kirim_bandung.batas_admin,
     },
     kirim_luar_kota: {
       list: priceBook.logistik.kirim_luar_kota.list,
-      batas_admin: priceBook.logistik.kirim_luar_kota.batas_admin,
       skema_50_aktif: priceBook.logistik.kirim_luar_kota.skema_50_aktif,
     },
     pasang_bandung: {
       list: priceBook.logistik.pasang_bandung.list,
-      batas_admin: priceBook.logistik.pasang_bandung.batas_admin,
     },
     pasang_luar_kota: {
       list: priceBook.logistik.pasang_luar_kota.list,
-      batas_admin: priceBook.logistik.pasang_luar_kota.batas_admin,
     },
     kota_dalam_kota: priceBook.logistik.kota_dalam_kota,
   };

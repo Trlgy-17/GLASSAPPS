@@ -67,19 +67,24 @@ export default function PenawaranPage() {
   const batasPasangAdmin = batasPasang?.batas_admin || (isDalamKota ? 500000 : 1000000);
   const batasPasangMin = isDalamKota ? 300000 : 800000;
   // Nilai Deal Ongkir
-  const [ongkirDealVal, setOngkirDealVal] = useState<number | undefined>(1150000);
   const [ongkirInputText, setOngkirInputText] = useState('');
-  const [isOngkirFocused, setIsOngkirFocused] = useState(false);
   const [ongkirKonfirmasiOwner, setOngkirKonfirmasiOwner] = useState(false);
   const [ongkirAlasan, setOngkirAlasan] = useState('');
 
+  const ongkirDealVal = useMemo(() => {
+    if (!ongkirInputText.trim()) return undefined;
+    return parseRupiah(ongkirInputText);
+  }, [ongkirInputText]);
+
   // Nilai Deal Pasang
-  const [pasangDealVal, setPasangDealVal] = useState<number | undefined>(undefined);
   const [pasangInputText, setPasangInputText] = useState('');
-  const [isPasangFocused, setIsPasangFocused] = useState(false);
   const [pasangKonfirmasiOwner, setPasangKonfirmasiOwner] = useState(false);
   const [pasangAlasan, setPasangAlasan] = useState('');
 
+  const pasangDealVal = useMemo(() => {
+    if (!pasangInputText.trim()) return undefined;
+    return parseRupiah(pasangInputText);
+  }, [pasangInputText]);
   // Items State
   const [items, setItems] = useState<LocalItemState[]>([
     {
@@ -130,6 +135,7 @@ export default function PenawaranPage() {
           ongkir: ongkirKonfirmasiOwner ? { sudah_dikonfirmasi: true, alasan: ongkirAlasan } : undefined,
           pasang: pasangKonfirmasiOwner ? { sudah_dikonfirmasi: true, alasan: pasangAlasan } : undefined,
         },
+        alasan_potongan_ongkir: ongkirAlasan.trim(),
         ongkir_deal: ongkirDealVal,
         pasang_deal: pasangDealVal,
         items: items.map((it) => {
@@ -208,33 +214,11 @@ export default function PenawaranPage() {
 
   const isPdfDownloadEnabled = Boolean(
     kalkulasi &&
-      kalkulasi.ongkir.status !== 'error_merah' &&
-      kalkulasi.pasang.status !== 'error_merah' &&
-      (!kalkulasi.ongkir.perlu_konfirmasi || (ongkirKonfirmasiOwner && ongkirAlasan.trim())) &&
-      (!kalkulasi.pasang.perlu_konfirmasi || (pasangKonfirmasiOwner && pasangAlasan.trim()))
+      kalkulasi.is_valid_untuk_pdf &&
+      kalkulasi.errors.length === 0
   );
 
-  const handleOngkirFocus = () => {
-    setIsOngkirFocused(true);
-    setOngkirInputText(ongkirDealVal !== undefined ? ongkirDealVal.toString() : '');
-  };
 
-  const handleOngkirBlur = () => {
-    setIsOngkirFocused(false);
-    const parsed = parseRupiah(ongkirInputText);
-    setOngkirDealVal(parsed !== undefined ? parsed : undefined);
-  };
-
-  const handlePasangFocus = () => {
-    setIsPasangFocused(true);
-    setPasangInputText(pasangDealVal !== undefined ? pasangDealVal.toString() : '');
-  };
-
-  const handlePasangBlur = () => {
-    setIsPasangFocused(false);
-    const parsed = parseRupiah(pasangInputText);
-    setPasangDealVal(parsed !== undefined ? parsed : undefined);
-  };
 
   const handleCopyRingkasanWa = () => {
     if (!kalkulasi) return;
@@ -273,9 +257,9 @@ export default function PenawaranPage() {
             ongkir_deal: kalkulasi.ongkir.deal,
             pasang_deal: kalkulasi.pasang.deal,
             konfirmasi_owner: {
-              ongkir: ongkirKonfirmasiOwner && ongkirAlasan.trim() ? { sudah_dikonfirmasi: true, alasan: ongkirAlasan.trim() } : undefined,
               pasang: pasangKonfirmasiOwner && pasangAlasan.trim() ? { sudah_dikonfirmasi: true, alasan: pasangAlasan.trim() } : undefined,
             },
+            alasan_potongan_ongkir: ongkirAlasan.trim(),
             items: items.map((it) => {
               const rawP = Number(it.panjang_cm);
               const rawL = Number(it.lebar_cm);
@@ -428,13 +412,12 @@ export default function PenawaranPage() {
                   onChange={(e) => {
                     const newZona = e.target.value as 'dalam_kota' | 'luar_kota';
                     setZona(newZona);
-                    setOngkirDealVal(newZona === 'dalam_kota' ? 500000 : 1150000);
                     setOngkirInputText('');
                   }}
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
-                  <option value="luar_kota">Luar Kota (Packing Kayu · List: Rp1.300.000 · Net Admin: Rp1.150.000)</option>
-                  <option value="dalam_kota">Bandung Raya (List: Rp750.000 · Net Admin: Rp500.000)</option>
+                  <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
+                  <option value="dalam_kota">Bandung Raya (List: Rp750.000)</option>
                 </select>
               </div>
 
@@ -963,7 +946,6 @@ export default function PenawaranPage() {
                   <span className="font-semibold text-ink tabular-nums">{formatRupiah(kalkulasi.subtotal_cermin)}</span>
                 </div>
 
-                {/* Ongkir Deal Input */}
                 <div className="space-y-2 pt-2 border-t border-line/40">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-bold text-ink flex items-center gap-1.5">
@@ -978,110 +960,67 @@ export default function PenawaranPage() {
                       type="button"
                       onClick={() => {
                         setZona('dalam_kota');
-                        setOngkirDealVal(500000);
                         setOngkirInputText('');
                       }}
-                      className={`px-2 py-1.5 rounded-lg transition cursor-pointer text-center text-[11px] ${
+                      className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
                         isDalamKota
                           ? 'bg-surface text-accent font-bold shadow-xs'
                           : 'text-muted hover:text-ink'
                       }`}
                     >
-                      Dalam Kota (Net 500k)
+                      Dalam kota
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         setZona('luar_kota');
-                        setOngkirDealVal(1150000);
                         setOngkirInputText('');
                       }}
-                      className={`px-2 py-1.5 rounded-lg transition cursor-pointer text-center text-[11px] ${
+                      className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
                         !isDalamKota
                           ? 'bg-surface text-accent font-bold shadow-xs'
                           : 'text-muted hover:text-ink'
                       }`}
                     >
-                      Luar Kota (Net 1.15jt)
-                    </button>
-                  </div>
-
-                  {/* Pilihan Cepat: Harga List vs Net Admin */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOngkirDealVal(ongkirListPrice);
-                        setOngkirInputText('');
-                      }}
-                      className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition cursor-pointer ${
-                        kalkulasi.ongkir.deal === ongkirListPrice
-                          ? 'border-accent bg-tint text-accent font-bold'
-                          : 'border-line bg-raised text-muted hover:bg-surface'
-                      }`}
-                    >
-                      List: {formatRupiah(ongkirListPrice)}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOngkirDealVal(batasOngkirAdmin);
-                        setOngkirInputText('');
-                      }}
-                      className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition cursor-pointer ${
-                        kalkulasi.ongkir.deal === batasOngkirAdmin
-                          ? 'border-accent bg-tint text-accent font-bold'
-                          : 'border-line bg-raised text-muted hover:bg-surface'
-                      }`}
-                    >
-                      Net: {formatRupiah(batasOngkirAdmin)}
+                      Luar kota
                     </button>
                   </div>
 
                   <input
                     id="input-ongkir-deal"
                     type="text"
-                    value={isOngkirFocused ? ongkirInputText : formatRupiah(kalkulasi.ongkir.deal)}
-                    onFocus={handleOngkirFocus}
-                    onBlur={handleOngkirBlur}
+                    value={ongkirInputText}
                     onChange={(e) => setOngkirInputText(e.target.value)}
-                    placeholder={`Ketik nominal deal manual...`}
+                    placeholder={`Ketik nominal deal pengiriman (list: ${formatRupiah(ongkirListPrice)})...`}
                     className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums font-semibold"
                   />
-                  <div className="flex items-center justify-between text-[11px] text-muted font-medium">
-                    <span>
-                      {isDalamKota ? 'DALAM KOTA = 750.000 NET DI 500 AJA' : 'LUAR KOTA = 1.300.000 NET DI 1.150.000'}
-                    </span>
-                    <span>Floor: {formatRupiah(batasOngkirMin)}</span>
+
+                  <div className="flex items-center justify-between text-[11px] text-muted">
+                    <span>Net: {formatRupiah(isDalamKota ? 500000 : 1150000)}</span>
+                    <span>Minimal (dibagi dua): {formatRupiah(batasOngkirMin)}</span>
                   </div>
-                  {kalkulasi.ongkir.status === 'error_merah' && (
-                    <p className="text-xs text-warn font-semibold mt-1">
-                      Minimal {formatRupiah(batasOngkirMin)} (ongkir maksimal dibagi 2)
+
+                  {/* Level 3: Ditolak (< 50%) */}
+                  {kalkulasi.ongkir.wewenang === 'ditolak' && (
+                    <p id="error-ongkir-ditolak" className="text-xs text-warn font-semibold mt-1">
+                      Ongkir maksimal dibagi dua, klien bayar minimal {formatRupiah(batasOngkirMin)}.
                     </p>
                   )}
 
-                  {kalkulasi.ongkir.perlu_konfirmasi && (
-                    <div className="p-3 bg-tint border border-line rounded-xl space-y-2 mt-2">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer">
-                        <input
-                          type="checkbox"
-                          id="check-konfirmasi-ongkir"
-                          checked={ongkirKonfirmasiOwner}
-                          onChange={(e) => setOngkirKonfirmasiOwner(e.target.checked)}
-                          className="w-4 h-4 rounded text-accent"
-                        />
-                        <span>Konfirmasi persetujuan owner</span>
-                      </label>
-                      {ongkirKonfirmasiOwner && (
-                        <input
-                          type="text"
-                          id="input-alasan-ongkir"
-                          value={ongkirAlasan}
-                          onChange={(e) => setOngkirAlasan(e.target.value)}
-                          placeholder="Alasan potongan (wajib diisi)"
-                          className="w-full text-xs px-2.5 py-1.5 min-h-[36px] border border-line rounded-lg bg-surface text-ink"
-                        />
-                      )}
+                  {/* Level 2: Di bawah list sampai 50% (Boleh oleh admin, wajib isi alasan singkat) */}
+                  {kalkulasi.ongkir.wewenang === 'perlu_alasan' && (
+                    <div className="p-3 bg-raised border border-line rounded-xl space-y-1.5 mt-2">
+                      <p className="text-xs font-semibold text-ink">
+                        Alasan potongan ongkir (wajib diisi):
+                      </p>
+                      <input
+                        type="text"
+                        id="input-alasan-ongkir"
+                        value={ongkirAlasan}
+                        onChange={(e) => setOngkirAlasan(e.target.value)}
+                        placeholder="Alasan potongan (misal: negosiasi/bagi dua)"
+                        className="w-full text-xs px-2.5 py-1.5 min-h-[36px] border border-line rounded-lg bg-surface text-ink"
+                      />
                     </div>
                   )}
                 </div>
@@ -1119,7 +1058,7 @@ export default function PenawaranPage() {
                       checked={perluPasang}
                       onChange={(e) => {
                         setPerluPasang(e.target.checked);
-                        setPasangDealVal(undefined);
+                        setPasangInputText('');
                       }}
                       className="w-4 h-4 rounded text-accent"
                     />

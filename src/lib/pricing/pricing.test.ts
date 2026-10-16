@@ -706,6 +706,7 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
         items: [baseItem],
         zona: 'luar_kota',
         ongkir_deal: 1_150_000,
+        alasan_potongan_ongkir: 'Diskon wewenang admin',
         perlu_pasang: false,
         segmen: 'B2C',
       },
@@ -721,22 +722,16 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
         items: [baseItem],
         zona: 'luar_kota',
         ongkir_deal: 900_000,
+        alasan_potongan_ongkir: 'Promo proyek langganan',
         perlu_pasang: false,
         segmen: 'B2C',
-        konfirmasi_owner: {
-          ongkir: {
-            sudah_dikonfirmasi: true,
-            alasan: 'Promo proyek langganan',
-          },
-        },
       },
       defaultPriceBookV1
     );
     expect(res900Ok.ongkir.deal).toBe(900_000);
     expect(res900Ok.ongkir.status).toBe('ok');
-    expect(res900Ok.ongkir.dikonfirmasi_owner).toBe(true);
+    expect(res900Ok.ongkir.wewenang).toBe('perlu_alasan');
     expect(res900Ok.is_valid_untuk_pdf).toBe(true);
-
     // 15c. Ongkir 900.000 TANPA konfirmasi (simpan ditolak / is_valid_untuk_pdf: false, total tetap tampil!)
     const res900NoConfirm = hitungPenawaran(
       {
@@ -749,33 +744,28 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
       defaultPriceBookV1
     );
     expect(res900NoConfirm.ongkir.deal).toBe(900_000);
-    expect(res900NoConfirm.ongkir.status).toBe('warning_kuning');
-    expect(res900NoConfirm.ongkir.pesan).toBe('Di bawah batas admin. Konfirmasi owner?');
+    expect(res900NoConfirm.ongkir.wewenang).toBe('perlu_alasan');
     expect(res900NoConfirm.is_valid_untuk_pdf).toBe(false);
     expect(res900NoConfirm.total).toBe(840_000 + 900_000); // Total tetap dihitung!
 
-    // 15d. Ongkir 650.000 + konfirmasi (lolos - tepat di batas owner 50%)
+    // 15d. Ongkir 650.000 + konfirmasi (lolos - tepat di batas 50%)
     const res650Ok = hitungPenawaran(
       {
         items: [baseItem],
         zona: 'luar_kota',
         ongkir_deal: 650_000,
+        alasan_potongan_ongkir: 'Ongkir maksimal dibagi 2 disetujui admin',
         perlu_pasang: false,
         segmen: 'B2C',
-        konfirmasi_owner: {
-          ongkir: {
-            sudah_dikonfirmasi: true,
-            alasan: 'Ongkir maksimal dibagi 2 disetujui owner',
-          },
-        },
       },
       defaultPriceBookV1
     );
     expect(res650Ok.ongkir.deal).toBe(650_000);
     expect(res650Ok.ongkir.status).toBe('ok');
+    expect(res650Ok.ongkir.wewenang).toBe('perlu_alasan');
     expect(res650Ok.is_valid_untuk_pdf).toBe(true);
 
-    // 15e. Ongkir 600.000 (ditolak / status merah, batas owner 650.000)
+    // 15e. Ongkir 600.000 (ditolak / status merah di bawah 50%)
     const res600Error = hitungPenawaran(
       {
         items: [baseItem],
@@ -788,9 +778,127 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     );
     expect(res600Error.ongkir.deal).toBe(600_000);
     expect(res600Error.ongkir.status).toBe('error_merah');
-    expect(res600Error.ongkir.pesan).toContain('Minimal Rp650.000 (ongkir maks. dibagi 2)');
-    expect(res600Error.ongkir.batas_owner).toBe(650_000);
+    expect(res600Error.ongkir.wewenang).toBe('ditolak');
+    expect(res600Error.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp650.000.');
     expect(res600Error.is_valid_untuk_pdf).toBe(false);
-    expect(res600Error.total).toBe(840_000 + 600_000); // Total tetap dihitung!
+    expect(res600Error.total).toBe(840_000 + 600_000);
+  });
+
+  // =========================================================================
+  // 16. Unit Test: 10 Kombinasi Aturan Ongkir Baru
+  // =========================================================================
+  it('16. 10 Kombinasi Aturan Ongkir Baru: Dalam/Luar/Kota Jauh x List/Net/Di Antara/50%/Di Bawah 50%', () => {
+    const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
+
+    // 1. Dalam Kota = List (Rp750.000) -> normal
+    const k1 = hitungPenawaran({ items: [item], zona: 'dalam_kota', perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k1.ongkir.wewenang).toBe('normal');
+    expect(k1.ongkir.status).toBe('ok');
+    expect(k1.is_valid_untuk_pdf).toBe(true);
+
+    // 2. Dalam Kota di antara list dan net (Rp600.000) tanpa alasan -> perlu_alasan, tidak boleh simpan
+    const k2 = hitungPenawaran({ items: [item], zona: 'dalam_kota', ongkir_deal: 600_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k2.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k2.ongkir.perlu_alasan).toBe(true);
+    expect(k2.ongkir.perlu_konfirmasi).toBe(false); // Tanpa izin owner!
+    expect(k2.is_valid_untuk_pdf).toBe(false);
+
+    // 3. Dalam Kota di antara list dan net (Rp600.000) + alasan admin -> lolos tanpa izin owner
+    const k3 = hitungPenawaran({ items: [item], zona: 'dalam_kota', ongkir_deal: 600_000, alasan_potongan_ongkir: 'Promo pembukaan', perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k3.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k3.ongkir.status).toBe('ok');
+    expect(k3.ongkir.dikonfirmasi_owner).toBe(false);
+    expect(k3.is_valid_untuk_pdf).toBe(true);
+
+    // 4. Dalam Kota = Net (Rp500.000) + alasan admin -> lolos wewenang admin
+    const k4 = hitungPenawaran({ items: [item], zona: 'dalam_kota', ongkir_deal: 500_000, alasan_potongan_ongkir: 'Batas net admin', perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k4.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k4.ongkir.status).toBe('ok');
+    expect(k4.is_valid_untuk_pdf).toBe(true);
+
+    // 5. Dalam Kota di bawah net (Rp400.000) tanpa alasan -> perlu_alasan, ditolak
+    const k5 = hitungPenawaran({ items: [item], zona: 'dalam_kota', ongkir_deal: 400_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k5.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k5.ongkir.perlu_alasan).toBe(true);
+    expect(k5.is_valid_untuk_pdf).toBe(false);
+
+    // 6. Dalam Kota 50% Floor (Rp375.000) + alasan admin -> lolos
+    const k6 = hitungPenawaran({
+      items: [item],
+      zona: 'dalam_kota',
+      ongkir_deal: 375_000,
+      alasan_potongan_ongkir: 'Disetujui admin bagi dua',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    }, defaultPriceBookV1);
+    expect(k6.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k6.ongkir.status).toBe('ok');
+    expect(k6.is_valid_untuk_pdf).toBe(true);
+
+    // 7. Dalam Kota di bawah 50% (Rp350.000) -> ditolak status merah
+    const k7 = hitungPenawaran({ items: [item], zona: 'dalam_kota', ongkir_deal: 350_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k7.ongkir.wewenang).toBe('ditolak');
+    expect(k7.ongkir.status).toBe('error_merah');
+    expect(k7.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp375.000.');
+    expect(k7.is_valid_untuk_pdf).toBe(false);
+    expect(k7.total).toBe(840_000 + 350_000); // Total tetap tampil!
+
+    // 8. Luar Kota = List (Rp1.300.000) -> normal
+    const k8 = hitungPenawaran({ items: [item], zona: 'luar_kota', perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k8.ongkir.wewenang).toBe('normal');
+    expect(k8.is_valid_untuk_pdf).toBe(true);
+
+    // 9. Luar Kota = Net (Rp1.150.000) + alasan admin -> lolos wewenang admin
+    const k9 = hitungPenawaran({ items: [item], zona: 'luar_kota', ongkir_deal: 1_150_000, alasan_potongan_ongkir: 'Diskon admin luar kota', perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k9.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k9.ongkir.status).toBe('ok');
+    expect(k9.is_valid_untuk_pdf).toBe(true);
+
+    // 10. Luar Kota di bawah net s/d 50% (Rp900.000) + alasan admin -> lolos
+    const k10 = hitungPenawaran({
+      items: [item],
+      zona: 'luar_kota',
+      ongkir_deal: 900_000,
+      alasan_potongan_ongkir: 'Admin approve luar kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    }, defaultPriceBookV1);
+    expect(k10.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k10.ongkir.status).toBe('ok');
+    expect(k10.is_valid_untuk_pdf).toBe(true);
+
+    // 11. Kota Jauh Aktual (Rp2.000.000) Deal = List -> normal
+    const k11 = hitungPenawaran({ items: [item], zona: 'luar_kota', ongkir_aktual: 2_000_000, ongkir_deal: 2_000_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k11.ongkir.wewenang).toBe('normal');
+    expect(k11.ongkir.list).toBe(2_000_000);
+    expect(k11.is_valid_untuk_pdf).toBe(true);
+
+    // 12. Kota Jauh Aktual (Rp2.000.000) dipotong ke 1.500.000 tanpa alasan -> perlu_alasan
+    const k12 = hitungPenawaran({ items: [item], zona: 'luar_kota', ongkir_aktual: 2_000_000, ongkir_deal: 1_500_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k12.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k12.ongkir.perlu_alasan).toBe(true);
+    expect(k12.is_valid_untuk_pdf).toBe(false);
+
+    // 13. Kota Jauh Aktual (Rp2.000.000) 50% Floor (Rp1.000.000) + alasan admin -> lolos
+    const k13 = hitungPenawaran({
+      items: [item],
+      zona: 'luar_kota',
+      ongkir_aktual: 2_000_000,
+      ongkir_deal: 1_000_000,
+      alasan_potongan_ongkir: 'Bagi dua ekspedisi jauh disetujui admin',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    }, defaultPriceBookV1);
+    expect(k13.ongkir.wewenang).toBe('perlu_alasan');
+    expect(k13.ongkir.status).toBe('ok');
+    expect(k13.is_valid_untuk_pdf).toBe(true);
+
+    // 14. Kota Jauh Aktual (Rp2.000.000) di bawah 50% (Rp800.000) -> ditolak status merah
+    const k14 = hitungPenawaran({ items: [item], zona: 'luar_kota', ongkir_aktual: 2_000_000, ongkir_deal: 800_000, perlu_pasang: false, segmen: 'B2C' }, defaultPriceBookV1);
+    expect(k14.ongkir.wewenang).toBe('ditolak');
+    expect(k14.ongkir.status).toBe('error_merah');
+    expect(k14.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp1.000.000.');
+    expect(k14.is_valid_untuk_pdf).toBe(false);
+    expect(k14.total).toBe(840_000 + 800_000);
   });
 });

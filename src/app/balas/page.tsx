@@ -1020,7 +1020,7 @@ export default function BalasChatPage() {
                     <ShieldAlert className="w-5 h-5 text-[#E3A857] shrink-0" />
                     <span className="font-semibold">
                       {draftResult.alasan_perlu_owner?.toLowerCase().includes('ongkir')
-                        ? 'Klien minta ongkir dibagi dua. Tanya owner dulu sebelum menjawab.'
+                        ? `Klien minta ongkir dibagi dua. Boleh disetujui, maksimal 50% (klien bayar minimal ${formatRupiah(extraction?.kota && /bandung|cimahi/i.test(extraction.kota) ? 375000 : 650000)}).`
                         : draftResult.alasan_perlu_owner?.toLowerCase().includes('potongan') || draftResult.alasan_perlu_owner?.toLowerCase().includes('diskon')
                         ? 'Klien minta potongan harga. Tanya owner dulu sebelum menjawab.'
                         : 'Klien meminta negosiasi khusus. Tanya owner dulu sebelum menjawab.'}

@@ -78,16 +78,13 @@ export function buildPrompts(params: BuildPromptParams): BuiltPromptResult {
     harga_premium_m2: formatRupiah(priceBook.tarif_m2.premium_b2c),
     harga_basic_m2: formatRupiah(priceBook.tarif_m2.basic_m2),
 
-    // Logistik HANYA memasukkan list dan batas_admin. BATAS_OWNER TIDAK PERNAH DIKIRIM!
+    // Logistik HANYA memasukkan harga LIST. Angka net, batas admin, dan 50% TIDAK PERNAH dikirim ke prompt!
     kirim_bandung_list: formatRupiah(priceBook.logistik.kirim_bandung.list),
-    kirim_bandung_batas: formatRupiah(priceBook.logistik.kirim_bandung.batas_admin),
     kirim_luar_list: formatRupiah(priceBook.logistik.kirim_luar_kota.list),
-    kirim_luar_batas: formatRupiah(priceBook.logistik.kirim_luar_kota.batas_admin),
     pasang_bandung_list: formatRupiah(priceBook.logistik.pasang_bandung.list),
     pasang_bandung_batas: formatRupiah(priceBook.logistik.pasang_bandung.batas_admin),
     pasang_luar_list: formatRupiah(priceBook.logistik.pasang_luar_kota.list),
     pasang_luar_batas: formatRupiah(priceBook.logistik.pasang_luar_kota.batas_admin),
-
     'lead.segmen': lead.segmen,
     b2b_tingkat: b2bTingkatText,
     bukti_sosial: priceBook.dokumen_pdf.instagram_handle || '@putraglass.id',
@@ -198,13 +195,11 @@ export function buildPrompts(params: BuildPromptParams): BuiltPromptResult {
       `Keamanan Prompt Gagal: Ditemukan variabel konteks belum terisi: ${unparsedContext.join(', ')}`
     );
   }
-
-  // 4. VALIDASI KEAMANAN: Pastikan batas_owner, net B2B (1.350.000), dan floor rahasia TIDAK PERNAH masuk
-  const forbiddenKeywords = ['1.350.000', '1350000', '375.000', '375000', '650.000 (batas owner)'];
-  // Catatan: 650.000 bisa muncul jika harga katalog/minimum SKU memang 650.000, namun batas_owner ongkir tidak boleh bocor
-  for (const forbidden of ['1.350.000', '1350000', '375.000', '375000']) {
+  // 4. VALIDASI KEAMANAN: Pastikan batas_owner, net B2B (1.350.000), floor rahasia, dan net ongkir TIDAK PERNAH masuk
+  const forbiddenKeywords = ['1.350.000', '1350000', '375.000', '375000', '500.000', '1.150.000'];
+  for (const forbidden of forbiddenKeywords) {
     if (systemText.includes(forbidden) || contextText.includes(forbidden)) {
-      throw new Error(`Kebocoran Rahasia Owner: Nilai ${forbidden} terdeteksi di dalam prompt!`);
+      throw new Error(`Kebocoran Rahasia: Nilai ${forbidden} terdeteksi di dalam prompt!`);
     }
   }
 

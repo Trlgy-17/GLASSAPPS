@@ -40,7 +40,7 @@ describe('Parser dan Formatter Rupiah (format-rupiah.ts)', () => {
       defaultPriceBookV1
     );
     expect(res.ongkir.status).toBe('error_merah');
-    expect(res.ongkir.pesan).toContain('Minimal Rp');
+    expect(res.ongkir.pesan).toMatch(/minimal Rp/i);
     expect(res.is_valid_untuk_pdf).toBe(false);
   });
   it('6. Formatter rupiah menghasilkan format Rp1.300.000 tanpa spasi', () => {

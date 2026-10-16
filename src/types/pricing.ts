@@ -110,14 +110,13 @@ export interface PriceBookData {
 export type PriceBookDataAdmin = Omit<PriceBookData, 'tarif_m2' | 'logistik'> & {
   tarif_m2: Omit<PriceBookData['tarif_m2'], 'premium_b2b_net_owner'>;
   logistik: {
-    kirim_bandung: Omit<BatasLogistik, 'batas_owner'>;
-    kirim_luar_kota: Omit<BatasLogistik, 'batas_owner'> & { skema_50_aktif: boolean };
-    pasang_bandung: Omit<BatasLogistik, 'batas_owner'>;
-    pasang_luar_kota: Omit<BatasLogistik, 'batas_owner'>;
+    kirim_bandung: { list: number; batas_admin?: number };
+    kirim_luar_kota: { list: number; batas_admin?: number; skema_50_aktif: boolean };
+    pasang_bandung: { list: number; batas_admin?: number };
+    pasang_luar_kota: { list: number; batas_admin?: number };
     kota_dalam_kota: string[];
   };
 };
-
 export interface CerminItemInput {
   id?: string;
   bentuk_kode: string;
@@ -146,6 +145,8 @@ export interface PenawaranInput {
   zona: 'dalam_kota' | 'luar_kota';
   perlu_pasang: boolean;
   ongkir_deal?: number;
+  ongkir_aktual?: number;
+  alasan_potongan_ongkir?: string;
   pasang_deal?: number;
   segmen: ClientSegment;
   user_role?: UserRole;
@@ -187,14 +188,19 @@ export interface HitungPenawaranOutput {
     list: number;
     deal: number;
     potongan: number;
+    di_bawah_net?: boolean;
     status: 'ok' | 'warning_kuning' | 'error_merah';
+    wewenang: 'normal' | 'perlu_alasan' | 'perlu_owner' | 'ditolak';
     pesan?: string;
-    batas_admin: number;
-    batas_floor?: number;
-    batas_owner?: number;
+    perlu_alasan: boolean;
     perlu_konfirmasi: boolean;
     dikonfirmasi_owner: boolean;
     alasan?: string;
+    minimal_bayar?: number;
+    batas_admin?: number;
+    batas_net?: number;
+    batas_floor?: number;
+    batas_owner?: number;
   };
   pasang: {
     list: number;

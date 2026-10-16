@@ -46,39 +46,71 @@ export function hitungPenawaran(
   const batasKirim = isDalamKota
     ? config.logistik.kirim_bandung
     : config.logistik.kirim_luar_kota;
-  const batasKirimFloor = Math.round(batasKirim.list * 0.5);
 
-  const ongkirList = batasKirim.list;
+  // Kota jauh / ongkir ekspedisi aktual di atas tarif standar luar kota
+  const isKotaJauh = !isDalamKota && Boolean(input.ongkir_aktual && input.ongkir_aktual > batasKirim.list);
+  const ongkirList = isKotaJauh ? input.ongkir_aktual! : batasKirim.list;
+
+  // Batas Net Admin:
+  // - Kota jauh: tidak ada net otomatis (net = list)
+  // - Dalam kota: Rp500.000
+  // - Luar kota: Rp1.150.000
+  const batasNetAdmin = isKotaJauh
+    ? ongkirList
+    : (isDalamKota ? (batasKirim.batas_admin || 500_000) : (batasKirim.batas_admin || 1_150_000));
+
+  // Batas 50% Minimal Bayar:
+  const batasMinimal50 = Math.round(ongkirList * 0.5);
+
   const ongkirDeal = input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList;
   const potonganOngkir = Math.max(0, ongkirList - ongkirDeal);
 
   let ongkirStatus: 'ok' | 'warning_kuning' | 'error_merah' = 'ok';
+  let ongkirWewenang: 'normal' | 'perlu_alasan' | 'perlu_owner' | 'ditolak' = 'normal';
   let ongkirPesan: string | undefined;
+  let ongkirPerluAlasan = false;
   let ongkirPerluKonfirmasi = false;
-  let ongkirDikonfirmasiOwner = false;
+  const ongkirDikonfirmasiOwner = false;
   let ongkirAlasan: string | undefined;
 
-  if (ongkirDeal < batasKirimFloor) {
+  const kfOwner = input.konfirmasi_owner?.ongkir;
+  const alasanInput = (kfOwner?.alasan || input.alasan_potongan_ongkir || '').trim();
+
+  // Level 3 (Ditolak): Di bawah 50%
+  if (ongkirDeal < batasMinimal50) {
     ongkirStatus = 'error_merah';
-    ongkirPesan = `Minimal Rp${batasKirimFloor.toLocaleString('id-ID')} (ongkir maks. dibagi 2)`;
+    ongkirWewenang = 'ditolak';
+    ongkirPesan = `Ongkir maksimal dibagi dua, klien bayar minimal Rp${batasMinimal50.toLocaleString('id-ID')}.`;
     isValidUntukPdf = false;
-    errors.push(`Ongkir deal (Rp${ongkirDeal.toLocaleString('id-ID')}) di bawah batas minimum (Rp${batasKirimFloor.toLocaleString('id-ID')})`);
-  } else if (ongkirDeal < batasKirim.batas_admin) {
-    const kf = input.konfirmasi_owner?.ongkir;
-    if (kf?.sudah_dikonfirmasi && kf.alasan && kf.alasan.trim().length > 0) {
+    errors.push(ongkirPesan);
+  }
+  // Level 2 (Boleh oleh admin sampai 50%; wajib alasan singkat): Di bawah list sampai 50%
+  else if (ongkirDeal < ongkirList) {
+    ongkirWewenang = 'perlu_alasan';
+    ongkirPerluAlasan = true;
+    ongkirPerluKonfirmasi = false; // TIDAK PERLU PERSETUJUAN OWNER!
+
+    if (alasanInput.length > 0) {
       ongkirStatus = 'ok';
-      ongkirDikonfirmasiOwner = true;
-      ongkirAlasan = kf.alasan.trim();
+      ongkirAlasan = alasanInput;
+      isValidUntukPdf = true;
     } else {
       ongkirStatus = 'warning_kuning';
-      ongkirPesan = 'Di bawah batas admin. Konfirmasi owner?';
-      ongkirPerluKonfirmasi = true;
+      ongkirPesan = 'Di bawah harga list. Alasan potongan wajib diisi.';
       isValidUntukPdf = false;
-      errors.push(`Ongkir deal (Rp${ongkirDeal.toLocaleString('id-ID')}) di bawah batas admin dan memerlukan konfirmasi owner serta alasan wajib diisi`);
+      errors.push(ongkirPesan);
     }
-  } else if (ongkirDeal === batasKirim.batas_admin && input.konfirmasi_owner?.ongkir?.sudah_dikonfirmasi) {
-    ongkirDikonfirmasiOwner = true;
-    ongkirAlasan = input.konfirmasi_owner.ongkir.alasan?.trim();
+  }
+  // Level 1 (Normal): Ongkir = list (atau di atas list)
+  else {
+    ongkirStatus = 'ok';
+    ongkirWewenang = 'normal';
+    ongkirPerluAlasan = false;
+    ongkirPerluKonfirmasi = false;
+    isValidUntukPdf = true;
+    if (alasanInput.length > 0) {
+      ongkirAlasan = alasanInput;
+    }
   }
   // 4. Evaluasi Pemasangan
   let pasangList = 0;
@@ -101,12 +133,15 @@ export function hitungPenawaran(
     potonganPasang = Math.max(0, pasangList - pasangDeal);
     batasPasangFloor = isDalamKota ? 300000 : 800000;
 
+
+    const batasPasangAdmin = 'batas_admin' in batasPasang && typeof batasPasang.batas_admin === 'number' ? batasPasang.batas_admin : (isDalamKota ? 500_000 : 1_000_000);
+
     if (pasangDeal < batasPasangFloor) {
       pasangStatus = 'error_merah';
       pasangPesan = `Minimal Rp${batasPasangFloor.toLocaleString('id-ID')}`;
       isValidUntukPdf = false;
       errors.push(`Pasang deal (Rp${pasangDeal.toLocaleString('id-ID')}) di bawah batas minimum (Rp${batasPasangFloor.toLocaleString('id-ID')})`);
-    } else if (pasangDeal < batasPasang.batas_admin) {
+    } else if (pasangDeal < batasPasangAdmin) {
       const kf = input.konfirmasi_owner?.pasang;
       if (kf?.sudah_dikonfirmasi && kf.alasan && kf.alasan.trim().length > 0) {
         pasangStatus = 'ok';
@@ -119,7 +154,7 @@ export function hitungPenawaran(
         isValidUntukPdf = false;
         errors.push(`Pasang deal (Rp${pasangDeal.toLocaleString('id-ID')}) di bawah batas admin dan memerlukan konfirmasi owner serta alasan wajib diisi`);
       }
-    } else if (pasangDeal === batasPasang.batas_admin && input.konfirmasi_owner?.pasang?.sudah_dikonfirmasi) {
+    } else if (pasangDeal === batasPasangAdmin && input.konfirmasi_owner?.pasang?.sudah_dikonfirmasi) {
       pasangDikonfirmasiOwner = true;
       pasangAlasan = input.konfirmasi_owner.pasang.alasan?.trim();
     }
@@ -141,14 +176,19 @@ export function hitungPenawaran(
       list: ongkirList,
       deal: ongkirDeal,
       potongan: potonganOngkir,
+      di_bawah_net: potonganOngkir > 0 && ongkirDeal < batasNetAdmin,
       status: ongkirStatus,
+      wewenang: ongkirWewenang,
       pesan: ongkirPesan,
-      batas_admin: batasKirim.batas_admin,
-      batas_floor: batasKirimFloor,
-      ...(typeof window === 'undefined' ? { batas_owner: batasKirimFloor } : {}),
-      perlu_konfirmasi: ongkirPerluKonfirmasi,
-      dikonfirmasi_owner: ongkirDikonfirmasiOwner,
+      perlu_alasan: ongkirPerluAlasan,
+      perlu_konfirmasi: false, // Tidak perlu konfirmasi owner ongkir
+      dikonfirmasi_owner: false,
       alasan: ongkirAlasan,
+      minimal_bayar: batasMinimal50,
+      batas_net: batasNetAdmin,
+      batas_admin: batasNetAdmin,
+      batas_floor: batasMinimal50,
+      ...(typeof window === 'undefined' ? { batas_owner: batasMinimal50 } : {}),
     },
     pasang: {
       list: pasangList,
@@ -156,7 +196,7 @@ export function hitungPenawaran(
       potongan: potonganPasang,
       status: pasangStatus,
       pesan: pasangPesan,
-      batas_admin: input.perlu_pasang ? (isDalamKota ? config.logistik.pasang_bandung.batas_admin : config.logistik.pasang_luar_kota.batas_admin) : 0,
+      batas_admin: input.perlu_pasang ? (isDalamKota ? (config.logistik.pasang_bandung.batas_admin || 500_000) : (config.logistik.pasang_luar_kota.batas_admin || 1_000_000)) : 0,
       batas_floor: input.perlu_pasang ? batasPasangFloor : 0,
       ...(typeof window === 'undefined' ? { batas_owner: input.perlu_pasang ? batasPasangFloor : 0 } : {}),
       perlu_konfirmasi: pasangPerluKonfirmasi,
@@ -166,7 +206,7 @@ export function hitungPenawaran(
     total,
     dp_50: dp50,
     pelunasan,
-    perlu_konfirmasi_owner: ongkirPerluKonfirmasi || pasangPerluKonfirmasi,
+    perlu_konfirmasi_owner: pasangPerluKonfirmasi,
     is_valid_untuk_pdf: isValidUntukPdf,
     errors,
   };

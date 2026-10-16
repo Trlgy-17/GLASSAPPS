@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { buildPrompts } from '../src/lib/ai/prompt-builder';
+import { defaultPriceBookV1 } from '../src/lib/pricing/default-price-book';
 
 // Muat .env.local
 const envPath = path.resolve(process.cwd(), '.env.local');
@@ -58,8 +60,9 @@ async function runLeakAudit() {
     { name: 'batas_owner', regex: /batas_owner/i },
     { name: 'net B2B (1350000)', regex: /1350000|1\.350\.000/ },
     { name: 'floor ongkir rahasia owner (375000)', regex: /375000|375\.000/ },
+    { name: 'net ongkir luar kota rahasia (1150000)', regex: /1150000|1\.150\.000/ },
+    { name: 'net ongkir dalam kota rahasia (500000)', regex: /500000|500\.000/ },
   ];
-
   let totalViolations = 0;
 
   for (const target of TARGETS) {
@@ -91,6 +94,33 @@ async function runLeakAudit() {
       totalViolations++;
     }
   }
+  // 10. Audit Prompt AI (buildPrompts)
+  try {
+    const built = buildPrompts({
+      priceBook: defaultPriceBookV1,
+      namaAdmin: 'Admin',
+      lead: { nama: 'Lead Test', kota: 'Bandung', zona: 'dalam_kota', segmen: 'B2C', status: 'prospek' },
+      transkripMessages: [{ pengirim: 'klien', teks: 'Halo ongkir berapa?' }],
+      kanal: 'whatsapp',
+    });
+
+    const promptText = `${built.systemInstruction} ${built.userContext}`;
+    let promptViolations = 0;
+    for (const pat of FORBIDDEN_PATTERNS) {
+      if (pat.regex.test(promptText)) {
+        console.error(`❌ BOCOR PADA PROMPT AI: Ditemukan pola "${pat.name}"!`);
+        promptViolations++;
+        totalViolations++;
+      }
+    }
+    if (promptViolations === 0) {
+      console.log(`✓ Bersih: Prompt AI (buildPrompts) (0 kebocoran)`);
+    }
+  } catch (err: unknown) {
+    console.error('❌ Gagal memeriksa prompt AI:', err instanceof Error ? err.message : String(err));
+    totalViolations++;
+  }
+
 
   console.log('\n================================================================');
   if (totalViolations === 0) {
