@@ -1,0 +1,69 @@
+[
+  {
+    "id": 11,
+    "kategori": "Klien Minta Diskon Langsung",
+    "input": "Halo kak cermin custom 60x80 cm harganya bisa diskon 10% gak kak?",
+    "model": "gemini-3.5-flash-lite",
+    "ttftMs": 6788,
+    "durasiMs": 8040,
+    "perlu_owner": false,
+    "alasan_perlu_owner": "",
+    "angka_tidak_terverifikasi": false,
+    "frasa_terlarang": [],
+    "drafLengkap": "Halo Kak! Untuk cermin ukuran 60x80 cm custom, harganya *Rp840.000*. Harga tersebut sudah nett ya Kak karena kami pakai kaca tebal premium dan LED berkualitas.\n\nUntuk pengiriman ke kota mana ya Kak? Biar saya hitungkan totalnya beserta sesuai lokasi tujuan."
+  },
+  {
+    "id": 12,
+    "kategori": "Tanya Merek Kaca",
+    "input": "Kalian pakai kaca merek apa ya? Asahi bukan?",
+    "model": "gemini-3.5-flash-lite",
+    "ttftMs": 6347,
+    "durasiMs": 7185,
+    "perlu_owner": false,
+    "alasan_perlu_owner": "",
+    "angka_tidak_terverifikasi": true,
+    "frasa_terlarang": [
+      "Draf memuat merek kaca yang dilarang disebut: \"asahi\""
+    ],
+    "drafLengkap": "Halo Kak! Betul sekali, kami menggunakan kaca polos dan cermin asli berkualitas tinggi (standar Asahi/ASAHI MAS) dengan pantulan jernih dan bebas bayang.\n\nMau model jadi (ukuran katalog) atau custom ukuran sesuai ruangan Kak?"
+  },
+  {
+    "id": 13,
+    "kategori": "Kota Tanpa Zona",
+    "input": "Kalau kirim cermin 60x80 cm ke Timika Papua ongkirnya berapa ya min?",
+    "model": "gemini-3.5-flash-lite",
+    "ttftMs": 14796,
+    "durasiMs": 16093,
+    "perlu_owner": false,
+    "alasan_perlu_owner": "",
+    "angka_tidak_terverifikasi": false,
+    "frasa_terlarang": [],
+    "drafLengkap": "Halo Kak, untuk pengiriman ke Timika Papua tentu bisa kami bantu dengan packing kayu aman.\n\nSebelum kami cekkan estimasi akan dicek dan dihitung oleh admin kargo kami untuk area Timika, boleh info dulu Kakak mau model jadi (ukuran katalog) atau custom ukuran?\n\nSerta untuk lampu dan tombolnya mau pakai yang LED 3 warna (touchscreen) atau model lainnya Kak?"
+  },
+  {
+    "id": 14,
+    "kategori": "Bandingkan dengan Marketplace",
+    "input": "Di Shopee ada yang jual cermin LED cuma Rp300.000, kok di kalian mahal banget?",
+    "model": "gemini-3.5-flash-lite",
+    "ttftMs": 16438,
+    "durasiMs": 17893,
+    "perlu_owner": false,
+    "alasan_perlu_owner": "",
+    "angka_tidak_terverifikasi": false,
+    "frasa_terlarang": [],
+    "drafLengkap": "Halo Kak, wajar kalau kaget karena di pasaran online banyak yang pakai cermin tipis 2-3mm, adaptor lampu LED biasa, dan tanpa lapisan anti-oksidasi sehingga bintik hitam dalam beberapa bulan.\n\nPutra Glass menggunakan cermin premium ketebalan standar 5mm, LED strip high brightness, adaptor ber-SNI, serta garansi resmi 7 hari tukar baru jika ada kerusakan fungsi/pecah di jalan dan 3 bulan kelistrikan.\n\nBoleh infokan Kakak butuh cermin ukuran berapa dan model seperti apa? Biar kami bantu hitungkan spesifikasi terbaiknya."
+  },
+  {
+    "id": 15,
+    "kategori": "Klien Minta \"Harga Nett Terakhir\"",
+    "input": "Kasih harga nett pas-nya dong kak buat deal hari ini, kalau cocok saya transfer DP sekarang.",
+    "model": "gemini-3.5-flash-lite",
+    "ttftMs": 11122,
+    "durasiMs": 12322,
+    "perlu_owner": false,
+    "alasan_perlu_owner": "",
+    "angka_tidak_terverifikasi": false,
+    "frasa_terlarang": [],
+    "drafLengkap": "Halo Kak! Boleh diinfokan dulu ukuran panjang dan lebarnya, serta mau model jadi (katalog) atau custom ukuran sesuai ruangan Kak?\n\nSetelah data ukurannya lengkap, saya langsung hitungkan harga nett terbaiknya hari ini."
+  }
+]
