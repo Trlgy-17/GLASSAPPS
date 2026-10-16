@@ -9,14 +9,19 @@ export interface WilayahKota {
 export const KOTA_INDONESIA: WilayahKota[] = kotaData as WilayahKota[];
 
 /**
- * Daftar semua 514 kota yang dikelompokkan per provinsi (38 provinsi)
+ * Daftar semua 514 daerah yang dikelompokkan per provinsi (38 provinsi),
+ * dipisahkan menjadi Kota (urut abjad) dan Kabupaten (urut abjad).
  */
 export interface ProvinsiGroup {
   provinsi: string;
   cities: WilayahKota[];
+  kotaList: WilayahKota[];
+  kabupatenList: WilayahKota[];
 }
 
-export function getAllCitiesGroupedByProvinsi(): ProvinsiGroup[] {
+export function getAllCitiesGroupedByProvinsi(
+  provFreq: Record<string, number> = {}
+): ProvinsiGroup[] {
   const map = new Map<string, WilayahKota[]>();
   for (const kota of KOTA_INDONESIA) {
     if (!map.has(kota.provinsi)) {
@@ -26,13 +31,54 @@ export function getAllCitiesGroupedByProvinsi(): ProvinsiGroup[] {
   }
 
   const groups: ProvinsiGroup[] = [];
-  for (const [provinsi, cities] of map.entries()) {
+  for (const [provinsi, all] of map.entries()) {
+    const kotaList = all
+      .filter((c) => /^kota\b/i.test(c.nama))
+      .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+    const kabupatenList = all
+      .filter((c) => !/^kota\b/i.test(c.nama))
+      .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+
     groups.push({
       provinsi,
-      cities,
+      cities: [...kotaList, ...kabupatenList],
+      kotaList,
+      kabupatenList,
     });
   }
+
+  // Urutan provinsi:
+  // 1. Jawa Barat paling atas
+  // 2. Provinsi yang paling sering dipakai admin (berdasarkan provFreq)
+  // 3. Sisanya urut abjad
+  groups.sort((a, b) => {
+    if (a.provinsi === 'Jawa Barat') return -1;
+    if (b.provinsi === 'Jawa Barat') return 1;
+
+    const freqA = provFreq[a.provinsi] || 0;
+    const freqB = provFreq[b.provinsi] || 0;
+    if (freqA !== freqB) {
+      return freqB - freqA;
+    }
+
+    return a.provinsi.localeCompare(b.provinsi, 'id');
+  });
+
   return groups;
+}
+
+/**
+ * Cari provinsi yang cocok dengan kata kunci pencarian
+ */
+export function searchProvinsi(
+  query: string,
+  provFreq: Record<string, number> = {}
+): ProvinsiGroup[] {
+  const rawTrimmed = query.trim().toLowerCase();
+  if (!rawTrimmed || rawTrimmed.length < 2) return [];
+
+  const allGroups = getAllCitiesGroupedByProvinsi(provFreq);
+  return allGroups.filter((g) => g.provinsi.toLowerCase().includes(rawTrimmed));
 }
 
 /**

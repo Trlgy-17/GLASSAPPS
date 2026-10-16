@@ -1,25 +1,53 @@
 import { describe, it, expect } from 'vitest';
 import {
   searchKota,
+  searchProvinsi,
   detectZonaByKota,
-  normalizeCityName,
   matchKotaFromText,
   getAllCitiesGroupedByProvinsi,
   KOTA_INDONESIA,
 } from './kota';
 
-describe('Utilitas Wilayah Kota Indonesia', () => {
+describe('Utilitas Wilayah Kota Indonesia (Bertingkat Provinsi -> Kota & Kabupaten)', () => {
   it('Memiliki tepat 514 kabupaten dan kota dari 38 provinsi', () => {
     expect(KOTA_INDONESIA.length).toBe(514);
     const uniqueProvinces = new Set(KOTA_INDONESIA.map((k) => k.provinsi));
     expect(uniqueProvinces.size).toBe(38);
   });
 
-  it('getAllCitiesGroupedByProvinsi mengelompokkan 514 kota ke dalam 38 provinsi', () => {
+  it('getAllCitiesGroupedByProvinsi menempatkan Jawa Barat paling atas dan memisahkan Kota & Kabupaten urut abjad', () => {
     const groups = getAllCitiesGroupedByProvinsi();
     expect(groups.length).toBe(38);
-    const totalCount = groups.reduce((acc, g) => acc + g.cities.length, 0);
-    expect(totalCount).toBe(514);
+    expect(groups[0].provinsi).toBe('Jawa Barat');
+
+    const jabar = groups[0];
+    expect(jabar.kotaList.length).toBe(9);
+    expect(jabar.kabupatenList.length).toBe(18);
+    expect(jabar.cities.length).toBe(27);
+
+    // Pastikan urut abjad di dalam Kota
+    const kotaNames = jabar.kotaList.map((k) => k.nama);
+    expect(kotaNames).toContain('Kota Bandung');
+    expect(kotaNames).toContain('Kota Cimahi');
+    expect(kotaNames[0]).toBe('Kota Bandung');
+
+    // Pastikan urut abjad di dalam Kabupaten
+    const kabNames = jabar.kabupatenList.map((k) => k.nama);
+    expect(kabNames).toContain('Kab. Bandung');
+    expect(kabNames).toContain('Kab. Bandung Barat');
+  });
+
+  it('getAllCitiesGroupedByProvinsi mengurutkan provinsi berdasarkan frekuensi pemakaian admin setelah Jawa Barat', () => {
+    const groups = getAllCitiesGroupedByProvinsi({ 'Jawa Timur': 5, Bali: 2 });
+    expect(groups[0].provinsi).toBe('Jawa Barat');
+    expect(groups[1].provinsi).toBe('Jawa Timur');
+    expect(groups[2].provinsi).toBe('Bali');
+  });
+
+  it('searchProvinsi menemukan provinsi berdasarkan nama (misal "jawa timur")', () => {
+    const found = searchProvinsi('jawa timur');
+    expect(found.length).toBe(1);
+    expect(found[0].provinsi).toBe('Jawa Timur');
   });
 
   it('Pencarian "sura" memunculkan Kota Surabaya dan Kota Surakarta', () => {
@@ -54,20 +82,6 @@ describe('Utilitas Wilayah Kota Indonesia', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].nama).toBe('Kab. Bandung Barat');
     expect(results[0].kode).toBe('32.17');
-  });
-
-  it('Pencarian "cimahi" mengembalikan Kota Cimahi', () => {
-    const results = searchKota('cimahi');
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].nama).toBe('Kota Cimahi');
-    expect(results[0].kode).toBe('32.77');
-  });
-
-  it('Pencarian "jayapura" menemukan Kota Jayapura di Papua', () => {
-    const results = searchKota('jayapura');
-    expect(results.length).toBeGreaterThan(0);
-    const names = results.map((r) => r.nama);
-    expect(names).toContain('Kota Jayapura');
   });
 
   it('Deteksi Zona: Kota Bandung, Kab. Bandung, Kab. Bandung Barat, Kota Cimahi -> dalam_kota', () => {

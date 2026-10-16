@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
-import { MapPin, History, ChevronDown, Check, Plus } from 'lucide-react';
+import {
+  MapPin,
+  History,
+  ChevronDown,
+  ChevronRight,
+  ArrowLeft,
+  Check,
+  Plus,
+} from 'lucide-react';
 import type { WilayahKota, ProvinsiGroup } from '@/lib/wilayah/kota';
 
 interface CityComboboxProps {
@@ -14,15 +22,16 @@ interface CityComboboxProps {
 }
 
 const RECENT_CITIES_KEY = 'pg_recent_cities_v1';
-const ITEM_HEIGHT = 48; // px per item
-const HEADER_HEIGHT = 32; // px per header provinsi
-const CONTAINER_HEIGHT = 320; // px
+const PROV_FREQ_KEY = 'pg_prov_freq_v1';
+const CONTAINER_MAX_HEIGHT = 360; // maks ±360px
 
-type FlatDropdownItem =
-  | { type: 'recent_header'; title: string }
+type DropdownSelectableItem =
   | { type: 'recent_city'; city: WilayahKota }
-  | { type: 'provinsi_header'; title: string; count: number }
-  | { type: 'city'; city: WilayahKota }
+  | { type: 'provinsi_row'; group: ProvinsiGroup }
+  | { type: 'back_button' }
+  | { type: 'city_in_prov'; city: WilayahKota }
+  | { type: 'search_provinsi'; group: ProvinsiGroup }
+  | { type: 'search_city'; city: WilayahKota }
   | { type: 'custom_option'; customText: string };
 
 export function CityCombobox({
@@ -35,14 +44,14 @@ export function CityCombobox({
 }: CityComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState(value || '');
+  const [selectedProvinsi, setSelectedProvinsi] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<WilayahKota[]>([]);
+  const [provinsiSuggestions, setProvinsiSuggestions] = useState<ProvinsiGroup[]>([]);
   const [recentCities, setRecentCities] = useState<WilayahKota[]>([]);
+  const [provFreq, setProvFreq] = useState<Record<string, number>>({});
   const [groupedProvinsi, setGroupedProvinsi] = useState<ProvinsiGroup[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
-
-  // Virtual scrolling state
-  const [scrollTop, setScrollTop] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,32 +65,48 @@ export function CityCombobox({
   const ensureDataLoaded = async () => {
     if (isDataLoaded) return;
     try {
-      const { getAllCitiesGroupedByProvinsi } = await import('@/lib/wilayah/kota');
-      setGroupedProvinsi(getAllCitiesGroupedByProvinsi());
-      setIsDataLoaded(true);
+      let loadedFreq: Record<string, number> = {};
+      try {
+        const storedFreq = localStorage.getItem(PROV_FREQ_KEY);
+        if (storedFreq) {
+          loadedFreq = JSON.parse(storedFreq) || {};
+          setProvFreq(loadedFreq);
+        }
+      } catch {}
 
       try {
-        const stored = localStorage.getItem(RECENT_CITIES_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as WilayahKota[];
+        const storedRecent = localStorage.getItem(RECENT_CITIES_KEY);
+        if (storedRecent) {
+          const parsed = JSON.parse(storedRecent) as WilayahKota[];
           if (Array.isArray(parsed)) {
             setRecentCities(parsed.slice(0, 5));
           }
         }
       } catch {}
+
+      const { getAllCitiesGroupedByProvinsi } = await import('@/lib/wilayah/kota');
+      setGroupedProvinsi(getAllCitiesGroupedByProvinsi(loadedFreq));
+      setIsDataLoaded(true);
     } catch (err) {
       console.error('Gagal memuat data kota:', err);
     }
   };
 
-  const saveRecentCity = (city: WilayahKota) => {
+  const saveRecentAndFreq = async (city: WilayahKota) => {
     try {
-      const stored = localStorage.getItem(RECENT_CITIES_KEY);
-      const prev: WilayahKota[] = stored ? JSON.parse(stored) : [];
+      const storedRecent = localStorage.getItem(RECENT_CITIES_KEY);
+      const prev: WilayahKota[] = storedRecent ? JSON.parse(storedRecent) : [];
       const filtered = prev.filter((c) => c.kode !== city.kode);
       const updated = [city, ...filtered].slice(0, 5);
       localStorage.setItem(RECENT_CITIES_KEY, JSON.stringify(updated));
       setRecentCities(updated);
+
+      const newFreq = { ...provFreq, [city.provinsi]: (provFreq[city.provinsi] || 0) + 1 };
+      localStorage.setItem(PROV_FREQ_KEY, JSON.stringify(newFreq));
+      setProvFreq(newFreq);
+
+      const { getAllCitiesGroupedByProvinsi } = await import('@/lib/wilayah/kota');
+      setGroupedProvinsi(getAllCitiesGroupedByProvinsi(newFreq));
     } catch {}
   };
 
@@ -92,22 +117,34 @@ export function CityCombobox({
     const trimmed = query.trim();
     if (!trimmed) {
       setSuggestions([]);
-      setHighlightedIndex(-1);
+      setProvinsiSuggestions([]);
+      setHighlightedIndex(0);
       return;
     }
 
-    import('@/lib/wilayah/kota').then(({ searchKota }) => {
-      const found = searchKota(trimmed, 25);
-      setSuggestions(found);
-      setHighlightedIndex(found.length > 0 ? 0 : 0); // 0 bisa city atau custom
+    // Jika sedang mengetik, abaikan tingkat provinsi dan cari langsung dari semua daerah & provinsi
+    import('@/lib/wilayah/kota').then(({ searchKota, searchProvinsi }) => {
+      const foundProv = searchProvinsi(trimmed, provFreq);
+      const foundKota = searchKota(trimmed, 20);
+      setProvinsiSuggestions(foundProv);
+      setSuggestions(foundKota);
+      setHighlightedIndex(0);
     });
-  }, [query, isOpen, isDataLoaded]);
+  }, [query, isOpen, isDataLoaded, provFreq]);
+
+  // Reset scroll ke atas saat pindah tingkat provinsi
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [selectedProvinsi, isOpen]);
 
   // Tutup dropdown saat klik di luar
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setSelectedProvinsi(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -117,8 +154,9 @@ export function CityCombobox({
   const handleSelectCity = (city: WilayahKota) => {
     setQuery(city.nama);
     onChange({ nama: city.nama, kode: city.kode, isCustom: false });
-    saveRecentCity(city);
+    saveRecentAndFreq(city);
     setIsOpen(false);
+    setSelectedProvinsi(null);
     setHighlightedIndex(-1);
   };
 
@@ -128,87 +166,66 @@ export function CityCombobox({
     setQuery(trimmed);
     onChange({ nama: trimmed, isCustom: true });
     setIsOpen(false);
+    setSelectedProvinsi(null);
     setHighlightedIndex(-1);
   };
 
-  // Susun flat list untuk virtual scroll & keyboard nav
-  const flatItems: FlatDropdownItem[] = useMemo(() => {
-    const items: FlatDropdownItem[] = [];
-    const trimmed = query.trim();
-
-    if (!trimmed) {
-      // 1. Dropdown terbuka tanpa ketik: 5 recent + SEMUA 514 kota per provinsi
-      if (recentCities.length > 0) {
-        items.push({ type: 'recent_header', title: 'Terakhir Digunakan' });
-        for (const c of recentCities) {
-          items.push({ type: 'recent_city', city: c });
-        }
-      }
-
-      for (const grp of groupedProvinsi) {
-        items.push({ type: 'provinsi_header', title: grp.provinsi, count: grp.cities.length });
-        for (const c of grp.cities) {
-          items.push({ type: 'city', city: c });
-        }
-      }
-    } else {
-      // 2. Mengetik query:
-      // Tampilkan hasil pencarian
-      for (const s of suggestions) {
-        items.push({ type: 'city', city: s });
-      }
-
-      // Jika TIDAK cocok dengan kota mana pun (suggestions.length === 0),
-      // tampilkan opsi '+ Pakai <teks> sebagai kota tujuan'
-      if (suggestions.length === 0) {
-        items.push({ type: 'custom_option', customText: trimmed });
-      }
-    }
-
-    return items;
-  }, [query, suggestions, recentCities, groupedProvinsi]);
-
-  // Posisi y kumulatif untuk tiap item (virtualization)
-  const itemLayouts = useMemo(() => {
-    let top = 0;
-    const layouts: { top: number; height: number }[] = [];
-    for (const item of flatItems) {
-      const height = item.type.includes('header') ? HEADER_HEIGHT : ITEM_HEIGHT;
-      layouts.push({ top, height });
-      top += height;
-    }
-    return { layouts, totalHeight: top };
-  }, [flatItems]);
-
-  // Item yang terlihat di viewport
-  const visibleIndices = useMemo(() => {
-    const startY = Math.max(0, scrollTop - 100);
-    const endY = scrollTop + CONTAINER_HEIGHT + 100;
-    const indices: number[] = [];
-    for (let i = 0; i < itemLayouts.layouts.length; i++) {
-      const l = itemLayouts.layouts[i];
-      if (l.top + l.height >= startY && l.top <= endY) {
-        indices.push(i);
-      }
-    }
-    return indices;
-  }, [scrollTop, itemLayouts]);
-
-  // Daftar item yang bisa dipilih keyboard (bukan header)
-  const selectableIndices = useMemo(() => {
-    const indices: number[] = [];
-    for (let i = 0; i < flatItems.length; i++) {
-      if (!flatItems[i].type.includes('header')) {
-        indices.push(i);
-      }
-    }
-    return indices;
-  }, [flatItems]);
-
-  // Scroll virtual listener
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop);
+  const handleEnterProvinsi = (provinsiName: string) => {
+    setSelectedProvinsi(provinsiName);
+    setQuery('');
+    setHighlightedIndex(0);
   };
+
+  const handleBackToProvinsiList = () => {
+    setSelectedProvinsi(null);
+    setHighlightedIndex(0);
+  };
+
+  const activeProvGroup = useMemo(() => {
+    if (!selectedProvinsi) return null;
+    return groupedProvinsi.find((g) => g.provinsi === selectedProvinsi) || null;
+  }, [selectedProvinsi, groupedProvinsi]);
+
+  // Susun daftar item yang bisa dipilih keyboard sesuai mode saat ini
+  const selectableItems: DropdownSelectableItem[] = useMemo(() => {
+    const trimmed = query.trim();
+    const list: DropdownSelectableItem[] = [];
+
+    if (trimmed) {
+      // Mode 3: Pencarian Langsung
+      for (const p of provinsiSuggestions) {
+        list.push({ type: 'search_provinsi', group: p });
+      }
+      for (const c of suggestions) {
+        list.push({ type: 'search_city', city: c });
+      }
+      if (provinsiSuggestions.length === 0 && suggestions.length === 0) {
+        list.push({ type: 'custom_option', customText: trimmed });
+      }
+      return list;
+    }
+
+    if (selectedProvinsi && activeProvGroup) {
+      // Mode 2: Di dalam Provinsi terpilih
+      list.push({ type: 'back_button' });
+      for (const k of activeProvGroup.kotaList) {
+        list.push({ type: 'city_in_prov', city: k });
+      }
+      for (const kb of activeProvGroup.kabupatenList) {
+        list.push({ type: 'city_in_prov', city: kb });
+      }
+      return list;
+    }
+
+    // Mode 1: Daftar 5 Recent + 38 Provinsi
+    for (const r of recentCities) {
+      list.push({ type: 'recent_city', city: r });
+    }
+    for (const g of groupedProvinsi) {
+      list.push({ type: 'provinsi_row', group: g });
+    }
+    return list;
+  }, [query, selectedProvinsi, activeProvGroup, recentCities, groupedProvinsi, provinsiSuggestions, suggestions]);
 
   // Keyboard navigation ARIA combobox
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -216,56 +233,76 @@ export function CityCombobox({
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
         e.preventDefault();
         ensureDataLoaded();
+        setSelectedProvinsi(null);
         setIsOpen(true);
+        setHighlightedIndex(0);
       }
       return;
     }
 
+    const total = selectableItems.length;
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (selectableIndices.length === 0) return;
-      const currentPos = selectableIndices.indexOf(highlightedIndex);
-      const nextPos = (currentPos + 1) % selectableIndices.length;
-      const targetIdx = selectableIndices[nextPos];
-      setHighlightedIndex(targetIdx);
-      scrollToItem(targetIdx);
+      if (total === 0) return;
+      const next = (highlightedIndex + 1) % total;
+      setHighlightedIndex(next);
+      scrollToOption(next);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (selectableIndices.length === 0) return;
-      const currentPos = selectableIndices.indexOf(highlightedIndex);
-      const prevPos = (currentPos - 1 + selectableIndices.length) % selectableIndices.length;
-      const targetIdx = selectableIndices[prevPos];
-      setHighlightedIndex(targetIdx);
-      scrollToItem(targetIdx);
+      if (total === 0) return;
+      const prev = (highlightedIndex - 1 + total) % total;
+      setHighlightedIndex(prev);
+      scrollToOption(prev);
+    } else if (e.key === 'ArrowRight') {
+      // Masuk provinsi jika yang disorot adalah baris provinsi
+      const current = selectableItems[highlightedIndex];
+      if (current && (current.type === 'provinsi_row' || current.type === 'search_provinsi')) {
+        e.preventDefault();
+        handleEnterProvinsi(current.group.provinsi);
+      }
+    } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+      // Kembali ke daftar semua provinsi jika field kosong & sedang di dalam provinsi
+      if (!query.trim() && selectedProvinsi) {
+        e.preventDefault();
+        handleBackToProvinsiList();
+      }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (highlightedIndex >= 0 && highlightedIndex < flatItems.length) {
-        const selectedItem = flatItems[highlightedIndex];
-        if (selectedItem.type === 'city' || selectedItem.type === 'recent_city') {
-          handleSelectCity(selectedItem.city);
-        } else if (selectedItem.type === 'custom_option') {
-          handleSelectCustom(selectedItem.customText);
+      const current = selectableItems[highlightedIndex];
+      if (current) {
+        if (current.type === 'provinsi_row' || current.type === 'search_provinsi') {
+          handleEnterProvinsi(current.group.provinsi);
+        } else if (current.type === 'back_button') {
+          handleBackToProvinsiList();
+        } else if (
+          current.type === 'recent_city' ||
+          current.type === 'city_in_prov' ||
+          current.type === 'search_city'
+        ) {
+          handleSelectCity(current.city);
+        } else if (current.type === 'custom_option') {
+          handleSelectCustom(current.customText);
         }
       } else if (query.trim()) {
-        // Jika tidak ada item yang terpilih atau kota tidak cocok, pakai custom
         handleSelectCustom(query);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setIsOpen(false);
+      setSelectedProvinsi(null);
     }
   };
 
-  const scrollToItem = (index: number) => {
-    if (!scrollContainerRef.current || index < 0 || index >= itemLayouts.layouts.length) return;
-    const l = itemLayouts.layouts[index];
-    const container = scrollContainerRef.current;
-    if (l.top < container.scrollTop) {
-      container.scrollTop = l.top;
-    } else if (l.top + l.height > container.scrollTop + CONTAINER_HEIGHT) {
-      container.scrollTop = l.top + l.height - CONTAINER_HEIGHT;
+  const scrollToOption = (index: number) => {
+    if (!scrollContainerRef.current) return;
+    const el = scrollContainerRef.current.querySelector(`[data-opt-idx="${index}"]`) as HTMLElement | null;
+    if (el) {
+      el.scrollIntoView({ block: 'nearest' });
     }
   };
+
+  let runningIdx = 0;
 
   return (
     <div ref={containerRef} className={`relative w-full ${className}`}>
@@ -310,7 +347,13 @@ export function CityCombobox({
           onClick={() => {
             if (disabled) return;
             ensureDataLoaded();
-            setIsOpen((prev) => !prev);
+            if (!isOpen) {
+              setSelectedProvinsi(null);
+              setIsOpen(true);
+            } else {
+              setIsOpen(false);
+              setSelectedProvinsi(null);
+            }
           }}
           className="absolute right-2 p-1 text-muted hover:text-ink transition cursor-pointer"
         >
@@ -318,122 +361,272 @@ export function CityCombobox({
         </button>
       </div>
 
-      {/* Virtualized Dropdown Listbox */}
+      {/* Dropdown Listbox (Maks ±360px) */}
       {isOpen && (
         <div
           id={`city-listbox-${comboboxId}`}
           role="listbox"
           ref={scrollContainerRef}
-          onScroll={handleScroll}
-          style={{ maxHeight: `${CONTAINER_HEIGHT}px` }}
-          className="absolute z-50 left-0 right-0 mt-1 overflow-y-auto rounded-xl border border-line bg-surface shadow-xl text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-100"
+          style={{ maxHeight: `${CONTAINER_MAX_HEIGHT}px` }}
+          className="absolute z-50 left-0 right-0 mt-1 overflow-y-auto rounded-xl border border-line bg-surface shadow-xl text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-100 divide-y divide-line/40"
         >
-          <div style={{ height: `${itemLayouts.totalHeight}px`, position: 'relative' }}>
-            {visibleIndices.map((idx) => {
-              const item = flatItems[idx];
-              const layout = itemLayouts.layouts[idx];
-              const isHighlighted = highlightedIndex === idx;
-
-              if (item.type === 'recent_header') {
-                return (
-                  <div
-                    key={`recent-hdr-${idx}`}
-                    style={{
-                      position: 'absolute',
-                      top: `${layout.top}px`,
-                      height: `${layout.height}px`,
-                      left: 0,
-                      right: 0,
-                    }}
-                    className="px-3 flex items-center gap-1.5 bg-raised/80 border-b border-line/40 text-[11px] font-bold text-accent uppercase tracking-wider"
-                  >
-                    <History className="w-3.5 h-3.5" />
-                    <span>{item.title}</span>
+          {/* =================================================================
+              MODE 3: MENGETIK (PENCARIAN LANGSUNG SEMUA DAERAH & PROVINSI)
+             ================================================================= */}
+          {query.trim() ? (
+            <div className="py-1">
+              {/* Baris Provinsi yang cocok (misal ketik "jawa timur") */}
+              {provinsiSuggestions.length > 0 && (
+                <div className="mb-1">
+                  <div className="px-3 py-1.5 bg-raised/80 text-[11px] font-bold text-muted uppercase tracking-wider">
+                    Provinsi
                   </div>
-                );
-              }
+                  {provinsiSuggestions.map((grp) => {
+                    const idx = runningIdx++;
+                    const isHighlighted = highlightedIndex === idx;
+                    return (
+                      <div
+                        key={`search-prov-${grp.provinsi}`}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        data-opt-idx={idx}
+                        data-testid="provinsi-option"
+                        onClick={() => handleEnterProvinsi(grp.provinsi)}
+                        className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer transition ${
+                          isHighlighted ? 'bg-raised text-accent font-bold' : 'text-ink hover:bg-raised/60'
+                        }`}
+                      >
+                        <span className="font-semibold">{grp.provinsi}</span>
+                        <div className="flex items-center gap-1.5 text-muted text-xs">
+                          <span>{grp.cities.length} daerah</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              if (item.type === 'provinsi_header') {
-                return (
-                  <div
-                    key={`prov-hdr-${idx}`}
-                    style={{
-                      position: 'absolute',
-                      top: `${layout.top}px`,
-                      height: `${layout.height}px`,
-                      left: 0,
-                      right: 0,
-                    }}
-                    data-testid="provinsi-header"
-                    className="px-3 flex items-center justify-between bg-raised/90 border-b border-line/60 text-[11px] font-bold text-ink uppercase tracking-wider sticky top-0"
-                  >
-                    <span>{item.title}</span>
-                    <span className="text-[10px] text-muted font-normal lowercase">{item.count} daerah</span>
+              {/* Daftar Daerah Hasil Pencarian (maks 20, format "Kota Surabaya — Jawa Timur") */}
+              {suggestions.length > 0 && (
+                <div>
+                  {provinsiSuggestions.length > 0 && (
+                    <div className="px-3 py-1.5 bg-raised/80 text-[11px] font-bold text-muted uppercase tracking-wider">
+                      Kota &amp; Kabupaten
+                    </div>
+                  )}
+                  {suggestions.map((city) => {
+                    const idx = runningIdx++;
+                    const isHighlighted = highlightedIndex === idx;
+                    const isSelected = kodeWilayah === city.kode;
+                    return (
+                      <div
+                        key={`search-city-${city.kode}`}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        data-opt-idx={idx}
+                        data-city-code={city.kode}
+                        onClick={() => handleSelectCity(city)}
+                        className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer transition ${
+                          isHighlighted ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                        }`}
+                      >
+                        <div className="truncate pr-2">
+                          <span className="font-semibold">{city.nama}</span>
+                          <span className="text-muted font-normal"> — {city.provinsi}</span>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Opsi Manual jika tidak ada yang cocok */}
+              {provinsiSuggestions.length === 0 && suggestions.length === 0 && (
+                <div
+                  role="option"
+                  id="option-custom-city"
+                  aria-selected={highlightedIndex === 0}
+                  data-opt-idx={runningIdx++}
+                  onClick={() => handleSelectCustom(query)}
+                  className="px-3 py-3 min-h-[44px] flex items-center gap-2 cursor-pointer bg-accent/10 text-accent font-bold hover:bg-accent/15 transition"
+                >
+                  <Plus className="w-4 h-4 text-accent shrink-0" />
+                  <div className="truncate">
+                    <span>+ Pakai &apos;<strong className="text-accent">{query.trim()}</strong>&apos; sebagai kota tujuan</span>
                   </div>
-                );
-              }
-
-              if (item.type === 'custom_option') {
+                </div>
+              )}
+            </div>
+          ) : selectedProvinsi && activeProvGroup ? (
+            /* =================================================================
+               MODE 2: DI DALAM SATU PROVINSI (← Semua provinsi, Kota, Kabupaten)
+               ================================================================= */
+            <div>
+              {/* Baris Atas: ← Semua provinsi (min-h 44px agar mudah ditekan di ponsel) */}
+              {(() => {
+                const idx = runningIdx++;
+                const isHighlighted = highlightedIndex === idx;
                 return (
-                  <div
-                    key={`custom-${idx}`}
-                    role="option"
-                    id="option-custom-city"
-                    aria-selected={isHighlighted}
-                    style={{
-                      position: 'absolute',
-                      top: `${layout.top}px`,
-                      height: `${layout.height}px`,
-                      left: 0,
-                      right: 0,
-                    }}
-                    onClick={() => handleSelectCustom(item.customText)}
-                    className={`px-3 flex items-center gap-2 cursor-pointer border-t border-line/60 transition ${
-                      isHighlighted ? 'bg-accent/15 text-accent font-bold' : 'hover:bg-raised text-ink'
+                  <button
+                    type="button"
+                    id="btn-kembali-semua-provinsi"
+                    data-opt-idx={idx}
+                    onClick={handleBackToProvinsiList}
+                    className={`w-full px-3 py-2.5 min-h-[44px] flex items-center justify-between text-left border-b border-line cursor-pointer transition sticky top-0 z-10 ${
+                      isHighlighted
+                        ? 'bg-raised text-accent font-bold'
+                        : 'bg-surface hover:bg-raised text-accent font-bold'
                     }`}
                   >
-                    <Plus className="w-4 h-4 text-accent shrink-0" />
-                    <div className="truncate">
-                      <span>+ Pakai &apos;<strong className="text-accent">{item.customText}</strong>&apos; sebagai kota tujuan</span>
+                    <div className="flex items-center gap-2">
+                      <ArrowLeft className="w-4 h-4 shrink-0" />
+                      <span>Semua provinsi</span>
                     </div>
-                  </div>
+                    <span className="text-xs font-semibold text-ink bg-raised px-2 py-0.5 rounded-md border border-line">
+                      {activeProvGroup.provinsi}
+                    </span>
+                  </button>
                 );
-              }
+              })()}
 
-              // Normal or recent city item
-              const isRecent = item.type === 'recent_city';
-              const city = item.city;
-              const isSelected = kodeWilayah === city.kode;
-
-              return (
-                <div
-                  key={`city-${city.kode}-${idx}`}
-                  role="option"
-                  aria-selected={isHighlighted}
-                  data-city-code={city.kode}
-                  style={{
-                    position: 'absolute',
-                    top: `${layout.top}px`,
-                    height: `${layout.height}px`,
-                    left: 0,
-                    right: 0,
-                  }}
-                  onClick={() => handleSelectCity(city)}
-                  className={`px-3 flex items-center justify-between cursor-pointer border-b border-line/20 transition ${
-                    isHighlighted
-                      ? 'bg-raised text-accent font-semibold'
-                      : 'text-ink hover:bg-raised/60'
-                  }`}
-                >
-                  <div className="truncate pr-2">
-                    <div className="font-semibold text-xs sm:text-sm truncate">{city.nama}</div>
-                    <div className="text-[11px] text-muted truncate">{city.provinsi}</div>
+              {/* Kelompok KOTA (urut abjad, tanpa label provinsi berulang) */}
+              {activeProvGroup.kotaList.length > 0 && (
+                <div>
+                  <div
+                    data-testid="group-header-kota"
+                    className="px-3 py-1.5 bg-raised/90 text-[11px] font-bold text-ink uppercase tracking-wider border-b border-line/50"
+                  >
+                    Kota
                   </div>
-                  {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                  {activeProvGroup.kotaList.map((city) => {
+                    const idx = runningIdx++;
+                    const isHighlighted = highlightedIndex === idx;
+                    const isSelected = kodeWilayah === city.kode;
+                    return (
+                      <div
+                        key={city.kode}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        data-opt-idx={idx}
+                        data-city-code={city.kode}
+                        onClick={() => handleSelectCity(city)}
+                        className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer transition ${
+                          isHighlighted ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                        }`}
+                      >
+                        <span className="font-semibold truncate">{city.nama}</span>
+                        {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              )}
+
+              {/* Kelompok KABUPATEN (urut abjad, tanpa label provinsi berulang) */}
+              {activeProvGroup.kabupatenList.length > 0 && (
+                <div>
+                  <div
+                    data-testid="group-header-kabupaten"
+                    className="px-3 py-1.5 bg-raised/90 text-[11px] font-bold text-ink uppercase tracking-wider border-y border-line/50"
+                  >
+                    Kabupaten
+                  </div>
+                  {activeProvGroup.kabupatenList.map((city) => {
+                    const idx = runningIdx++;
+                    const isHighlighted = highlightedIndex === idx;
+                    const isSelected = kodeWilayah === city.kode;
+                    return (
+                      <div
+                        key={city.kode}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        data-opt-idx={idx}
+                        data-city-code={city.kode}
+                        onClick={() => handleSelectCity(city)}
+                        className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer transition ${
+                          isHighlighted ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                        }`}
+                      >
+                        <span className="font-semibold truncate">{city.nama}</span>
+                        {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* =================================================================
+               MODE 1: TINGKAT PROVINSI (Terakhir dipakai + 38 Provinsi)
+               ================================================================= */
+            <div>
+              {/* Bagian 1: Terakhir dipakai (maks 5 kota) */}
+              {recentCities.length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 bg-raised/80 flex items-center gap-1.5 text-[11px] font-bold text-accent uppercase tracking-wider border-b border-line/40">
+                    <History className="w-3.5 h-3.5" />
+                    <span>Terakhir dipakai</span>
+                  </div>
+                  {recentCities.map((city) => {
+                    const idx = runningIdx++;
+                    const isHighlighted = highlightedIndex === idx;
+                    const isSelected = kodeWilayah === city.kode;
+                    return (
+                      <div
+                        key={`recent-${city.kode}`}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        data-opt-idx={idx}
+                        onClick={() => handleSelectCity(city)}
+                        className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer transition ${
+                          isHighlighted ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                        }`}
+                      >
+                        <div className="truncate pr-2">
+                          <span className="font-semibold">{city.nama}</span>
+                          <span className="text-muted text-xs"> — {city.provinsi}</span>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Bagian 2: Daftar 38 Provinsi (Jawa Barat paling atas) */}
+              <div>
+                <div className="px-3 py-1.5 bg-raised/90 text-[11px] font-bold text-ink uppercase tracking-wider border-b border-line/50">
+                  Pilih Provinsi (38)
+                </div>
+                {groupedProvinsi.map((grp) => {
+                  const idx = runningIdx++;
+                  const isHighlighted = highlightedIndex === idx;
+                  return (
+                    <div
+                      key={grp.provinsi}
+                      role="option"
+                      aria-selected={isHighlighted}
+                      data-opt-idx={idx}
+                      data-testid="provinsi-row"
+                      data-provinsi={grp.provinsi}
+                      onClick={() => handleEnterProvinsi(grp.provinsi)}
+                      className={`px-3 py-2.5 min-h-[42px] flex items-center justify-between cursor-pointer border-b border-line/20 transition ${
+                        isHighlighted ? 'bg-raised text-accent font-semibold' : 'text-ink hover:bg-raised/60'
+                      }`}
+                    >
+                      <span className="font-semibold truncate">{grp.provinsi}</span>
+                      <div className="flex items-center gap-1.5 text-muted text-xs shrink-0">
+                        <span>{grp.cities.length} daerah</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
