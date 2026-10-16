@@ -33,30 +33,12 @@ export async function GET(req: NextRequest) {
   const kanal = searchParams.get('kanal') || null;
   const adminId = searchParams.get('admin_id') || null;
 
-  // Tentukan rentang tanggal
-  const now = new Date();
-  let startDate = new Date();
-  let endDate = new Date();
-
-  if (periode === 'minggu_ini') {
-    const day = now.getDay() || 7; // 1 = senin
-    startDate.setDate(now.getDate() - day + 1);
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-  } else if (periode === 'bulan_lalu') {
-    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  } else if (periode === 'custom') {
-    const s = searchParams.get('start_date');
-    const e = searchParams.get('end_date');
-    startDate = s ? new Date(s) : new Date(now.getFullYear(), now.getMonth(), 1);
-    endDate = e ? new Date(e) : new Date();
-  } else {
-    // bulan_ini (default)
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  }
-
+  // Tentukan rentang tanggal berbasis zona waktu Asia/Jakarta (WIB, UTC+7)
+  const { startDate, endDate } = getWibDateRange(
+    periode,
+    searchParams.get('start_date'),
+    searchParams.get('end_date')
+  );
   // 1. Panggil fungsi database get_owner_dashboard_summary (dihitung di PostgreSQL)
   const { data: summary, error: sumErr } = await adminClient.rpc('get_owner_dashboard_summary', {
     p_start_date: startDate.toISOString(),
@@ -111,4 +93,53 @@ export async function GET(req: NextRequest) {
     perubahan_harga_terakhir: priceBookLogs || [],
     admins: admins || [],
   });
+}
+
+function getWibDateRange(
+  periode: string,
+  customStart?: string | null,
+  customEnd?: string | null
+): { startDate: Date; endDate: Date } {
+  const now = new Date();
+  const wibFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour12: false,
+  });
+
+  const parts = wibFormatter.formatToParts(now);
+  const partMap: Record<string, number> = {};
+  for (const p of parts) {
+    partMap[p.type] = Number(p.value);
+  }
+  const curYear = partMap.year || 2026;
+  const curMonth = partMap.month || 10;
+  const curDay = partMap.day || 16;
+
+  if (periode === 'minggu_ini') {
+    const wibDayOfWeek = new Date(`${curYear}-${String(curMonth).padStart(2, '0')}-${String(curDay).padStart(2, '0')}T12:00:00+07:00`).getDay() || 7;
+    const mondayDay = curDay - wibDayOfWeek + 1;
+    const startStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(Math.max(1, mondayDay)).padStart(2, '0')}T00:00:00.000+07:00`;
+    const endStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(curDay).padStart(2, '0')}T23:59:59.999+07:00`;
+    return { startDate: new Date(startStr), endDate: new Date(endStr) };
+  } else if (periode === 'bulan_lalu') {
+    const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
+    const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const startStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
+    const endStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}T23:59:59.999+07:00`;
+    return { startDate: new Date(startStr), endDate: new Date(endStr) };
+  } else if (periode === 'custom' && customStart && customEnd) {
+    const startStr = `${customStart}T00:00:00.000+07:00`;
+    const endStr = `${customEnd}T23:59:59.999+07:00`;
+    return { startDate: new Date(startStr), endDate: new Date(endStr) };
+  } else {
+    // bulan_ini (default)
+    const lastDayThisMonth = new Date(curYear, curMonth, 0).getDate();
+    const startStr = `${curYear}-${String(curMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
+    const endStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}T23:59:59.999+07:00`;
+    return { startDate: new Date(startStr), endDate: new Date(endStr) };
+  }
 }
