@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -88,10 +89,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Logo asli Putra Glass dalam kotak putih 40x40 */}
           <div className="flex items-center gap-3 px-2 pt-2">
             <div className="w-10 h-10 min-w-[40px] min-h-[40px] bg-white rounded-xl flex items-center justify-center p-1.5 shadow-sm shrink-0">
-              <img
+              <Image
                 src="/logo-mark.png"
                 alt="Putra Glass Logo"
+                width={40}
+                height={40}
                 className="w-full h-full object-contain"
+                priority
               />
             </div>
             <div>
@@ -198,10 +202,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Mobile Brand */}
           <div className="flex items-center gap-3 md:hidden">
             <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 shadow-xs border border-line">
-              <img
+              <Image
                 src="/logo-mark.png"
                 alt="Putra Glass Logo"
+                width={36}
+                height={36}
                 className="w-full h-full object-contain"
+                priority
               />
             </div>
             <span className="font-bold text-sm text-ink">Putra Glass</span>
