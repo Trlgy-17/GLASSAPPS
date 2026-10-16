@@ -204,6 +204,110 @@ export default function PengaturanBukuHargaPage() {
 
       {priceBook && (
         <form onSubmit={handleSave} className="space-y-6">
+          {/* Bagian Jasa Pengiriman Resmi */}
+          <div className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
+            <h2 className="text-[17px] font-bold text-ink border-b border-line pb-3">
+              1. Jasa Pengiriman (Ongkos Kirim)
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 bg-raised rounded-xl border border-line space-y-3">
+                <span className="font-bold text-sm text-ink block">Luar Kota (Packing Kayu)</span>
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1">Harga List (Rp)</label>
+                  <input
+                    type="number"
+                    value={priceBook.logistik?.kirim_luar_kota?.list || 1300000}
+                    onChange={(e) =>
+                      setPriceBook({
+                        ...priceBook,
+                        logistik: {
+                          ...priceBook.logistik,
+                          kirim_luar_kota: {
+                            ...priceBook.logistik?.kirim_luar_kota,
+                            list: Number(e.target.value),
+                            batas_admin: priceBook.logistik?.kirim_luar_kota?.batas_admin || 1150000,
+                            skema_50_aktif: true,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full text-sm px-3 py-2 border border-line rounded-lg bg-surface text-ink tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1">Harga Net Admin (Rp)</label>
+                  <input
+                    type="number"
+                    value={priceBook.logistik?.kirim_luar_kota?.batas_admin || 1150000}
+                    onChange={(e) =>
+                      setPriceBook({
+                        ...priceBook,
+                        logistik: {
+                          ...priceBook.logistik,
+                          kirim_luar_kota: {
+                            ...priceBook.logistik?.kirim_luar_kota,
+                            list: priceBook.logistik?.kirim_luar_kota?.list || 1300000,
+                            batas_admin: Number(e.target.value),
+                            skema_50_aktif: true,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full text-sm px-3 py-2 border border-line rounded-lg bg-surface text-ink tabular-nums"
+                  />
+                </div>
+                <p className="text-[11px] text-muted">LUAR KOTA = 1.300.000 NET DI 1.150.000</p>
+              </div>
+
+              <div className="p-4 bg-raised rounded-xl border border-line space-y-3">
+                <span className="font-bold text-sm text-ink block">Dalam Kota (Bandung Raya &amp; Cimahi)</span>
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1">Harga List (Rp)</label>
+                  <input
+                    type="number"
+                    value={priceBook.logistik?.kirim_bandung?.list || 750000}
+                    onChange={(e) =>
+                      setPriceBook({
+                        ...priceBook,
+                        logistik: {
+                          ...priceBook.logistik,
+                          kirim_bandung: {
+                            ...priceBook.logistik?.kirim_bandung,
+                            list: Number(e.target.value),
+                            batas_admin: priceBook.logistik?.kirim_bandung?.batas_admin || 500000,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full text-sm px-3 py-2 border border-line rounded-lg bg-surface text-ink tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1">Harga Net Admin (Rp)</label>
+                  <input
+                    type="number"
+                    value={priceBook.logistik?.kirim_bandung?.batas_admin || 500000}
+                    onChange={(e) =>
+                      setPriceBook({
+                        ...priceBook,
+                        logistik: {
+                          ...priceBook.logistik,
+                          kirim_bandung: {
+                            ...priceBook.logistik?.kirim_bandung,
+                            list: priceBook.logistik?.kirim_bandung?.list || 750000,
+                            batas_admin: Number(e.target.value),
+                          },
+                        },
+                      })
+                    }
+                    className="w-full text-sm px-3 py-2 border border-line rounded-lg bg-surface text-ink tabular-nums"
+                  />
+                </div>
+                <p className="text-[11px] text-muted">DALAM KOTA = 750.000 NET DI 500 AJA</p>
+              </div>
+            </div>
+          </div>
+
           {/* Bagian Rekening & Kontak PDF */}
           <div className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
             <h2 className="text-[17px] font-bold text-ink border-b border-line pb-3">

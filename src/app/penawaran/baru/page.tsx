@@ -67,7 +67,7 @@ export default function PenawaranPage() {
   const batasPasangAdmin = batasPasang?.batas_admin || (isDalamKota ? 500000 : 1000000);
   const batasPasangMin = isDalamKota ? 300000 : 800000;
   // Nilai Deal Ongkir
-  const [ongkirDealVal, setOngkirDealVal] = useState<number | undefined>(undefined);
+  const [ongkirDealVal, setOngkirDealVal] = useState<number | undefined>(1150000);
   const [ongkirInputText, setOngkirInputText] = useState('');
   const [isOngkirFocused, setIsOngkirFocused] = useState(false);
   const [ongkirKonfirmasiOwner, setOngkirKonfirmasiOwner] = useState(false);
@@ -428,7 +428,8 @@ export default function PenawaranPage() {
                   onChange={(e) => {
                     const newZona = e.target.value as 'dalam_kota' | 'luar_kota';
                     setZona(newZona);
-                    setOngkirDealVal(undefined);
+                    setOngkirDealVal(newZona === 'dalam_kota' ? 500000 : 1150000);
+                    setOngkirInputText('');
                   }}
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
@@ -963,12 +964,78 @@ export default function PenawaranPage() {
                 </div>
 
                 {/* Ongkir Deal Input */}
-                <div className="space-y-1.5 pt-2 border-t border-line/40">
+                <div className="space-y-2 pt-2 border-t border-line/40">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-muted flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-accent" /> Ongkir Deal (List: {formatRupiah(ongkirListPrice)}):
+                    <span className="font-bold text-ink flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-accent" /> 1. JASA PENGIRIMAN
                     </span>
-                    <span className="font-bold text-ink tabular-nums">{formatRupiah(kalkulasi.ongkir.deal)}</span>
+                    <span className="font-extrabold text-ink tabular-nums text-sm">{formatRupiah(kalkulasi.ongkir.deal)}</span>
+                  </div>
+
+                  {/* Toggle Cepat Zona Pengiriman */}
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-raised rounded-xl border border-line text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setZona('dalam_kota');
+                        setOngkirDealVal(500000);
+                        setOngkirInputText('');
+                      }}
+                      className={`px-2 py-1.5 rounded-lg transition cursor-pointer text-center text-[11px] ${
+                        isDalamKota
+                          ? 'bg-surface text-accent font-bold shadow-xs'
+                          : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      Dalam Kota (Net 500k)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setZona('luar_kota');
+                        setOngkirDealVal(1150000);
+                        setOngkirInputText('');
+                      }}
+                      className={`px-2 py-1.5 rounded-lg transition cursor-pointer text-center text-[11px] ${
+                        !isDalamKota
+                          ? 'bg-surface text-accent font-bold shadow-xs'
+                          : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      Luar Kota (Net 1.15jt)
+                    </button>
+                  </div>
+
+                  {/* Pilihan Cepat: Harga List vs Net Admin */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOngkirDealVal(ongkirListPrice);
+                        setOngkirInputText('');
+                      }}
+                      className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition cursor-pointer ${
+                        kalkulasi.ongkir.deal === ongkirListPrice
+                          ? 'border-accent bg-tint text-accent font-bold'
+                          : 'border-line bg-raised text-muted hover:bg-surface'
+                      }`}
+                    >
+                      List: {formatRupiah(ongkirListPrice)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOngkirDealVal(batasOngkirAdmin);
+                        setOngkirInputText('');
+                      }}
+                      className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition cursor-pointer ${
+                        kalkulasi.ongkir.deal === batasOngkirAdmin
+                          ? 'border-accent bg-tint text-accent font-bold'
+                          : 'border-line bg-raised text-muted hover:bg-surface'
+                      }`}
+                    >
+                      Net: {formatRupiah(batasOngkirAdmin)}
+                    </button>
                   </div>
 
                   <input
@@ -978,13 +1045,15 @@ export default function PenawaranPage() {
                     onFocus={handleOngkirFocus}
                     onBlur={handleOngkirBlur}
                     onChange={(e) => setOngkirInputText(e.target.value)}
-                    placeholder={`Default: ${formatRupiah(ongkirListPrice)}`}
-                    className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none"
+                    placeholder={`Ketik nominal deal manual...`}
+                    className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums font-semibold"
                   />
-                  <p className="text-[11px] text-muted font-medium">
-                    Batas Wewenang Admin (Harga Net): {formatRupiah(batasOngkirAdmin)}
-                  </p>
-
+                  <div className="flex items-center justify-between text-[11px] text-muted font-medium">
+                    <span>
+                      {isDalamKota ? 'DALAM KOTA = 750.000 NET DI 500 AJA' : 'LUAR KOTA = 1.300.000 NET DI 1.150.000'}
+                    </span>
+                    <span>Floor: {formatRupiah(batasOngkirMin)}</span>
+                  </div>
                   {kalkulasi.ongkir.status === 'error_merah' && (
                     <p className="text-xs text-warn font-semibold mt-1">
                       Minimal {formatRupiah(batasOngkirMin)} (ongkir maksimal dibagi 2)
