@@ -269,7 +269,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '25', 10)));
+  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '20', 10)));
   const search = searchParams.get('search')?.trim() || '';
   const status = searchParams.get('status')?.trim() || '';
   const includeTest = searchParams.get('include_test') === 'true';
@@ -279,7 +279,7 @@ export async function GET(req: NextRequest) {
 
   let query = adminClient
     .from('penawaran')
-    .select('*, leads!inner(nama, kota, no_wa), users:created_by(nama, email)', { count: 'exact' });
+    .select('id, nomor, status, kanal, total_nilai, ringkasan_json, valid_until, created_at, deal_at, alasan_batal, leads!inner(nama, kota, no_wa), users:created_by(nama, email)', { count: 'exact' });
   if (!includeTest) {
     query = query.not('leads.nama', 'ilike', '[TES]%').not('nomor', 'ilike', '%TEST%');
   }

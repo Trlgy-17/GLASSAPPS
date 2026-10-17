@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { matchKotaFromText, WilayahKota } from '@/lib/wilayah/kota';
+import type { WilayahKota } from '@/lib/wilayah/kota';
 import { formatModelDisplayName, AI_ALL_EXHAUSTED_MESSAGE } from '@/lib/ai/fallback-chain';
 // Lazy load CityCombobox agar bundle JS awal tetap kecil
 const CityCombobox = dynamic(
@@ -209,7 +209,7 @@ export default function BalasChatPage() {
     }
   }, [pastedText, kanal]);
 
-  // Helper kompresi gambar
+  // Helper kompresi gambar (maks 1600px, JPEG kualitas 0.8, target < 400KB, URL.revokeObjectURL aman)
   const resizeImage = (file: File): Promise<ScreenshotItem> => {
     const { promise, resolve } = Promise.withResolvers<ScreenshotItem>();
     const reader = new FileReader();
@@ -233,13 +233,32 @@ export default function BalasChatPage() {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, w, h);
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const base64 = compressedDataUrl.split(',')[1];
-        resolve({
-          base64,
-          mimeType: 'image/jpeg',
-          previewUrl: compressedDataUrl,
-        });
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+              resolve({
+                base64: dataUrl.split(',')[1],
+                mimeType: 'image/jpeg',
+                previewUrl: dataUrl,
+              });
+              return;
+            }
+            const previewUrl = URL.createObjectURL(blob);
+            const blobReader = new FileReader();
+            blobReader.onloadend = () => {
+              const base64 = (blobReader.result as string).split(',')[1];
+              resolve({
+                base64,
+                mimeType: 'image/jpeg',
+                previewUrl,
+              });
+            };
+            blobReader.readAsDataURL(blob);
+          },
+          'image/jpeg',
+          0.8
+        );
       };
       img.src = e.target?.result as string;
     };
@@ -331,6 +350,7 @@ export default function BalasChatPage() {
 
           // Otomatis cocokkan kota hasil baca AI ke master Kemendagri
           if (json.extraction?.kota) {
+            const { matchKotaFromText } = await import('@/lib/wilayah/kota');
             const match = matchKotaFromText(json.extraction.kota);
             if (match.matchedKota) {
               setExtraction((prev) => (prev ? { ...prev, kota: match.matchedKota!.nama } : prev));
@@ -541,6 +561,10 @@ export default function BalasChatPage() {
   };
 
   const handleRemoveImage = (index: number) => {
+    const imgToRemove = images[index];
+    if (imgToRemove?.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(imgToRemove.previewUrl);
+    }
     setImages(images.filter((_, i) => i !== index));
   };
 
@@ -630,6 +654,11 @@ export default function BalasChatPage() {
 
   const handleChatBaru = () => {
     try { sessionStorage.removeItem('balas_chat_draft_input'); } catch {}
+    images.forEach((img) => {
+      if (img.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(img.previewUrl);
+      }
+    });
     setImages([]);
     setPastedText('');
     setExtraction(null);
@@ -852,7 +881,7 @@ export default function BalasChatPage() {
             <div className="flex flex-wrap gap-2.5 pt-1">
               {images.map((img, i) => (
                 <div key={i} className="relative group w-16 h-16 rounded-xl border border-line overflow-hidden bg-raised">
-                  <img src={img.previewUrl} alt={`Screenshot ${i + 1}`} className="w-full h-full object-cover" />
+                  <img src={img.previewUrl} alt={`Screenshot ${i + 1}`} width={64} height={64} className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={(e) => {

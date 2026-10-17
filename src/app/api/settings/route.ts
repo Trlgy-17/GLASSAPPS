@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { CompanySettings, DEFAULT_SETTINGS } from '@/types/settings';
+import { getCompanySettings } from '@/lib/settings/get-settings';
 
 export async function GET() {
-  const adminClient = createAdminClient();
-  const { data, error } = await adminClient
-    .from('settings')
-    .select('*')
-    .eq('id', 'general')
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ settings: DEFAULT_SETTINGS });
-  }
-
-  return NextResponse.json({ settings: data });
+  const settings = await getCompanySettings();
+  return NextResponse.json({ settings });
 }
 
 export async function POST(req: NextRequest) {
@@ -135,6 +127,8 @@ export async function POST(req: NextRequest) {
   if (upsertErr) {
     return NextResponse.json({ error: upsertErr.message }, { status: 500 });
   }
+
+  revalidateTag('company_settings');
 
   // Catat perubahan di audit_log
   await adminClient.from('audit_log').insert({

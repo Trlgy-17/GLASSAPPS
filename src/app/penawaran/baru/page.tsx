@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { defaultAdminPriceBookV1 } from '@/lib/pricing/admin-price-book';
 import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { parseRupiah, formatRupiah } from '@/lib/pricing/format-rupiah';
-import { detectZonaByKota } from '@/lib/wilayah/kota';
+import { detectZonaByKota } from '@/lib/wilayah/zona';
 import { CerminItemInput, PenawaranInput, PriceBookData, PriceBookDataAdmin } from '@/types/pricing';
 
 // Lazy load CityCombobox agar bundle JS awal tetap kecil (<= 200 KB)

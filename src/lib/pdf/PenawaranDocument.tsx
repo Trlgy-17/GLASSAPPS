@@ -1,3 +1,4 @@
+import 'server-only';
 import React from 'react';
 import { Document, Page, Text, View, Image, Link, StyleSheet } from '@react-pdf/renderer';
 import { HitungPenawaranOutput, PriceBookData } from '@/types/pricing';

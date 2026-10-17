@@ -1,7 +1,8 @@
+import { unstable_cache } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { CompanySettings, DEFAULT_SETTINGS } from '@/types/settings';
 
-export async function getCompanySettings(): Promise<CompanySettings> {
+async function fetchCompanySettingsFromDb(): Promise<CompanySettings> {
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
@@ -31,3 +32,9 @@ export async function getCompanySettings(): Promise<CompanySettings> {
     return DEFAULT_SETTINGS;
   }
 }
+
+export const getCompanySettings = unstable_cache(
+  fetchCompanySettingsFromDb,
+  ['company_settings_cache'],
+  { tags: ['company_settings'], revalidate: 3600 }
+);

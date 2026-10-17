@@ -7,6 +7,9 @@ const bundleAnalyzer = withBundleAnalyzer({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
   async headers() {
     return [
       {
@@ -34,6 +37,12 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+    ];
+  },
+  async rewrites() {
+    return [
+      { source: '/balas-chat', destination: '/balas' },
+      { source: '/kalkulator', destination: '/penawaran/baru' },
     ];
   },
 };

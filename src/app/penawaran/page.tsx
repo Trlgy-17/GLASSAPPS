@@ -65,7 +65,7 @@ export default function PenawaranListPage() {
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
-        limit: '25',
+        limit: '20',
         search: searchQuery,
         status: statusFilter,
       });

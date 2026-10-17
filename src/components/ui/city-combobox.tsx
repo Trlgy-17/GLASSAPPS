@@ -121,15 +121,18 @@ export function CityCombobox({
       setHighlightedIndex(0);
       return;
     }
+    // Debounce pencarian kota 150 ms untuk responsivitas input
+    const debounceTimer = setTimeout(() => {
+      import('@/lib/wilayah/kota').then(({ searchKota, searchProvinsi }) => {
+        const foundProv = searchProvinsi(trimmed, provFreq);
+        const foundKota = searchKota(trimmed, 20);
+        setProvinsiSuggestions(foundProv);
+        setSuggestions(foundKota);
+        setHighlightedIndex(0);
+      });
+    }, 150);
 
-    // Jika sedang mengetik, abaikan tingkat provinsi dan cari langsung dari semua daerah & provinsi
-    import('@/lib/wilayah/kota').then(({ searchKota, searchProvinsi }) => {
-      const foundProv = searchProvinsi(trimmed, provFreq);
-      const foundKota = searchKota(trimmed, 20);
-      setProvinsiSuggestions(foundProv);
-      setSuggestions(foundKota);
-      setHighlightedIndex(0);
-    });
+    return () => clearTimeout(debounceTimer);
   }, [query, isOpen, isDataLoaded, provFreq]);
 
   // Reset scroll ke atas saat pindah tingkat provinsi

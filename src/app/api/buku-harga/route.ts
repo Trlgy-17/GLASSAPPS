@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
 import { PriceBookData, PriceBookDataAdmin } from '@/types/pricing';
@@ -145,6 +146,7 @@ export async function POST(req: NextRequest) {
   // Jika langsung diaktifkan, panggil fungsi activate_price_book dalam satu transaksi aman
   if (aktifkan_sekarang) {
     await adminClient.rpc('activate_price_book', { p_versi: newVersi });
+    revalidateTag('price_book_active');
   }
 
   // Rekam ke audit_log dengan snapshot sebelum & sesudah
