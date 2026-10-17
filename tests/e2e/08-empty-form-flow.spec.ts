@@ -57,7 +57,7 @@ test.describe('Verifikasi Form Penawaran Awal Kosong & Transfer Data Balas Chat'
     await expect(inputKota).toHaveValue('Kota Bandung');
 
     // Logout via button di sidebar
-    const btnLogout = page.locator('button[aria-label="Keluar dari aplikasi"]');
+    const btnLogout = page.locator('button[aria-label="Keluar dari aplikasi"]:visible').first();
     await btnLogout.click();
     await page.waitForURL('**/login');
 

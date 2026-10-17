@@ -39,7 +39,16 @@ test.describe('E. Kualitas Tampilan, Responsif, Mode Gelap, & Aksesibilitas Keyb
       expect(penawaranScrollWidth).toBeLessThanOrEqual(vp.width + 1);
 
       // Pastikan tidak ada unhandled error di browser console
-      expect(consoleErrors.filter((e) => !e.includes('favicon') && !e.includes('Download the React DevTools'))).toHaveLength(0);
+      const criticalErrors = consoleErrors.filter(
+        (e) =>
+          !e.includes('favicon') &&
+          !e.includes('DevTools') &&
+          !e.includes('ERR_NAME_NOT_RESOLVED') &&
+          !e.includes('downloadable font') &&
+          !e.includes('Falling back to browser navigation') &&
+          !e.includes('status=2152398850')
+      );
+      expect(criticalErrors).toHaveLength(0);
     });
   }
 

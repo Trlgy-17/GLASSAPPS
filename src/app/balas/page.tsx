@@ -906,7 +906,28 @@ export default function BalasChatPage() {
             <textarea
               ref={textareaRef}
               value={pastedText}
-              onChange={(e) => setPastedText(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setPastedText(val);
+                try {
+                  if (val.trim()) {
+                    sessionStorage.setItem('balas_chat_draft_input', JSON.stringify({ pastedText: val, kanal }));
+                  } else {
+                    sessionStorage.removeItem('balas_chat_draft_input');
+                  }
+                } catch {}
+              }}
+              onInput={(e) => {
+                const val = (e.target as HTMLTextAreaElement).value;
+                setPastedText(val);
+                try {
+                  if (val.trim()) {
+                    sessionStorage.setItem('balas_chat_draft_input', JSON.stringify({ pastedText: val, kanal }));
+                  } else {
+                    sessionStorage.removeItem('balas_chat_draft_input');
+                  }
+                } catch {}
+              }}
               placeholder="Ketik atau tempel teks (Enter = baris baru, Ctrl+Enter = Buat Draf)..."
               rows={4}
               className="w-full p-3.5 bg-raised border border-line rounded-xl text-ink text-[15px] focus:outline-none focus:border-accent transition resize-none placeholder:text-muted/60"

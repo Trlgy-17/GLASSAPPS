@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 import { formatRupiah } from '@/lib/pricing/format-rupiah';
 import {
   FileText,
@@ -51,16 +50,15 @@ export default function PenawaranListPage() {
   const [alasanBatalInput, setAlasanBatalInput] = useState('harga');
 
   const loadQuotes = useCallback(async () => {
-    setIsLoading(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const { data: profile } = await supabase.from('users').select('peran').eq('id', user.id).single();
-      setUserRole(profile?.peran || 'admin');
-    }
+    try {
+      const authRes = await fetch('/api/auth/me');
+      if (authRes.ok) {
+        const authJson = await authRes.json();
+        if (authJson.user?.peran) {
+          setUserRole(authJson.user.peran);
+        }
+      }
+    } catch {}
 
     try {
       const params = new URLSearchParams({

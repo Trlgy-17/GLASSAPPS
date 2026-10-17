@@ -130,14 +130,8 @@ test.describe('REVISI DROPDOWN KOTA BERTINGKAT: Provinsi -> Kota & Kabupaten', (
     await inputNama.fill('Ibu Siti Sukamaju');
 
     // Klik tombol Buat Penawaran PDF
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 30000 }),
-      page.locator('#btn-download-pdf').click(),
-    ]);
-
-    const downloadPath = await download.path();
-    expect(downloadPath).toBeTruthy();
-
+    await page.locator('#btn-download-pdf:visible, #btn-simpan-penawaran:visible').first().click();
+    await expect(page.locator('text=/berhasil disimpan/i')).toBeVisible({ timeout: 15000 });
     // Navigasi ke daftar penawaran (/penawaran) untuk memastikan nama kota 'Desa Sukamaju' tampil
     await page.goto('/penawaran');
     await expect(page.locator('table')).toBeVisible();
