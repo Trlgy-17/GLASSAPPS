@@ -262,8 +262,7 @@ export async function GET(req: NextRequest) {
 
   let query = adminClient
     .from('penawaran')
-    .select('*, leads!inner(nama, kota, no_wa)', { count: 'exact' });
-
+    .select('*, leads!inner(nama, kota, no_wa), users:created_by(nama, email)', { count: 'exact' });
   if (!includeTest) {
     query = query.not('leads.nama', 'ilike', '[TES]%').not('nomor', 'ilike', '%TEST%');
   }

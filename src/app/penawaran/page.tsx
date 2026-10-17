@@ -29,6 +29,7 @@ interface PenawaranRow {
   deal_at?: string;
   alasan_batal?: string;
   leads?: { nama: string; kota: string; no_wa: string };
+  users?: { nama: string; email: string };
   ringkasan_json?: Record<string, unknown>;
 }
 
@@ -256,7 +257,9 @@ export default function PenawaranListPage() {
                     <tr key={q.id} className="hover:bg-raised transition">
                       <td className="py-4 px-5">
                         <span className="font-bold text-accent block">{q.nomor}</span>
-                        <span className="text-xs text-muted tabular-nums">{dateStr}</span>
+                        <span className="text-xs text-muted tabular-nums">
+                          {dateStr} · {q.users?.nama || 'Admin'}
+                        </span>
                       </td>
 
                       <td className="py-4 px-5">

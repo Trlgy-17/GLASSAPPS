@@ -49,30 +49,30 @@ interface WeeklyChartItem {
 
 interface PotonganItem {
   id: string;
-  aktor: string;
-  objek: string;
-  sebelum: any;
-  sesudah: any;
+  penawaran_id?: string;
+  nomor: string;
+  nama_klien: string;
+  kota: string;
+  jenis: string;
+  nilai_list: number;
+  nilai_deal: number;
+  selisih: number;
+  keterangan_deal: string;
+  ringkasan_baris: string;
   alasan: string;
-  created_at: string;
+  di_bawah_net: boolean;
+  tanggal: string;
+  admin_nama: string;
+  penawaran?: any;
 }
-
-interface PriceBookAuditLog {
-  id: string;
-  aktor: string;
-  aksi: string;
-  created_at: string;
-  alasan: string;
-  sesudah: any;
-}
-
 export default function DasborPage() {
   const [summary, setSummary] = useState<DasborSummary | null>(null);
   const [followUpList, setFollowUpList] = useState<FollowUpItem[]>([]);
   const [chartData, setChartData] = useState<WeeklyChartItem[]>([]);
   const [potonganList, setPotonganList] = useState<PotonganItem[]>([]);
-  const [priceBookLogs, setPriceBookLogs] = useState<PriceBookAuditLog[]>([]);
   const [admins, setAdmins] = useState<Array<{ id: string; nama: string; email: string }>>([]);
+  const [selectedDetailQuote, setSelectedDetailQuote] = useState<any | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   const [rentang, setRentang] = useState<'minggu_ini' | 'bulan_ini' | 'bulan_lalu' | 'custom'>('bulan_ini');
   const [kanal, setKanal] = useState<string>('all');
@@ -97,7 +97,6 @@ export default function DasborPage() {
           setFollowUpList(json.follow_up || []);
           setChartData(json.chart_data || []);
           setPotonganList(json.potongan_minggu_ini || []);
-          setPriceBookLogs(json.perubahan_harga_terakhir || []);
           if (json.admins) setAdmins(json.admins);
         }
       } catch (err) {
@@ -115,6 +114,60 @@ export default function DasborPage() {
   const totalStatusCount = summary
     ? summary.dibuat.jumlah + summary.proses.jumlah + summary.deal.jumlah + summary.batal.jumlah
     : 1;
+  const handleOpenDetail = async (nomor: string, fallbackData?: any) => {
+    setIsLoadingDetail(true);
+    try {
+      const res = await fetch(`/api/penawaran?search=${encodeURIComponent(nomor)}&include_test=true`);
+      if (res.ok) {
+        const json = await res.json();
+        const found = json.penawaran?.[0];
+        if (found) {
+          setSelectedDetailQuote({
+            id: found.id,
+            nomor: found.nomor,
+            nama_klien: found.leads?.nama || fallbackData?.nama_klien || 'Klien',
+            kota: found.leads?.kota || fallbackData?.kota || '-',
+            admin_nama: found.users?.nama || fallbackData?.admin_nama || 'Admin',
+            status: found.status,
+            total_nilai: Number(found.total_nilai || fallbackData?.total_nilai || 0),
+            subtotal_cermin: Number(found.ringkasan_json?.subtotal_cermin || 0),
+            ongkir: Number(found.ringkasan_json?.ongkir?.deal || 0),
+            pasang: Number(found.ringkasan_json?.pasang?.deal || 0),
+            dp_50: Number(found.ringkasan_json?.dp_50 || 0),
+            pelunasan: Number(found.ringkasan_json?.pelunasan || 0),
+            items: Array.isArray(found.items_json) ? found.items_json : [],
+            tanggal: new Date(found.created_at).toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            }),
+          });
+          return;
+        }
+      }
+    } catch {} finally {
+      setIsLoadingDetail(false);
+    }
+
+    if (fallbackData) {
+      setSelectedDetailQuote({
+        id: fallbackData.id || nomor,
+        nomor,
+        nama_klien: fallbackData.nama_klien || 'Klien',
+        kota: fallbackData.kota || '-',
+        admin_nama: fallbackData.admin_nama || 'Admin',
+        status: fallbackData.status || 'terkirim',
+        total_nilai: Number(fallbackData.total_nilai || fallbackData.nilai_deal || 0),
+        subtotal_cermin: Number(fallbackData.total_nilai || fallbackData.nilai_deal || 0),
+        ongkir: Number(fallbackData.nilai_deal || 0),
+        pasang: 0,
+        dp_50: Math.ceil(Number(fallbackData.total_nilai || fallbackData.nilai_deal || 0) / 2000) * 1000,
+        pelunasan: Number(fallbackData.total_nilai || fallbackData.nilai_deal || 0) - Math.ceil(Number(fallbackData.total_nilai || fallbackData.nilai_deal || 0) / 2000) * 1000,
+        items: [],
+        tanggal: fallbackData.tanggal || 'Hari ini',
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -429,7 +482,11 @@ export default function DasborPage() {
                     </thead>
                     <tbody className="divide-y divide-line/40">
                       {followUpList.map((item) => (
-                        <tr key={item.id} className="hover:bg-raised transition">
+                        <tr
+                          key={item.id}
+                          onClick={() => handleOpenDetail(item.nomor, item)}
+                          className="hover:bg-raised transition cursor-pointer"
+                        >
                           <td className="py-3 font-bold text-accent">{item.nomor}</td>
                           <td className="py-3">
                             <span className="font-semibold text-ink block">{item.nama_klien}</span>
@@ -440,10 +497,10 @@ export default function DasborPage() {
                           </td>
                           <td className="py-3 text-center">
                             <span className="inline-block px-2.5 py-1 bg-warn-bg text-warn border border-warn/30 rounded-lg font-bold text-xs tabular-nums">
-                              {item.hari_tanpa_perubahan} hari
+                              {item.hari_tanpa_perubahan} hari tanpa kabar
                             </span>
                           </td>
-                          <td className="py-3 text-right text-muted text-xs">{item.admin_nama}</td>
+                          <td className="py-3 text-right text-muted text-xs font-semibold">{item.admin_nama}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -460,74 +517,130 @@ export default function DasborPage() {
                   <span>Potongan minggu ini</span>
                 </h3>
                 <span className="text-xs text-muted tabular-nums font-semibold">
-                  {potonganList.length} diskon
+                  {potonganList.length} potongan
                 </span>
               </div>
 
               {potonganList.length === 0 ? (
                 <p className="text-sm text-muted py-8 text-center">
-                  Tidak ada potongan di bawah batas admin minggu ini.
+                  Tidak ada potongan minggu ini.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {potonganList.map((item) => {
-                    const listVal = item.sebelum?.nilai_list || 0;
-                    const dealVal = item.sesudah?.nilai_deal || 0;
-                    const selisih = Math.max(0, listVal - dealVal);
-
-                    return (
-                      <div key={item.id} className="p-3.5 bg-raised rounded-xl border border-line text-sm space-y-1.5">
-                        <div className="flex justify-between items-center font-bold text-ink">
-                          <span className="capitalize">{item.objek?.split(':')[2] || item.objek}</span>
-                          <span className="tabular-nums text-warn">-{formatRupiah(selisih)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs text-muted">
-                          <span>Oleh: {item.aktor}</span>
-                          <span className="tabular-nums">{new Date(item.created_at).toLocaleDateString('id-ID')}</span>
-                        </div>
-                        <p className="text-xs text-muted italic pt-1 border-t border-line">
-                          &ldquo;{item.alasan}&rdquo;
-                        </p>
+                <div className="space-y-2.5">
+                  {potonganList.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleOpenDetail(item.nomor, item)}
+                      className="p-3.5 bg-raised hover:bg-surface border border-line rounded-xl text-xs space-y-1.5 transition cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-ink leading-snug">
+                          {item.ringkasan_baris}
+                        </span>
+                        {item.di_bawah_net && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warn-bg text-warn border border-warn/30 shrink-0">
+                            Di bawah net
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center justify-between text-muted text-[11px] pt-1 border-t border-line/40">
+                        <span className="italic">Alasan: &ldquo;{item.alasan}&rdquo;</span>
+                        <span>
+                          {item.tanggal} · oleh <strong className="text-ink font-semibold">{item.admin_nama}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
 
-          {/* 5. Perubahan Harga Terakhir (Audit Log) */}
-          <div className="bg-surface p-6 rounded-[20px] border border-line shadow-none space-y-4">
-            <h3 className="text-[17px] font-bold text-ink">Perubahan Harga Terakhir</h3>
-            {priceBookLogs.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">Belum ada riwayat audit buku harga</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-muted text-xs font-semibold">
-                      <th className="py-2.5">Waktu</th>
-                      <th className="py-2.5">Aktor</th>
-                      <th className="py-2.5">Aksi</th>
-                      <th className="py-2.5">Catatan Perubahan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line/40">
-                    {priceBookLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-raised transition">
-                        <td className="py-3 text-xs text-muted tabular-nums">
-                          {new Date(log.created_at).toLocaleString('id-ID')}
-                        </td>
-                        <td className="py-3 font-semibold text-ink">{log.aktor}</td>
-                        <td className="py-3 font-semibold text-accent">{log.aksi}</td>
-                        <td className="py-3 text-muted text-xs">{log.alasan || 'Pembaruan parameter buku harga'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Modal Dialog: Detail Penawaran Baca Saja */}
+          {selectedDetailQuote && (
+            <div
+              id="modal-detail-penawaran"
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+            >
+              <div className="bg-surface border border-line rounded-[20px] max-w-lg w-full p-6 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <div>
+                    <h3 className="font-bold text-ink text-base">
+                      Detail Penawaran: {selectedDetailQuote.nomor}
+                    </h3>
+                    <p className="text-xs text-muted">
+                      {selectedDetailQuote.tanggal} · oleh{' '}
+                      <strong className="text-ink font-semibold">{selectedDetailQuote.admin_nama}</strong>
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-lg uppercase bg-raised border border-line text-accent">
+                    {selectedDetailQuote.status}
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-raised rounded-xl border border-line">
+                    <div>
+                      <span className="text-muted block">Nama Klien:</span>
+                      <span className="font-bold text-ink text-sm block">
+                        {selectedDetailQuote.nama_klien}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted block">Kota Tujuan:</span>
+                      <span className="font-semibold text-ink text-sm block">
+                        {selectedDetailQuote.kota || '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 p-3.5 bg-raised rounded-xl border border-line">
+                    <div className="flex justify-between text-muted">
+                      <span>Subtotal Cermin:</span>
+                      <span className="font-semibold text-ink tabular-nums">
+                        {formatRupiah(selectedDetailQuote.subtotal_cermin || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted">
+                      <span>Jasa Pengiriman:</span>
+                      <span className="font-semibold text-ink tabular-nums">
+                        {formatRupiah(selectedDetailQuote.ongkir || 0)}
+                      </span>
+                    </div>
+                    {selectedDetailQuote.pasang > 0 && (
+                      <div className="flex justify-between text-muted">
+                        <span>Pemasangan:</span>
+                        <span className="font-semibold text-ink tabular-nums">
+                          {formatRupiah(selectedDetailQuote.pasang)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-bold text-ink pt-2 border-t border-line/60">
+                      <span>Total Penawaran:</span>
+                      <span className="text-accent tabular-nums">
+                        {formatRupiah(selectedDetailQuote.total_nilai || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted pt-1">
+                      <span>DP 50%: {formatRupiah(selectedDetailQuote.dp_50 || Math.ceil(selectedDetailQuote.total_nilai / 2000) * 1000)}</span>
+                      <span>Pelunasan: {formatRupiah(selectedDetailQuote.pelunasan || (selectedDetailQuote.total_nilai - Math.ceil(selectedDetailQuote.total_nilai / 2000) * 1000))}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-line">
+                  <button
+                    type="button"
+                    id="btn-tutup-detail-modal"
+                    onClick={() => setSelectedDetailQuote(null)}
+                    className="min-h-[44px] px-5 py-2 bg-raised hover:bg-surface border border-line text-ink rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Tutup (Baca Saja)
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </>
       ) : null}
     </div>

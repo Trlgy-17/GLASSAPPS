@@ -228,4 +228,25 @@ test.describe('B. FUNGSI OWNER - Read-Only Guard, Agregasi Dasbor, & Batas Bulan
     const jsonAdmin = await resAdmin.json();
     expect(jsonAdmin.summary.dibuat.jumlah).toBeGreaterThan(0);
   });
+
+  test('4. Perapihan dasbor owner: Hapus Perubahan Harga Terakhir, Potongan Minggu Ini nama admin & bahasa awam, modal detail baca saja tanpa UUID', async ({
+    page,
+  }) => {
+    await loginAsOwner(page);
+    await page.goto('/dasbor');
+    await page.waitForSelector('text=Dasbor Owner');
+
+    // 1. Panel "Perubahan Harga Terakhir" HARUS TIDAK TAMPIL di dasbor owner
+    await expect(page.locator('text=Perubahan Harga Terakhir')).toHaveCount(0);
+
+    // 2. Panel "Potongan minggu ini" harus ada
+    await expect(page.locator('text=Potongan minggu ini')).toBeVisible();
+
+    // 3. Panel "Perlu follow-up" harus ada
+    await expect(page.locator('text=Perlu follow-up')).toBeVisible();
+    // Pastikan tidak ada raw UUID di seluruh teks tampilan halaman
+    const pageContent = await page.innerText('body');
+    const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+    expect(pageContent).not.toMatch(uuidRegex);
+  });
 });

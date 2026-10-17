@@ -53,27 +53,91 @@ export async function GET(req: NextRequest) {
 
   // 2. Ambil daftar perlu follow-up (terkirim/nego >= 3 hari tanpa perubahan)
   const { data: followUpList, error: fuErr } = await adminClient.rpc('get_quotes_need_followup');
+  const cleanFollowUpList = (followUpList || []).filter((item: any) => {
+    const nama = String(item.nama_klien || '').toLowerCase();
+    const nomor = String(item.nomor || '').toLowerCase();
+    return !nama.startsWith('[tes]') && !nama.includes('test') && !nomor.includes('test');
+  });
 
   // 3. Ambil grafik mingguan (8 minggu terakhir)
   const { data: chartData, error: chartErr } = await adminClient.rpc('get_weekly_quote_chart');
 
   // 4. Potongan minggu ini dari audit_log
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-  const { data: potonganRows } = await adminClient
+  const { data: rawPotonganRows } = await adminClient
     .from('audit_log')
     .select('id, aktor, aksi, objek, sebelum, sesudah, alasan, created_at, users:aktor(nama, email)')
     .eq('aksi', 'KONFIRMASI_POTONGAN')
     .gte('created_at', sevenDaysAgo)
     .order('created_at', { ascending: false });
 
-  // 5. Perubahan harga terakhir dari audit_log
-  const { data: priceBookLogs } = await adminClient
-    .from('audit_log')
-    .select('id, aktor, aksi, objek, alasan, created_at, users:aktor(nama, email)')
-    .eq('aksi', 'CREATE_PRICE_BOOK')
-    .order('created_at', { ascending: false })
-    .limit(5);
-  // 6. Daftar Admin untuk Filter
+  const cleanPotonganRows = (rawPotonganRows || []).filter((r: any) => {
+    const alasan = String(r.alasan || '').toLowerCase();
+    const objek = String(r.objek || '').toLowerCase();
+    return !alasan.includes('e2e test') && !alasan.includes('test') && !alasan.includes('uji') && !objek.includes('test');
+  });
+
+  const quoteNumbers = cleanPotonganRows
+    .map((r: any) => r.objek?.split(':')[1])
+    .filter(Boolean);
+
+  const quoteMap = new Map<string, any>();
+  if (quoteNumbers.length > 0) {
+    const { data: linkedQuotes } = await adminClient
+      .from('penawaran')
+      .select('id, nomor, total_nilai, status, valid_until, created_at, ringkasan_json, items_json, leads!inner(nama, kota), users:created_by(nama)')
+      .in('nomor', quoteNumbers);
+
+    for (const q of linkedQuotes || []) {
+      quoteMap.set(q.nomor, q);
+    }
+  }
+
+  const enrichedPotongan = cleanPotonganRows.map((r: any) => {
+    const quoteNo = r.objek?.split(':')[1] || '';
+    const q = quoteMap.get(quoteNo);
+    const namaKlien = q?.leads?.nama || 'Klien';
+    const kota = q?.leads?.kota || '';
+    const jenis = r.objek?.includes('ongkir') ? 'Ongkir' : 'Pemasangan';
+    const listVal = Number(r.sebelum?.nilai_list || 0);
+    const dealVal = Number(r.sesudah?.nilai_deal || 0);
+    const selisih = Math.max(0, listVal - dealVal);
+
+    const isBagiDua = listVal > 0 && dealVal === Math.round(listVal * 0.5);
+    const keteranganDeal = isBagiDua ? 'dibagi dua' : `potongan Rp${selisih.toLocaleString('id-ID')}`;
+
+    const cleanAlasan = String(r.alasan || '')
+      .replace(/^\[DI BAWAH NET\]\s*/i, '')
+      .trim();
+
+    const isDiBawahNet =
+      String(r.alasan || '').includes('[DI BAWAH NET]') ||
+      (listVal === 1300000 && dealVal < 1150000) ||
+      (listVal === 750000 && dealVal < 500000);
+
+    const adminNama = r.users?.nama || q?.users?.nama || 'Admin';
+
+    return {
+      id: r.id,
+      penawaran_id: q?.id || null,
+      nomor: quoteNo,
+      nama_klien: namaKlien,
+      kota,
+      jenis,
+      nilai_list: listVal,
+      nilai_deal: dealVal,
+      selisih,
+      keterangan_deal: keteranganDeal,
+      ringkasan_baris: `${jenis} ${namaKlien} (${quoteNo}): Rp${listVal.toLocaleString('id-ID')} → Rp${dealVal.toLocaleString('id-ID')}, ${keteranganDeal}`,
+      alasan: cleanAlasan,
+      di_bawah_net: isDiBawahNet,
+      tanggal: new Date(r.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
+      admin_nama: adminNama,
+      penawaran: q || null,
+    };
+  });
+
+  // 5. Daftar Admin untuk Filter
   const { data: admins } = await adminClient
     .from('users')
     .select('id, nama, email')
@@ -87,10 +151,9 @@ export async function GET(req: NextRequest) {
       end: endDate.toISOString(),
     },
     summary,
-    follow_up: followUpList || [],
+    follow_up: cleanFollowUpList,
     chart: chartData || [],
-    potongan_minggu_ini: potonganRows || [],
-    perubahan_harga_terakhir: priceBookLogs || [],
+    potongan_minggu_ini: enrichedPotongan,
     admins: admins || [],
   });
 }
