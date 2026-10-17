@@ -1,3 +1,4 @@
+import '../../scripts/patch-dns.js';
 import fs from 'fs';
 import path from 'path';
 import { Page, expect } from '@playwright/test';

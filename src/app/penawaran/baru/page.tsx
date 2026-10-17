@@ -1177,6 +1177,7 @@ function PenawaranContent() {
 
                 <button
                   type="button"
+                  id="btn-download-pdf-mobile"
                   onClick={() => handleSimpanPenawaran(true)}
                   disabled={!isPdfDownloadEnabled || isGeneratingPdf || userRole === 'owner'}
                   className="w-full min-h-[48px] bg-accent text-accent-ink rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-40 transition cursor-pointer shadow-none"

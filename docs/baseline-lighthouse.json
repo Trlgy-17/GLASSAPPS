@@ -1,0 +1,68 @@
+[
+  {
+    "page": "/login",
+    "mScore": 98,
+    "mLcp": "2.2 s",
+    "mTbt": "80 ms",
+    "mCls": "0",
+    "dScore": 100,
+    "dLcp": "0.5 s",
+    "dTbt": "0 ms",
+    "dCls": "0"
+  },
+  {
+    "page": "/balas (balas-chat)",
+    "mScore": 94,
+    "mLcp": "2.9 s",
+    "mTbt": "70 ms",
+    "mCls": "0.069",
+    "dScore": 100,
+    "dLcp": "0.7 s",
+    "dTbt": "0 ms",
+    "dCls": "0.026"
+  },
+  {
+    "page": "/penawaran/baru (kalkulator)",
+    "mScore": 94,
+    "mLcp": "2.9 s",
+    "mTbt": "100 ms",
+    "mCls": "0.02",
+    "dScore": 100,
+    "dLcp": "0.7 s",
+    "dTbt": "0 ms",
+    "dCls": "0"
+  },
+  {
+    "page": "/penawaran",
+    "mScore": 96,
+    "mLcp": "2.8 s",
+    "mTbt": "40 ms",
+    "mCls": "0",
+    "dScore": 100,
+    "dLcp": "0.6 s",
+    "dTbt": "0 ms",
+    "dCls": "0"
+  },
+  {
+    "page": "/pengaturan/buku-harga",
+    "mScore": 90,
+    "mLcp": "3.5 s",
+    "mTbt": "90 ms",
+    "mCls": "0",
+    "dScore": 100,
+    "dLcp": "0.8 s",
+    "dTbt": "0 ms",
+    "dCls": "0"
+  },
+  {
+    "page": "/dasbor (owner)",
+    "mScore": 94,
+    "mLcp": "3.0 s",
+    "mTbt": "70 ms",
+    "mCls": "0",
+    "dScore": 100,
+    "dLcp": "0.6 s",
+    "dTbt": "0 ms",
+    "dCls": "0.001"
+  }
+]

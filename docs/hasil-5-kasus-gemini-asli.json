@@ -1,0 +1,57 @@
+[
+  {
+    "id": 1,
+    "kategori": "Tanya Harga Custom",
+    "kanal": "whatsapp",
+    "status": "SUCCESS",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "durationMs": 4264,
+    "createdAt": "2026-10-17T02:15:50.900125+00:00",
+    "drafPreview": "...",
+    "isMarketplaceCompliant": true
+  },
+  {
+    "id": 2,
+    "kategori": "Tanya Produk Jadi TC/ST/BT",
+    "kanal": "whatsapp",
+    "status": "SUCCESS",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "durationMs": 2421,
+    "createdAt": "2026-10-17T02:15:55.477684+00:00",
+    "drafPreview": "...",
+    "isMarketplaceCompliant": true
+  },
+  {
+    "id": 3,
+    "kategori": "Ongkir Luar Kota",
+    "kanal": "whatsapp",
+    "status": "SUCCESS",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "durationMs": 2351,
+    "createdAt": "2026-10-17T02:15:59.939922+00:00",
+    "drafPreview": "...",
+    "isMarketplaceCompliant": true
+  },
+  {
+    "id": 4,
+    "kategori": "Minta Ambil Sendiri",
+    "kanal": "whatsapp",
+    "status": "SUCCESS",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "durationMs": 2740,
+    "createdAt": "2026-10-17T02:16:04.810924+00:00",
+    "drafPreview": "...",
+    "isMarketplaceCompliant": true
+  },
+  {
+    "id": 5,
+    "kategori": "Chat dari Marketplace (Shopee/TikTok)",
+    "kanal": "tiktok",
+    "status": "SUCCESS",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "durationMs": 3227,
+    "createdAt": "2026-10-17T02:16:10.186476+00:00",
+    "drafPreview": "...",
+    "isMarketplaceCompliant": true
+  }
+]

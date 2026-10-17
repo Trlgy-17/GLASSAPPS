@@ -26,28 +26,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function loadUser() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setUserEmail(user.email || null);
-        const { data: profile } = await supabase
-          .from('users')
-          .select('nama, peran')
-          .eq('id', user.id)
-          .single();
-        setUserRole(profile?.peran || 'admin');
-        setUserName(profile?.nama || user.email?.split('@')[0] || 'Pengguna');
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.user) {
+            setUserEmail(json.user.email);
+            setUserRole(json.user.peran);
+            setUserName(json.user.nama);
+          }
+        }
+      } catch (err) {
+        console.warn('Gagal memuat profil user:', err);
       }
     }
     loadUser();
   }, [pathname]);
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
     router.push('/login');
+    router.refresh();
   };
 
   if (pathname === '/login') {
@@ -218,8 +219,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Spacer */}
           </div>
 
-          {/* Right Header: Theme Toggle */}
-          <div className="flex items-center gap-3">
+          {/* Right Header: Theme Toggle & Mobile Logout */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="Keluar dari aplikasi"
+              title="Keluar"
+              className="md:hidden w-9 h-9 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-raised text-muted hover:text-ink transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
             <ThemeToggle />
           </div>
         </header>
