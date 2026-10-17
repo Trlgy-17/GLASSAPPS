@@ -14,22 +14,30 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { getPeriode } from '@/lib/closing-period';
+let _inMemoryUser: { email: string; peran: 'owner' | 'admin'; nama: string } | null = null;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [userRole, setUserRole] = useState<'owner' | 'admin' | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | null>(_inMemoryUser?.peran || null);
+  const [userName, setUserName] = useState<string | null>(_inMemoryUser?.nama || null);
+  const [userEmail, setUserEmail] = useState<string | null>(_inMemoryUser?.email || null);
 
   useEffect(() => {
+    if (_inMemoryUser) {
+      setUserEmail(_inMemoryUser.email);
+      setUserRole(_inMemoryUser.peran);
+      setUserName(_inMemoryUser.nama);
+      return;
+    }
     async function loadUser() {
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const json = await res.json();
           if (json.user) {
+            _inMemoryUser = { email: json.user.email, peran: json.user.peran, nama: json.user.nama };
             setUserEmail(json.user.email);
             setUserRole(json.user.peran);
             setUserName(json.user.nama);
@@ -43,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const handleLogout = async () => {
+    _inMemoryUser = null;
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {}
@@ -120,6 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   className={`min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer focus-visible:outline-2 focus-visible:outline-accent ${
                     isActive
                       ? 'bg-surface/15 text-white font-semibold'

@@ -61,11 +61,18 @@ export async function POST(req: NextRequest) {
     const peran = profile?.peran || 'admin';
     const redirectTo = peran === 'owner' ? '/dasbor' : '/balas';
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       peran,
       redirectTo,
     });
+    response.cookies.set('pg_role', peran, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+      sameSite: 'lax',
+      httpOnly: true,
+    });
+    return response;
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Server login error:', errMsg);

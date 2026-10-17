@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { draftReply, MODEL_EMBEDDING } from '@/lib/ai/provider';
-import { GoogleGenAI } from '@google/genai';
+import { draftReply, MODEL_EMBEDDING, getAIClient } from '@/lib/ai/provider';
 import { checkAiRateLimit } from '@/lib/ai/rate-limiter';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
 
@@ -51,54 +50,46 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { transkrip_messages, lead, kanal, kalkulator_output_json, arahan_admin } = body;
 
-    // Ambil buku harga aktif
-    const { data: pbRow } = await adminClient
-      .from('price_books')
-      .select('*')
-      .eq('aktif', true)
-      .single();
-
-    const priceBook = pbRow?.data_json || defaultPriceBookV1;
-
-    // Ambil 3 kartu memori yang paling relevan via RPC match_kartu_memori
-    let memoriKasus: Array<{ ringkasan: string; teks_final: string; hasil: string }> = [];
+    // Jalankan pengambilan Buku Harga dan pemuatan Kartu Memori KB secara paralel
     const clientMessages = (transkrip_messages || [])
       .filter((m: { pengirim: string }) => m.pengirim === 'klien')
       .slice(-3)
       .map((m: { teks: string }) => m.teks)
       .join(' ');
 
-    if (clientMessages.trim()) {
-      try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (apiKey) {
-          const ai = new GoogleGenAI({ apiKey });
+    const [pbRowRes, memoriKasus] = await Promise.all([
+      adminClient.from('price_books').select('*').eq('aktif', true).single(),
+      (async () => {
+        if (!clientMessages.trim()) return [];
+        try {
+          const ai = getAIClient();
           const embedRes = await ai.models.embedContent({
             model: MODEL_EMBEDDING,
             contents: clientMessages,
           });
           const queryEmbedding = embedRes.embeddings?.[0]?.values;
-
           if (queryEmbedding && queryEmbedding.length > 0) {
             const { data: matched } = await adminClient.rpc('match_kartu_memori', {
               query_embedding: queryEmbedding,
               match_threshold: 0.5,
               match_count: 3,
             });
-
             if (matched && matched.length > 0) {
-              memoriKasus = matched.map((km: { ringkasan: string; balasan_final: string; hasil: string }) => ({
+              return matched.map((km: { ringkasan: string; balasan_final: string; hasil: string }) => ({
                 ringkasan: km.ringkasan,
                 teks_final: km.balasan_final,
                 hasil: km.hasil,
               }));
             }
           }
+        } catch (err) {
+          console.warn('Gagal mencari memori kasus serupa:', err);
         }
-      } catch (err) {
-        console.warn('Gagal mencari memori kasus serupa:', err);
-      }
-    }
+        return [];
+      })(),
+    ]);
+
+    const priceBook = pbRowRes.data?.data_json || defaultPriceBookV1;
 
     const drafResult = await draftReply(
       {

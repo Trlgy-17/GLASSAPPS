@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Copy,
+  Loader2,
 } from 'lucide-react';
 interface LocalItemState {
   mode: 'custom' | 'produk_jadi';
@@ -279,7 +280,7 @@ function PenawaranContent() {
   };
 
   const handleSimpanPenawaran = async (isUnduh: boolean) => {
-    if (!kalkulasi || isSavingRef.current || isSavingDraft || isGeneratingPdf) return;
+    if (!kalkulasi || isSavingRef.current || isSavingDraft || isGeneratingPdf || savedQuoteId) return;
     isSavingRef.current = true;
     if (isUnduh) setIsGeneratingPdf(true);
     else setIsSavingDraft(true);
@@ -363,7 +364,7 @@ function PenawaranContent() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Top Bar Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -385,21 +386,21 @@ function PenawaranContent() {
             type="button"
             id="btn-simpan-penawaran"
             onClick={() => handleSimpanPenawaran(false)}
-            disabled={!isPdfDownloadEnabled || isSavingDraft || userRole === 'owner'}
+            disabled={!isPdfDownloadEnabled || isSavingDraft || isGeneratingPdf || Boolean(savedQuoteId) || userRole === 'owner'}
             className="min-h-[44px] px-4 py-2 bg-surface border border-line text-ink hover:bg-raised rounded-xl text-xs font-semibold flex items-center gap-2 transition cursor-pointer disabled:opacity-40"
           >
-            <FileText className="w-4 h-4 text-accent" />
-            <span>{isSavingDraft ? 'Menyimpan...' : 'Simpan Draf'}</span>
+            {isSavingDraft ? <Loader2 className="w-4 h-4 text-accent animate-spin" /> : <FileText className="w-4 h-4 text-accent" />}
+            <span>{isSavingDraft ? 'Menyimpan...' : savedQuoteId ? 'Tersimpan' : 'Simpan Draf'}</span>
           </button>
 
           <button
             type="button"
             id="btn-download-pdf"
             onClick={() => handleSimpanPenawaran(true)}
-            disabled={!isPdfDownloadEnabled || isGeneratingPdf || userRole === 'owner'}
+            disabled={!isPdfDownloadEnabled || isGeneratingPdf || isSavingDraft || userRole === 'owner'}
             className="min-h-[44px] px-5 py-2 bg-accent text-accent-ink rounded-xl text-xs font-bold flex items-center gap-2 hover:opacity-95 transition cursor-pointer disabled:opacity-40"
           >
-            <Download className="w-4 h-4" />
+            {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh Penawaran PDF'}</span>
           </button>
         </div>

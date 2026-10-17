@@ -254,9 +254,13 @@ test.describe('11. Fitur Hapus Penawaran & Periode Closing Bulanan', () => {
     // Pilih alasan "Demo / percobaan"
     await page.click('button:has-text("Demo / percobaan")');
     await page.fill('textarea[placeholder*="nomor kontak salah"]', 'Catatan pengujian e2e automated');
+    // Klik tombol konfirmasi hapus & tunggu response DELETE dari server
+    const [delResponse] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/penawaran') && res.request().method() === 'DELETE'),
+      page.click('#btn-confirm-delete'),
+    ]);
+    expect(delResponse.status()).toBe(200);
 
-    // Klik tombol konfirmasi hapus
-    await page.click('#btn-confirm-delete');
     // Verifikasi penawaran hilang dari daftar admin
     await expect(page.locator('#table-daftar-penawaran').getByText(quoteNomor)).toHaveCount(0, { timeout: 10000 });
 

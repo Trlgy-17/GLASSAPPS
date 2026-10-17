@@ -190,6 +190,14 @@ export default function PenawaranListPage() {
       return;
     }
 
+    // Optimistic UI: perbarui tampilan seketika (≤ 50ms)
+    const prevQuotes = quotes;
+    setQuotes((prev) =>
+      prev.map((q) => (q.id === quoteId ? { ...q, status: newStatus as PenawaranRow['status'] } : q))
+    );
+    setDealModalQuoteId(null);
+    setBatalModalQuoteId(null);
+
     try {
       const res = await fetch(`/api/penawaran/${quoteId}/status`, {
         method: 'PATCH',
@@ -201,15 +209,13 @@ export default function PenawaranListPage() {
         }),
       });
 
-      if (res.ok) {
-        await loadQuotes();
-        setDealModalQuoteId(null);
-        setBatalModalQuoteId(null);
-      } else {
+      if (!res.ok) {
+        setQuotes(prevQuotes);
         const json = await res.json();
         alert(`Gagal mengubah status: ${json.error || 'Terjadi kesalahan'}`);
       }
     } catch {
+      setQuotes(prevQuotes);
       alert('Gagal menghubungi server');
     }
   };
@@ -239,12 +245,20 @@ export default function PenawaranListPage() {
 
   const handleConfirmDelete = async () => {
     if (!deleteModalQuote) return;
-    setIsDeleting(true);
-    try {
-      const payload = deleteModalQuote.isBulk
-        ? { ids: selectedIds, alasan: deleteAlasan, catatan: deleteCatatan }
-        : { id: deleteModalQuote.id, alasan: deleteAlasan, catatan: deleteCatatan };
+    const targetIds = deleteModalQuote.isBulk
+      ? selectedIds
+      : [deleteModalQuote.id];
 
+    // Optimistic UI: hapus baris seketika dari tampilan & tutup modal
+    const prevQuotes = quotes;
+    setQuotes((prev) => prev.filter((q) => !targetIds.includes(q.id)));
+    setSelectedIds([]);
+    const payload = deleteModalQuote.isBulk
+      ? { ids: selectedIds, alasan: deleteAlasan, catatan: deleteCatatan }
+      : { id: deleteModalQuote.id, alasan: deleteAlasan, catatan: deleteCatatan };
+    setDeleteModalQuote(null);
+
+    try {
       const res = await fetch('/api/penawaran', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -252,18 +266,14 @@ export default function PenawaranListPage() {
       });
 
       const json = await res.json();
-      if (res.ok && json.success) {
-        setDeleteModalQuote(null);
-        setSelectedIds([]);
-        await loadQuotes();
-      } else {
+      if (!res.ok || !json.success) {
+        setQuotes(prevQuotes);
         alert(`Gagal menghapus penawaran: ${json.error || 'Terjadi kesalahan'}`);
       }
     } catch (e: unknown) {
+      setQuotes(prevQuotes);
       const msg = e instanceof Error ? e.message : 'Terjadi kesalahan server';
       alert(`Gagal menghapus: ${msg}`);
-    } finally {
-      setIsDeleting(false);
     }
   };
 

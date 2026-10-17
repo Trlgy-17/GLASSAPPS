@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import React from 'react';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
@@ -130,48 +130,8 @@ export async function POST(req: NextRequest) {
     const { data: nomor } = await adminClient.rpc('generate_nomor_penawaran');
     quoteNumber = nomor || `PG-Q-TEMP-${Date.now().toString().slice(-4)}`;
   }
-  // 6. Generate Dokumen PDF deterministik
-  const todayStr = new Date().toLocaleDateString('id-ID');
-  const validUntilDate = new Date(Date.now() + (priceBook.dokumen_pdf?.masa_berlaku_hari || 7) * 86400000);
-  const validUntilStr = validUntilDate.toLocaleDateString('id-ID');
-
-  // Ambil data settings kontak & QR lokasi di server
-  const companySettings = await getCompanySettings();
-  const qrDataUrl = await generateQrPngDataUrl(companySettings.maps_url);
-
-  // Dapatkan nama profil admin pembuat
-  const { data: creatorUser } = await adminClient
-    .from('users')
-    .select('nama')
-    .eq('id', user.id)
-    .single();
-  const namaAdmin = creatorUser?.nama || 'Admin Putra Glass';
-
-  const pdfDoc = React.createElement(PenawaranDocument, {
-    nomor: quoteNumber,
-    tanggal: todayStr,
-    berlakuSampai: validUntilStr,
-    namaKlien: nama_klien || 'Klien Putra Glass',
-    kotaKlien: kota_klien || 'Bandung',
-    kalkulasi: kalkulasi,
-    config: priceBook,
-    settings: companySettings,
-    qrDataUrl: qrDataUrl,
-    kanal: kanal || 'whatsapp',
-    namaAdmin: namaAdmin,
-  });
-
-  const pdfBuffer = await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>);
   const pdfPath = `${quoteNumber}.pdf`;
-  // 7. Simpan file PDF ke private bucket storage
-  await adminClient.storage
-    .from('penawaran-pdf')
-    .upload(pdfPath, pdfBuffer, {
-      contentType: 'application/pdf',
-      upsert: true,
-    });
-
-  // 8. Simpan baris Penawaran terkunci (Snapshot)
+  const validUntilDate = new Date(Date.now() + (priceBook.dokumen_pdf?.masa_berlaku_hari || 7) * 86400000);
   const { data: savedPenawaran, error: saveErr } = await adminClient
     .from('penawaran')
     .insert({
@@ -250,6 +210,44 @@ export async function POST(req: NextRequest) {
       alasan: kalkulasi.pasang.alasan || 'Konfirmasi langsung owner',
     });
   }
+
+  // Render Dokumen PDF di Latar Belakang (after) & upload ke storage
+  const todayStr = new Date().toLocaleDateString('id-ID');
+  const validUntilStr = validUntilDate.toLocaleDateString('id-ID');
+  after(async () => {
+    try {
+      const [companySettings, creatorUserRes] = await Promise.all([
+        getCompanySettings(),
+        adminClient.from('users').select('nama').eq('id', user.id).single(),
+      ]);
+      const qrDataUrl = await generateQrPngDataUrl(companySettings.maps_url);
+      const namaAdmin = creatorUserRes.data?.nama || 'Admin Putra Glass';
+
+      const pdfDoc = React.createElement(PenawaranDocument, {
+        nomor: quoteNumber,
+        tanggal: todayStr,
+        berlakuSampai: validUntilStr,
+        namaKlien: nama_klien || 'Klien Putra Glass',
+        kotaKlien: kota_klien || 'Bandung',
+        kalkulasi: kalkulasi,
+        config: priceBook,
+        settings: companySettings,
+        qrDataUrl: qrDataUrl,
+        kanal: kanal || 'whatsapp',
+        namaAdmin: namaAdmin,
+      });
+
+      const pdfBuffer = await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>);
+      await adminClient.storage
+        .from('penawaran-pdf')
+        .upload(pdfPath, pdfBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+    } catch (bgErr) {
+      console.error('[Background PDF Render Error]:', bgErr);
+    }
+  });
 
   // 10. Tautan PDF lewat domain aplikasi sendiri (tanpa signed URL eksternal)
   return NextResponse.json({

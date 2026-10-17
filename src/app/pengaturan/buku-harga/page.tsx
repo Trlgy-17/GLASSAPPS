@@ -96,62 +96,70 @@ export default function PengaturanBukuHargaPage() {
     }
 
     setIsSaving(true);
+    setSaveSuccess(true);
 
     try {
-      // 1. Simpan Settings Kontak & Workshop
-      const resSettings = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...settings,
-          no_rekening: cleanNoRek,
-          catatan_perubahan: catatanPerubahan,
-        }),
-      });
+      const syncedBook: PriceBookData | null = priceBook
+        ? {
+            ...priceBook,
+            dokumen_pdf: {
+              ...priceBook.dokumen_pdf,
+              bank_nama: settings.bank,
+              bank_nomor: cleanNoRek,
+              bank_atas_nama: settings.nama_rekening,
+              kontak_wa_resmi: trimmedWa,
+              instagram_handle: `@${settings.instagram.replace(/^@/, '')}`,
+            },
+          }
+        : null;
 
+      const promises: [Promise<Response>, Promise<Response>?] = [
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...settings,
+            no_rekening: cleanNoRek,
+            catatan_perubahan: catatanPerubahan,
+          }),
+        }),
+      ];
+
+      if (syncedBook) {
+        promises.push(
+          fetch('/api/buku-harga', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              data_json: syncedBook,
+              aktifkan_sekarang: true,
+              catatan_perubahan: catatanPerubahan,
+            }),
+          })
+        );
+      }
+
+      const [resSettings, resBook] = await Promise.all(promises);
       const jsonSettings = await resSettings.json();
       if (!resSettings.ok) {
         throw new Error(jsonSettings.error || 'Gagal menyimpan data kontak');
       }
 
-      // 2. Simpan & Sinkronkan Buku Harga jika ada
-      if (priceBook) {
-        const syncedBook: PriceBookData = {
-          ...priceBook,
-          dokumen_pdf: {
-            ...priceBook.dokumen_pdf,
-            bank_nama: settings.bank,
-            bank_nomor: cleanNoRek,
-            bank_atas_nama: settings.nama_rekening,
-            kontak_wa_resmi: trimmedWa,
-            instagram_handle: `@${settings.instagram.replace(/^@/, '')}`,
-          },
-        };
-
-        const resBook = await fetch('/api/buku-harga', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            data_json: syncedBook,
-            aktifkan_sekarang: true,
-            catatan_perubahan: catatanPerubahan,
-          }),
-        });
-
+      if (resBook) {
         const jsonBook = await resBook.json();
         if (!resBook.ok) {
           throw new Error(jsonBook.error || 'Gagal menyimpan buku harga');
         }
-
         if (jsonBook.price_book?.data_json) {
           setPriceBook(jsonBook.price_book.data_json);
         }
       }
 
       setSettings(jsonSettings.settings);
-      setSaveSuccess(true);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Terjadi kesalahan sistem');
+    } catch (err: unknown) {
+      setSaveSuccess(false);
+      const msg = err instanceof Error ? err.message : 'Terjadi kesalahan sistem';
+      setErrorMessage(msg);
     } finally {
       setIsSaving(false);
     }

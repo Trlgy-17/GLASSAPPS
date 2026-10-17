@@ -70,13 +70,17 @@ export function recordModelSuccess(model: string): void {
   circuitBreakers.delete(model);
 }
 
-// Inisialisasi GoogleGenAI SDK
-function getAIClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY tidak ditemukan di environment (.env.local)');
+// Inisialisasi GoogleGenAI SDK (Singleton instance untuk connection keep-alive)
+let _cachedAIClient: GoogleGenAI | null = null;
+export function getAIClient(): GoogleGenAI {
+  if (!_cachedAIClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY tidak ditemukan di environment (.env.local)');
+    }
+    _cachedAIClient = new GoogleGenAI({ apiKey });
   }
-  return new GoogleGenAI({ apiKey });
+  return _cachedAIClient;
 }
 
 // Cek Batas Harian Permintaan AI (Dihitung per request API, reset ~14.00 WIB)

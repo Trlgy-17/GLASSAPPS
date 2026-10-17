@@ -1,0 +1,24 @@
+{
+  "sebelum_optimasi": {
+    "login_ms": 1750,
+    "pindah_kalkulator_ms": 273,
+    "pindah_penawaran_ms": 82,
+    "pindah_balas_chat_ms": 72,
+    "simpan_penawaran_ms": 1986,
+    "buka_pdf_ms": 502,
+    "ubah_status_ms": 324,
+    "hapus_penawaran_ms": 384,
+    "draft_ai_ms": 3232
+  },
+  "sesudah_optimasi": {
+    "login_ms": 1047,
+    "pindah_kalkulator_ms": 152,
+    "pindah_penawaran_ms": 76,
+    "pindah_balas_chat_ms": 71,
+    "simpan_penawaran_ms": 438,
+    "buka_pdf_ms": 852,
+    "ubah_status_ms": 295,
+    "hapus_penawaran_ms": 324,
+    "draft_ai_ms": 3392
+  }
+}

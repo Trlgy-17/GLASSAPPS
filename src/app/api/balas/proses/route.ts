@@ -31,19 +31,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: userData } = await adminClient
-    .from('users')
-    .select('nama, peran')
-    .eq('id', user.id)
-    .single();
+  // Jalankan pemeriksaan profil user, rate limit, dan pembacaan buku harga secara paralel
+  const [userDataRes, rateLimit, pbRowRes] = await Promise.all([
+    adminClient.from('users').select('nama, peran').eq('id', user.id).single(),
+    checkAiRateLimit(user.id, 'proses', 20),
+    adminClient.from('price_books').select('*').eq('aktif', true).single(),
+  ]);
 
+  const userData = userDataRes.data;
   if (userData?.peran !== 'admin') {
     return NextResponse.json({ error: 'Hanya admin yang boleh memproses balasan chat' }, { status: 403 });
   }
   const durasiAuth = Date.now() - tAuth0;
-
-  // Periksa batas request per user (20 request / menit)
-  const rateLimit = await checkAiRateLimit(user.id, 'proses', 20);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: `Terlalu banyak permintaan AI. Batas 20/menit. Coba lagi dalam ${rateLimit.retryAfterSec} detik.` },
@@ -75,16 +74,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Baca Buku Harga Aktif dari DB
-    const tDb0 = Date.now();
-    const { data: pbRow } = await adminClient
-      .from('price_books')
-      .select('*')
-      .eq('aktif', true)
-      .single();
-
-    const priceBook = pbRow?.data_json || defaultPriceBookV1;
-    const durasiDbRead = Date.now() - tDb0;
+    const priceBook = pbRowRes.data?.data_json || defaultPriceBookV1;
+    const durasiDbRead = 0;
 
     // Bersihkan format screenshot dari data yang sudah tervalidasi
     const sanitizedScreenshots: ScreenshotInput[] = validated.data.map((s) => ({
