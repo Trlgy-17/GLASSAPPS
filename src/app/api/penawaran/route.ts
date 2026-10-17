@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import React from 'react';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
+import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { PenawaranDocument } from '@/lib/pdf/PenawaranDocument';
+import { getCompanySettings } from '@/lib/settings/get-settings';
+import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -120,6 +121,19 @@ export async function POST(req: NextRequest) {
   const todayStr = new Date().toLocaleDateString('id-ID');
   const validUntilDate = new Date(Date.now() + (priceBook.dokumen_pdf?.masa_berlaku_hari || 7) * 86400000);
   const validUntilStr = validUntilDate.toLocaleDateString('id-ID');
+
+  // Ambil data settings kontak & QR lokasi di server
+  const companySettings = await getCompanySettings();
+  const qrDataUrl = await generateQrPngDataUrl(companySettings.maps_url);
+
+  // Dapatkan nama profil admin pembuat
+  const { data: creatorUser } = await adminClient
+    .from('users')
+    .select('nama')
+    .eq('id', user.id)
+    .single();
+  const namaAdmin = creatorUser?.nama || 'Admin Putra Glass';
+
   const pdfDoc = React.createElement(PenawaranDocument, {
     nomor: quoteNumber,
     tanggal: todayStr,
@@ -128,11 +142,14 @@ export async function POST(req: NextRequest) {
     kotaKlien: kota_klien || 'Bandung',
     kalkulasi: kalkulasi,
     config: priceBook,
+    settings: companySettings,
+    qrDataUrl: qrDataUrl,
+    kanal: kanal || 'whatsapp',
+    namaAdmin: namaAdmin,
   });
 
   const pdfBuffer = await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>);
   const pdfPath = `${quoteNumber}.pdf`;
-
   // 7. Simpan file PDF ke private bucket storage
   await adminClient.storage
     .from('penawaran-pdf')
