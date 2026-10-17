@@ -8,6 +8,10 @@ const adminCookie = fs.existsSync('docs/admin-cookie.txt')
 const ownerCookie = fs.existsSync('docs/owner-cookie.txt')
   ? fs.readFileSync('docs/owner-cookie.txt', 'utf8').trim()
   : '';
+const lhDir = path.resolve(process.cwd(), '.lighthouse');
+if (!fs.existsSync(lhDir)) {
+  fs.mkdirSync(lhDir, { recursive: true });
+}
 
 const pages = [
   { name: '/login', url: 'http://localhost:3000/login', role: 'anon' },
@@ -25,7 +29,7 @@ for (const p of pages) {
   const headers = cookie ? JSON.stringify({ Cookie: cookie }) : '';
 
   // 1. Mobile
-  const mobileFile = `docs/lh-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-mobile.json`;
+  const mobileFile = path.join(lhDir, `lh-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-mobile.json`);
   const extraHeaderFlag = headers ? ` --extra-headers=${JSON.stringify(headers)}` : '';
   try {
     execSync(
@@ -39,7 +43,7 @@ for (const p of pages) {
     const mCls = mData.audits['cumulative-layout-shift'].displayValue;
 
     // 2. Desktop
-    const desktopFile = `docs/lh-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-desktop.json`;
+    const desktopFile = path.join(lhDir, `lh-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-desktop.json`);
     execSync(
       `npx lighthouse ${p.url} --output=json --output-path=${desktopFile} --chrome-flags="--headless" --preset=desktop${extraHeaderFlag}`,
       { stdio: 'pipe' }

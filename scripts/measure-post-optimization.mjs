@@ -19,6 +19,15 @@ if (fs.existsSync(envPath)) {
     });
 }
 
+if (!env.TEST_ADMIN_EMAIL || !env.TEST_ADMIN_PASSWORD || !env.TEST_OWNER_EMAIL || !env.TEST_OWNER_PASSWORD) {
+  throw new Error('TEST_ADMIN_* atau TEST_OWNER_* belum diisi di .env.local');
+}
+
+const lhDir = path.resolve(process.cwd(), '.lighthouse');
+if (!fs.existsSync(lhDir)) {
+  fs.mkdirSync(lhDir, { recursive: true });
+}
+
 async function getCookies() {
   const browser = await chromium.launch({ headless: true });
 
@@ -68,7 +77,7 @@ async function main() {
     const headers = cookie ? JSON.stringify({ Cookie: cookie }) : '';
 
     // 1. Mobile
-    const mobileFile = `docs/lh-post-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-mobile.json`;
+    const mobileFile = path.join(lhDir, `lh-post-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-mobile.json`);
     const extraHeaderFlag = headers ? ` --extra-headers=${JSON.stringify(headers)}` : '';
     try {
       execSync(
@@ -82,7 +91,7 @@ async function main() {
       const mCls = mData.audits['cumulative-layout-shift'].displayValue;
 
       // 2. Desktop
-      const desktopFile = `docs/lh-post-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-desktop.json`;
+      const desktopFile = path.join(lhDir, `lh-post-${p.name.replace(/[^a-zA-Z0-9]/g, '_')}-desktop.json`);
       execSync(
         `npx lighthouse ${p.url} --output=json --output-path=${desktopFile} --chrome-flags="--headless" --preset=desktop${extraHeaderFlag}`,
         { stdio: 'pipe' }

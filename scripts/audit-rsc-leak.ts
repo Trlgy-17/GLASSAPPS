@@ -22,8 +22,12 @@ if (fs.existsSync(envPath)) {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const adminEmail = process.env.TEST_ADMIN_EMAIL || 'admin@putraglass.com';
-const adminPassword = process.env.TEST_ADMIN_PASSWORD || '***REMOVED***';
+const adminEmail = process.env.TEST_ADMIN_EMAIL;
+const adminPassword = process.env.TEST_ADMIN_PASSWORD;
+
+if (!adminEmail || !adminPassword) {
+  throw new Error('TEST_ADMIN_EMAIL atau TEST_ADMIN_PASSWORD belum diisi di .env.local');
+}
 
 async function runLeakAudit() {
   console.log('================================================================');

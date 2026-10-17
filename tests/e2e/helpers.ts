@@ -19,10 +19,14 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-export const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@putraglass.com';
-export const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || '***REMOVED***';
-export const OWNER_EMAIL = process.env.TEST_OWNER_EMAIL || 'owner@putraglass.com';
-export const OWNER_PASSWORD = process.env.TEST_OWNER_PASSWORD || '***REMOVED***';
+if (!process.env.TEST_ADMIN_EMAIL || !process.env.TEST_ADMIN_PASSWORD || !process.env.TEST_OWNER_EMAIL || !process.env.TEST_OWNER_PASSWORD) {
+  throw new Error('TEST_ADMIN_* atau TEST_OWNER_* belum diisi di .env.local');
+}
+
+export const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+export const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+export const OWNER_EMAIL = process.env.TEST_OWNER_EMAIL;
+export const OWNER_PASSWORD = process.env.TEST_OWNER_PASSWORD;
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
