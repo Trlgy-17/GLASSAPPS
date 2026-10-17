@@ -8,6 +8,7 @@ import {
   VarianCermin,
   AddOnConfig,
 } from '@/types/pricing';
+import { hitungHargaCerminCustomRaw } from './custom-pricing';
 
 /**
  * Mesin kalkulasi harga Putra Glass (Single Source of Truth)
@@ -369,15 +370,13 @@ function hitungSingleItem(
       }
     }
 
-    // Luas dalam mm2
-    const luasMm2 = panjang_mm * lebar_mm;
-    const kelipatanCermin = config.pembulatan.cermin_kelipatan; // 5000
-    // Pembagi = 1.000.000 (konversi mm2 ke m2) * kelipatanCermin
-    const pembagi = 1_000_000 * kelipatanCermin; // 5.000.000.000
-
-    // ceil((panjang_mm * lebar_mm * tarif_m2) / 5.000.000.000) * 5.000
-    hargaCerminRaw = Math.ceil((luasMm2 * tarifM2Dipakai) / pembagi) * kelipatanCermin;
-
+    // Menggunakan fungsi murni bersama untuk perhitungan cermin custom
+    hargaCerminRaw = hitungHargaCerminCustomRaw(
+      panjang_mm,
+      lebar_mm,
+      tarifM2Dipakai,
+      config.pembulatan.cermin_kelipatan
+    );
     // Guardrail harga minimum (HANYA custom, tidak untuk SKU)
     hargaCermin = Math.max(hargaCerminRaw, config.pembulatan.harga_minimum_custom);
   }
