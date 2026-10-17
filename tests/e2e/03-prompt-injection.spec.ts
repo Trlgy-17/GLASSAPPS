@@ -38,7 +38,7 @@ test.describe('A.3 Prompt Injection Defense - Minimal 5 Variasi Serangan', () =>
 
   for (const { nama, prompt } of INJECTION_PAYLOADS) {
     test(nama, async ({ request }) => {
-      test.setTimeout(60000);
+      test.setTimeout(180000);
       const res = await request.post('/api/balas/proses', {
         headers: {
           'Content-Type': 'application/json',

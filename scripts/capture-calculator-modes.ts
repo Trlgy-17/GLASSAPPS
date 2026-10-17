@@ -17,8 +17,8 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const adminEmail = process.env.TEST_ADMIN_EMAIL;
-const adminPassword = process.env.TEST_ADMIN_PASSWORD;
+const adminEmail = process.env.TEST_ADMIN_EMAIL!;
+const adminPassword = process.env.TEST_ADMIN_PASSWORD!;
 
 if (!adminEmail || !adminPassword) {
   throw new Error('TEST_ADMIN_EMAIL atau TEST_ADMIN_PASSWORD belum diisi di .env.local');
