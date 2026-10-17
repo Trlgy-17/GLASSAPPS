@@ -1,3 +1,4 @@
+import './patch-dns.js';
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
@@ -62,6 +63,8 @@ async function runLeakAudit() {
     { name: 'floor ongkir rahasia owner (375000)', regex: /375000|375\.000/ },
     { name: 'net ongkir luar kota rahasia (1150000)', regex: /1150000|1\.150\.000/ },
     { name: 'net ongkir dalam kota rahasia (500000)', regex: /500000|500\.000/ },
+    { name: 'domain supabase.co (Prinsip Browser Bebas Supabase)', regex: /rdjzejhbebwufqjgcgkd\.supabase\.co/i },
+    { name: 'token signed URL storage', regex: /\/object\/sign\/|\/storage\/v1\/object\/sign/i },
   ];
   let totalViolations = 0;
 

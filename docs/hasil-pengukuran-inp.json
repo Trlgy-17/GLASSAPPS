@@ -1,0 +1,12 @@
+{
+  "kalkulator": {
+    "maxInpMs": 16,
+    "avgDurationMs": 16,
+    "status": "PASS"
+  },
+  "buatDraf": {
+    "maxInpMs": 16,
+    "avgDurationMs": 16,
+    "status": "PASS"
+  }
+}

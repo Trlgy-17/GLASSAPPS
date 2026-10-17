@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Settings, LogOut, User } from 'lucide-react';
 
 export function Navbar() {
@@ -14,16 +13,17 @@ export function Navbar() {
 
   useEffect(() => {
     async function loadUser() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserEmail(user.email || null);
-        const { data: profile } = await supabase
-          .from('users')
-          .select('peran')
-          .eq('id', user.id)
-          .single();
-        setUserRole(profile?.peran || 'admin');
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.user) {
+            setUserEmail(json.user.email);
+            setUserRole(json.user.peran);
+          }
+        }
+      } catch (e) {
+        console.warn('Gagal memuat user di navbar:', e);
       }
     }
     loadUser();
@@ -34,9 +34,11 @@ export function Navbar() {
       sessionStorage.removeItem('balas_chat_draft_input');
       sessionStorage.removeItem('penawaran_baru_form_draft');
     } catch {}
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
     router.push('/login');
+    router.refresh();
   };
 
   if (pathname === '/login') return null;

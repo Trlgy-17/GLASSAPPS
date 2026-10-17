@@ -745,29 +745,33 @@ export default function BalasChatPage() {
         </div>
       </div>
 
-      {/* Ringkasan Harian Pemakaian AI Admin (Hanya Model Gemini + Biaya) */}
-      {aiDailySummary && (
-        <div
-          id="box-admin-daily-ai-usage"
-          className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-raised/80 border border-line rounded-[18px] text-xs text-ink"
-        >
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-bold text-accent">Pemakaian AI Hari Ini:</span>
-            {Object.entries(aiDailySummary.per_model || {}).length > 0 ? (
-              Object.entries(aiDailySummary.per_model).map(([mdl, s]) => (
-                <span key={mdl} className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
-                  {formatModelDisplayName(mdl)}: <strong>{s.count}</strong> draf (Rp{Math.round(s.cost).toLocaleString('id-ID')})
-                </span>
-              ))
-            ) : (
-              <span className="text-muted font-medium">Gemini aktif (0 draf hari ini)</span>
-            )}
+      {/* Ringkasan Harian Pemakaian AI Admin (Zero CLS Skeleton) */}
+      <div className="min-h-[44px]">
+        {aiDailySummary ? (
+          <div
+            id="box-admin-daily-ai-usage"
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-raised/80 border border-line rounded-[18px] text-xs text-ink"
+          >
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="font-bold text-accent">Pemakaian AI Hari Ini:</span>
+              {Object.entries(aiDailySummary.per_model || {}).length > 0 ? (
+                Object.entries(aiDailySummary.per_model).map(([mdl, s]) => (
+                  <span key={mdl} className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
+                    {formatModelDisplayName(mdl)}: <strong>{s.count}</strong> draf (Rp{Math.round(s.cost).toLocaleString('id-ID')})
+                  </span>
+                ))
+              ) : (
+                <span className="text-muted font-medium">Gemini aktif (0 draf hari ini)</span>
+              )}
+            </div>
+            <div className="font-semibold text-muted">
+              Total Biaya: <strong className="text-ink">Rp{Math.round(aiDailySummary.total_biaya_rp).toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
+            </div>
           </div>
-          <div className="font-semibold text-muted">
-            Total Biaya: <strong className="text-ink">Rp{Math.round(aiDailySummary.total_biaya_rp).toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
-          </div>
-        </div>
-      )}
+        ) : (
+          <div className="h-[44px] rounded-[18px] bg-raised/20 border border-line/30" />
+        )}
+      </div>
 
       {/* Banner Pesan Error Ramah (Jika AI Penuh / Habis) */}
       {friendlyError && (

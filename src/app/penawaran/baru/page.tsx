@@ -150,7 +150,7 @@ function PenawaranContent() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-
+  const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
   // Ambil buku harga aktif & peran user
   useEffect(() => {
     async function loadData() {
@@ -337,16 +337,17 @@ function PenawaranContent() {
         return;
       }
 
+      if (json.penawaran?.id) {
+        setSavedQuoteId(json.penawaran.id);
+      }
       if (isUnduh) {
-        if (json.pdf_url) {
-          const link = document.createElement('a');
-          link.href = json.pdf_url;
-          link.download = `${json.penawaran?.nomor || nomorPenawaran}_${(namaKlien.trim() || 'Klien').replace(/\s+/g, '_')}.pdf`;
-          link.target = '_blank';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
+        const downloadUrl = json.pdf_download_url || `/api/penawaran/${json.penawaran?.id}/pdf?download=true`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `${json.penawaran?.nomor || nomorPenawaran}_${(namaKlien.trim() || 'Klien').replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         setSaveSuccessMsg(`Penawaran ${json.penawaran?.nomor} berhasil disimpan dengan status 'terkirim'!`);
       } else {
         setSaveSuccessMsg(`Penawaran ${json.penawaran?.nomor} berhasil disimpan sebagai 'draf'!`);
@@ -405,9 +406,31 @@ function PenawaranContent() {
       </div>
 
       {saveSuccessMsg && (
-        <div className="p-4 bg-ok-bg border border-ok/30 rounded-[18px] text-ok text-sm flex items-center gap-2.5">
-          <CheckCircle2 className="w-5 h-5 text-ok shrink-0" />
-          <span>{saveSuccessMsg}</span>
+        <div className="p-4 bg-ok-bg border border-ok/30 rounded-[18px] text-ok text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-ok shrink-0" />
+            <span className="font-medium">{saveSuccessMsg}</span>
+          </div>
+          {savedQuoteId && (
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={`/api/penawaran/${savedQuoteId}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 bg-surface text-ink hover:bg-raised border border-line rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-accent" />
+                <span>Lihat PDF</span>
+              </a>
+              <a
+                href={`/api/penawaran/${savedQuoteId}/pdf?download=true`}
+                className="px-3.5 py-1.5 bg-accent text-accent-ink rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh PDF</span>
+              </a>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,0 +1,79 @@
+[
+  {
+    "id": 1,
+    "kategori": "1. Tanya Harga Custom (Bulat D70 3 Warna ST ke Bandung)",
+    "kanal": "whatsapp",
+    "durasiDetik": "3.11",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "fullText": "Halo Kak! Terima kasih sudah menghubungi Putra Glass. Untuk cermin custom bulat diameter 70 cm dengan spesifikasi kaca cermin datar grade 1 tebal 5 mm (jernih & bebas bayangan ganda) serta sudah termasuk tepi bevel 10 mm keliling, lampu LED 3 warna premium, dan kontrol sensor tangan, harganya *Rp960.000*.\n\nUntuk pengiriman ke Bandung, ongkirnya *Rp750.000*. Atau bisa juga diambil langsung ke workshop kami di Bandung ya Kak (ongkir Rp0).\n\nSebagai informasi, produk kami bergaransi resmi 7 hari fisik pengiriman dan 3 bulan fungsi kelistrikan LED & sensor. Ada yang ingin ditanyakan atau mau dilanjut ke pemesanan Kak?",
+    "bubbles": [
+      "Halo Kak! Terima kasih sudah menghubungi Putra Glass. Untuk cermin custom bulat diameter 70 cm dengan spesifikasi kaca cermin datar grade 1 tebal 5 mm (jernih & bebas bayangan ganda) serta sudah termasuk tepi bevel 10 mm keliling, lampu LED 3 warna premium, dan kontrol sensor tangan, harganya *Rp960.000*.",
+      "Untuk pengiriman ke Bandung, ongkirnya *Rp750.000*. Atau bisa juga diambil langsung ke workshop kami di Bandung ya Kak (ongkir Rp0).",
+      "Sebagai informasi, produk kami bergaransi resmi 7 hari fisik pengiriman dan 3 bulan fungsi kelistrikan LED & sensor. Ada yang ingin ditanyakan atau mau dilanjut ke pemesanan Kak?"
+    ],
+    "tahap": "penawaran",
+    "ringkasan": "Klien menanyakan harga cermin custom bulat D70cm dengan lampu 3 warna dan sensor tangan untuk pengiriman ke Bandung."
+  },
+  {
+    "id": 2,
+    "kategori": "2. Tanya Produk Jadi (Rectangle 40x60 Sandblast ST)",
+    "kanal": "whatsapp",
+    "durasiDetik": "4.18",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "fullText": "Halo Kak, siang juga! Terima kasih sudah menghubungi Putra Glass di Bandung.\n\nUntuk cermin model rectangle ukuran 40x60 cm dengan sandblast dan sensor tangan, harganya *Rp755.000*.\n\nProduk kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, lengkap dengan tepi bevel 10 mm keliling yang elegan.\n\nBoleh dibantu info pengirimannya ke kota mana Kak, agar kami bisa cek estimasi ongkirnya?",
+    "bubbles": [
+      "Halo Kak, siang juga! Terima kasih sudah menghubungi Putra Glass di Bandung.",
+      "Untuk cermin model rectangle ukuran 40x60 cm dengan sandblast dan sensor tangan, harganya *Rp755.000*.",
+      "Produk kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, lengkap dengan tepi bevel 10 mm keliling yang elegan.",
+      "Boleh dibantu info pengirimannya ke kota mana Kak, agar kami bisa cek estimasi ongkirnya?"
+    ],
+    "tahap": "penawaran",
+    "ringkasan": "Klien menanyakan ketersediaan dan harga cermin rectangle ukuran 40x60 cm dengan fitur sandblast dan sensor tangan."
+  },
+  {
+    "id": 3,
+    "kategori": "3. Ongkir Luar Kota (Custom 60x80 ke Surabaya)",
+    "kanal": "whatsapp",
+    "durasiDetik": "2.03",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "fullText": "Halo Kak! Untuk estimasi ongkos kirim ke Surabaya akan dicek dan dihitung oleh admin kargo kami ya Kak.\n\nSebagai informasi, cermin kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, sudah termasuk tepi bevel 10 mm keliling.\n\nUntuk spesifikasi cermin custom ukuran 60x80 cm ini, Kakak lebih berminat dengan pilihan lampu LED 3 warna (dengan touchscreen kabel) atau LED 1 warna basic (dengan saklar)?",
+    "bubbles": [
+      "Halo Kak! Untuk estimasi ongkos kirim ke Surabaya akan dicek dan dihitung oleh admin kargo kami ya Kak.",
+      "Sebagai informasi, cermin kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, sudah termasuk tepi bevel 10 mm keliling.",
+      "Untuk spesifikasi cermin custom ukuran 60x80 cm ini, Kakak lebih berminat dengan pilihan lampu LED 3 warna (dengan touchscreen kabel) atau LED 1 warna basic (dengan saklar)?"
+    ],
+    "tahap": "kualifikasi",
+    "ringkasan": "Klien menanyakan ongkir cermin custom 60x80 ke Surabaya."
+  },
+  {
+    "id": 4,
+    "kategori": "4. Minta Ambil Sendiri (Oval 50x70 ke Workshop)",
+    "kanal": "whatsapp",
+    "durasiDetik": "2.31",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "fullText": "Tentu saja bisa banget Kak! Untuk area Bandung, sangat dipersilakan jika ingin diambil langsung ke workshop kami di Bandung (ongkir Rp0).\n\nSebagai informasi, produk kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, lengkap dengan tepi bevel 10 mm keliling yang elegan.\n\nUntuk cermin oval ukuran 50x70 cm dengan LED 3 warna premium dan kontrol touchscreen, harganya *Rp650.000*.\n\nBoleh dibantu info untuk estimasi kapan rencana pengambilan atau pemesanannya Kak?",
+    "bubbles": [
+      "Tentu saja bisa banget Kak! Untuk area Bandung, sangat dipersilakan jika ingin diambil langsung ke workshop kami di Bandung (ongkir Rp0).",
+      "Sebagai informasi, produk kami menggunakan kaca cermin datar grade 1 tebal 5 mm yang jernih dan bebas bayangan ganda, lengkap dengan tepi bevel 10 mm keliling yang elegan.",
+      "Untuk cermin oval ukuran 50x70 cm dengan LED 3 warna premium dan kontrol touchscreen, harganya *Rp650.000*.",
+      "Boleh dibantu info untuk estimasi kapan rencana pengambilan atau pemesanannya Kak?"
+    ],
+    "tahap": "penawaran",
+    "ringkasan": "Klien bertanya apakah bisa ambil sendiri ke workshop di Bandung dan meminta alamat workshop untuk cermin oval 50x70 cm."
+  },
+  {
+    "id": 5,
+    "kategori": "5. Chat Marketplace TikTok (Bulat 60 cm)",
+    "kanal": "tiktok",
+    "durasiDetik": "3.98",
+    "modelUsed": "gemini-3.5-flash-lite",
+    "fullText": "Halo Kak! Untuk cermin bulat ukuran 60 cm kami buat secara custom berkualitas premium dengan kaca jernih tebal 5 mm dan sudah termasuk bevel 10 mm keliling.\n\nPengiriman kami menggunakan packing kayu khusus yang kokoh dan berstandar ketat.\n\nBoleh dibantu infokan Kakak, untuk pengiriman nanti dikirim ke kota mana ya?",
+    "bubbles": [
+      "Halo Kak! Untuk cermin bulat ukuran 60 cm kami buat secara custom berkualitas premium dengan kaca jernih tebal 5 mm dan sudah termasuk bevel 10 mm keliling.",
+      "Pengiriman kami menggunakan packing kayu khusus yang kokoh dan berstandar ketat.",
+      "Boleh dibantu infokan Kakak, untuk pengiriman nanti dikirim ke kota mana ya?"
+    ],
+    "tahap": "kualifikasi",
+    "ringkasan": "Memperbaiki draf balasan dengan menghilangkan kata terlarang 'dijamin' sesuai aturan baru."
+  }
+]

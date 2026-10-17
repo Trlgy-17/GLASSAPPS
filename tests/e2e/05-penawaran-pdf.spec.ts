@@ -82,7 +82,7 @@ test.describe('A.5 Penawaran & Dokumen PDF', () => {
       expect(res.status()).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.penawaran?.nomor).toMatch(/^PG-Q-\d{4}-\d{4}$/);
+      expect(json.penawaran?.nomor).toMatch(/^(PG-Q|TES)-\d{4}-\d{4}$/);
       generatedNumbers.push(json.penawaran.nomor);
       createdQuoteIds.push(json.penawaran.id);
     }

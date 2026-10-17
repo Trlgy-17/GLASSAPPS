@@ -114,9 +114,21 @@ export async function POST(req: NextRequest) {
     );
   }
   // 5. Generate Nomor Penawaran atomic via DB function
-  const { data: nomor, error: noErr } = await adminClient.rpc('generate_nomor_penawaran');
-  const quoteNumber = nomor || `PG-Q-TEMP-${Date.now().toString().slice(-4)}`;
+  // Data tes WAJIB menggunakan sequence terpisah (TES-) agar tidak memakan sequence asli PG-Q-
+  let quoteNumber: string;
+  const isTestRequest =
+    Boolean(body.is_test) ||
+    Boolean(rawInput.is_test) ||
+    (nama_klien && String(nama_klien).includes('[TES]')) ||
+    (nama_klien && String(nama_klien).toLowerCase().includes('test'));
 
+  if (isTestRequest) {
+    const { data: testNomor } = await adminClient.rpc('generate_nomor_penawaran_test');
+    quoteNumber = testNomor || `TES-${Date.now().toString().slice(-8)}`;
+  } else {
+    const { data: nomor } = await adminClient.rpc('generate_nomor_penawaran');
+    quoteNumber = nomor || `PG-Q-TEMP-${Date.now().toString().slice(-4)}`;
+  }
   // 6. Generate Dokumen PDF deterministik
   const todayStr = new Date().toLocaleDateString('id-ID');
   const validUntilDate = new Date(Date.now() + (priceBook.dokumen_pdf?.masa_berlaku_hari || 7) * 86400000);
@@ -238,15 +250,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 10. Buat Signed URL berumur pendek untuk unduh PDF
-  const { data: signedUrlData } = await adminClient.storage
-    .from('penawaran-pdf')
-    .createSignedUrl(pdfPath, 3600);
-
+  // 10. Tautan PDF lewat domain aplikasi sendiri (tanpa signed URL eksternal)
   return NextResponse.json({
     success: true,
     penawaran: savedPenawaran,
-    pdf_url: signedUrlData?.signedUrl,
+    pdf_url: `/api/penawaran/${savedPenawaran.id}/pdf`,
+    pdf_download_url: `/api/penawaran/${savedPenawaran.id}/pdf?download=true`,
   });
 }
 
