@@ -126,9 +126,27 @@ export default function BalasChatPage() {
   const [isMarkingSent, setIsMarkingSent] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
   const [cityCandidates, setCityCandidates] = useState<WilayahKota[]>([]);
+  const [isLedDimmed, setIsLedDimmed] = useState(false);
+  const ledDimTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  // Lifecycle Garis LED
+  useEffect(() => {
+    clearTimeout(ledDimTimerRef.current);
+    if (draftResult && !isProcessing && !friendlyError) {
+      setIsLedDimmed(false);
+      ledDimTimerRef.current = setTimeout(() => {
+        setIsLedDimmed(true);
+      }, 3000);
+    } else {
+      setIsLedDimmed(false);
+    }
+    return () => {
+      clearTimeout(ledDimTimerRef.current);
+    };
+  }, [draftResult, isProcessing, friendlyError]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   // Pulihkan draf input admin dari sessionStorage jika ada
   useEffect(() => {
     try {
@@ -978,19 +996,53 @@ export default function BalasChatPage() {
         </div>
 
         {/* KOLOM KANAN: PANEL DRAF = "CERMIN LED" */}
-        <div className="lg:col-span-7 cermin-led-panel p-4 sm:p-6 md:p-8 space-y-6 max-w-full overflow-hidden">
-          {/* Garis LED 2px di tepi atas dengan Glow */}
-          <div className={`led-line ${isProcessing ? 'led-pulse' : ''}`} />
+        {(() => {
+          const isPanelEmpty = !draftResult && !isProcessing;
+          const panelStatusClass = isPanelEmpty
+            ? 'panel-empty'
+            : friendlyError
+            ? 'panel-error'
+            : 'panel-active';
+          const showLedLine = Boolean((isProcessing || draftResult) && !friendlyError);
 
+          return (
+            <div
+              id="cermin-led-panel"
+              className={`lg:col-span-7 cermin-led-panel ${panelStatusClass} p-4 sm:p-6 md:p-8 space-y-6 max-w-full overflow-hidden`}
+            >
+              {/* Garis LED 1.5px di tepi atas dengan Glow dan memudar di ujung */}
+              {showLedLine && (
+                <div
+                  id="led-top-line"
+                  data-state={isProcessing ? 'writing' : isLedDimmed ? 'dimmed' : 'ready'}
+                  className={`led-line ${
+                    isProcessing ? 'led-pulsing' : isLedDimmed ? 'led-dimmed' : 'led-ready'
+                  }`}
+                />
+              )}
           {!draftResult ? (
             <div className="py-24 text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-full bg-tint flex items-center justify-center text-accent">
-                <Sparkles className="w-6 h-6" />
-              </div>
-              <p className="text-[17px] font-bold text-ink">Area Draf Balasan</p>
-              <p className="text-sm text-muted max-w-sm mx-auto">
-                Tempel screenshot chat klien (<kbd className="font-mono text-xs">Ctrl+V</kbd>) atau ketik pesan manual untuk melihat draf balasan.
-              </p>
+              {isProcessing ? (
+                <>
+                  <div className="w-12 h-12 mx-auto rounded-full bg-tint flex items-center justify-center text-accent">
+                    <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                  </div>
+                  <p className="text-[17px] font-bold text-ink">Menyusun Balasan...</p>
+                  <p className="text-sm text-muted max-w-sm mx-auto">
+                    Menganalisis chat, menghitung harga resmi, dan merangkai draf balasan.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 mx-auto rounded-full bg-tint flex items-center justify-center text-accent">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <p className="text-[17px] font-bold text-ink">Area Draf Balasan</p>
+                  <p className="text-sm text-muted max-w-sm mx-auto">
+                    Tempel screenshot chat klien (<kbd className="font-mono text-xs">Ctrl+V</kbd>) atau ketik pesan manual untuk melihat draf balasan.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -1440,7 +1492,9 @@ export default function BalasChatPage() {
               </div>
             </div>
           )}
-        </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

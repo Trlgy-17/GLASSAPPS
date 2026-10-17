@@ -55,7 +55,8 @@
   --bubble: #E4EDF9;
   --rim: #B8CDEA;
   --led: #6E9BE0;
-  --chart-1: #3F6DB5;
+  --led-glow: 0 0 6px rgba(110, 155, 224, 0.3);
+  --led-glow-dimmed: 0 0 4px rgba(110, 155, 224, 0.15);
   --chart-2: #C27A22;
 }
 
@@ -78,7 +79,8 @@
   --bubble: #1F2E49;
   --rim: rgba(169, 200, 255, 0.45);
   --led: #CFE0FF;
-  --chart-1: #5A88D2;
+  --led-glow: 0 0 10px rgba(207, 224, 255, 0.4);
+  --led-glow-dimmed: 0 0 6px rgba(207, 224, 255, 0.2);
   --chart-2: #BC8035;
 }
 
@@ -125,42 +127,71 @@ body {
 .cermin-led-panel {
   position: relative;
   border-radius: 28px;
-  border: 1px solid var(--rim);
   background-color: var(--surface);
   box-shadow: none;
+  transition: border-color 0.3s ease;
 }
 
+/* Panel Kosong / Error: border line biasa, tanpa glow */
+.cermin-led-panel.panel-empty,
+.cermin-led-panel.panel-error {
+  border: 1px solid var(--line);
+}
+
+/* Panel Aktif (Menulis atau Draf Siap): border rim lembut */
+.cermin-led-panel.panel-active {
+  border: 1px solid var(--rim);
+}
+
+/* Garis LED di tepi atas (Clean, inset 32px, memudar di ujung) */
 .led-line {
   position: absolute;
   top: 0;
-  left: 48px;
-  right: 48px;
-  height: 2px;
+  left: 32px;
+  right: 32px;
+  height: 1.5px;
   background-color: var(--led);
-  box-shadow: 0 0 14px var(--led);
   border-radius: 9999px;
   pointer-events: none;
   z-index: 10;
+  opacity: 0.7;
+  box-shadow: var(--led-glow);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+  transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.led-pulse {
-  animation: ledPulse 1.6s ease-in-out infinite;
+/* Status 1: Sedang menulis (berdenyut pelan) */
+.led-line.led-pulsing {
+  animation: ledPulseSlow 2.2s ease-in-out infinite;
 }
 
-@keyframes ledPulse {
+/* Status 2: Draf siap (diam dengan glow lembut) */
+.led-line.led-ready {
+  opacity: 0.7;
+  box-shadow: var(--led-glow);
+}
+
+/* Status 3: Meredup ke 40% setelah 3 detik */
+.led-line.led-dimmed {
+  opacity: 0.4;
+  box-shadow: var(--led-glow-dimmed);
+}
+
+@keyframes ledPulseSlow {
   0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 16px var(--led);
+    opacity: 0.7;
+    box-shadow: var(--led-glow);
   }
   50% {
-    opacity: 0.3;
-    box-shadow: 0 0 4px var(--led);
+    opacity: 0.25;
+    box-shadow: 0 0 2px var(--led);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .led-pulse {
+  .led-line.led-pulsing {
     animation: none;
-    opacity: 1;
+    opacity: 0.7;
   }
 }
