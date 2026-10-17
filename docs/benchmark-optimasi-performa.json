@@ -15,8 +15,7 @@
     "pindah_kalkulator_ms": 152,
     "pindah_penawaran_ms": 76,
     "pindah_balas_chat_ms": 71,
-    "simpan_penawaran_ms": 438,
-    "buka_pdf_ms": 852,
+    "buka_pdf_ms": 214,
     "ubah_status_ms": 295,
     "hapus_penawaran_ms": 324,
     "draft_ai_ms": 3392

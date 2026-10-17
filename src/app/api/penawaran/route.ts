@@ -8,6 +8,7 @@ import { getCompanySettings } from '@/lib/settings/get-settings';
 import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
 import { getPeriode } from '@/lib/closing-period';
+import { setCachedPdf } from '@/lib/pdf/pdf-cache';
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -238,6 +239,8 @@ export async function POST(req: NextRequest) {
       });
 
       const pdfBuffer = await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>);
+      setCachedPdf(savedPenawaran.id, Buffer.from(pdfBuffer));
+      setCachedPdf(quoteNumber, Buffer.from(pdfBuffer));
       await adminClient.storage
         .from('penawaran-pdf')
         .upload(pdfPath, pdfBuffer, {

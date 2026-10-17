@@ -6,6 +6,7 @@ import { defaultPriceBookV1 } from '@/lib/pricing/default-price-book';
 import { getCompanySettings } from '@/lib/settings/get-settings';
 import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
+import { getCachedPdf, setCachedPdf } from '@/lib/pdf/pdf-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,24 +33,22 @@ export async function GET(
     }
 
     const { id } = await params;
+    const t0 = performance.now();
 
-    // Ambil data user untuk cek peran
-    const { data: userProfile } = await adminClient
-      .from('users')
-      .select('peran')
-      .eq('id', user.id)
-      .single();
+    // 1. Cek in-memory server cache
+    let pdfBuffer = getCachedPdf(id);
 
+    // Kueri profil user dan penawaran secara paralel
+    const [userProfileRes, penawaranRes] = await Promise.all([
+      adminClient.from('users').select('peran').eq('id', user.id).single(),
+      adminClient.from('penawaran').select('*, leads!inner(nama, kota), price_books(data_json), users:created_by(nama)').eq('id', id).single(),
+    ]);
+
+    const userProfile = userProfileRes.data;
     const userRole = userProfile?.peran || 'admin';
+    const penawaran = penawaranRes.data;
 
-    // Ambil data penawaran lengkap
-    const { data: penawaran, error: penErr } = await adminClient
-      .from('penawaran')
-      .select('*, leads!inner(nama, kota), price_books(data_json), users:created_by(nama)')
-      .eq('id', id)
-      .single();
-
-    if (penErr || !penawaran) {
+    if (!penawaran) {
       return NextResponse.json({ error: 'Penawaran tidak ditemukan' }, { status: 404 });
     }
 
@@ -70,10 +69,12 @@ export async function GET(
       ? `attachment; filename="${filename}"`
       : `inline; filename="${filename}"`;
 
-    let pdfBuffer: Buffer | null = null;
+    if (!pdfBuffer) {
+      pdfBuffer = getCachedPdf(safeNumber);
+    }
 
-    // 1. Coba unduh dari private bucket Storage di server
-    if (penawaran.pdf_path) {
+    // 2. Jika belum ada di memory cache, coba unduh dari private bucket Storage
+    if (!pdfBuffer && penawaran.pdf_path) {
       const { data: storageBlob, error: downloadErr } = await adminClient.storage
         .from('penawaran-pdf')
         .download(penawaran.pdf_path);
@@ -81,9 +82,10 @@ export async function GET(
       if (!downloadErr && storageBlob) {
         const ab = await storageBlob.arrayBuffer();
         pdfBuffer = Buffer.from(ab);
+        setCachedPdf(id, pdfBuffer);
+        setCachedPdf(safeNumber, pdfBuffer);
       }
     }
-
     // 2. Jika file belum ada di storage, render ulang on-the-fly deterministik
     if (!pdfBuffer) {
       const priceBook = penawaran.price_books?.data_json || defaultPriceBookV1;
@@ -124,27 +126,24 @@ export async function GET(
         namaAdmin: penawaran.users?.nama || 'Admin Putra Glass',
       });
 
-      pdfBuffer = await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>);
+      pdfBuffer = Buffer.from(await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>));
+      setCachedPdf(id, pdfBuffer);
+      setCachedPdf(safeNumber, pdfBuffer);
 
-      // Simpan ke storage untuk akses berikutnya
       const savePath = penawaran.pdf_path || `${penawaran.nomor}.pdf`;
-      await adminClient.storage
+      adminClient.storage
         .from('penawaran-pdf')
-        .upload(savePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
-
-      if (!penawaran.pdf_path) {
-        await adminClient
-          .from('penawaran')
-          .update({ pdf_path: savePath })
-          .eq('id', id);
-      }
+        .upload(savePath, pdfBuffer, { contentType: 'application/pdf', upsert: true })
+        .catch(() => {});
     }
+
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': disposition,
-        'Cache-Control': 'private, no-store',
+        'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
+        'Server-Timing': `pdf;dur=${Math.round(performance.now() - t0)}`,
       },
     });
   } catch (err: unknown) {

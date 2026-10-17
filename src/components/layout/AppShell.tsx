@@ -25,6 +25,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [userEmail, setUserEmail] = useState<string | null>(_inMemoryUser?.email || null);
 
   useEffect(() => {
+    if (pathname === '/login') return;
     if (_inMemoryUser) {
       setUserEmail(_inMemoryUser.email);
       setUserRole(_inMemoryUser.peran);
