@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { formatRupiah } from '@/lib/pricing/format-rupiah';
+import { getPeriode, getAvailablePeriods } from '@/lib/closing-period';
 import { WeeklyTrendChartSkeleton, WeeklyChartItem } from '@/components/dashboard/WeeklyTrendChart';
 
 const WeeklyTrendChart = dynamic(
@@ -68,18 +69,58 @@ interface PotonganItem {
   di_bawah_net: boolean;
   tanggal: string;
   admin_nama: string;
-  penawaran?: any;
+  penawaran?: Record<string, unknown>;
 }
+
+interface DetailQuote {
+  id: string;
+  nomor: string;
+  nama_klien: string;
+  kota: string;
+  admin_nama: string;
+  status: string;
+  total_nilai: number;
+  subtotal_cermin: number;
+  ongkir: number;
+  pasang: number;
+  dp_50: number;
+  pelunasan: number;
+  items: Array<{
+    bentuk_kode?: string;
+    nama_produk?: string;
+    panjang_mm?: number;
+    lebar_mm?: number;
+    qty?: number;
+    total_harga?: number;
+    lampu?: string;
+    kontrol?: string;
+  }>;
+  tanggal: string;
+}
+
+interface FallbackDetail {
+  id?: string;
+  nomor?: string;
+  nama_klien?: string;
+  kota?: string;
+  admin_nama?: string;
+  status?: string;
+  total_nilai?: number;
+  nilai_deal?: number;
+  tanggal?: string;
+}
+
 export default function DasborPage() {
   const [summary, setSummary] = useState<DasborSummary | null>(null);
   const [followUpList, setFollowUpList] = useState<FollowUpItem[]>([]);
   const [chartData, setChartData] = useState<WeeklyChartItem[]>([]);
   const [potonganList, setPotonganList] = useState<PotonganItem[]>([]);
   const [admins, setAdmins] = useState<Array<{ id: string; nama: string; email: string }>>([]);
-  const [selectedDetailQuote, setSelectedDetailQuote] = useState<any | null>(null);
+  const [selectedDetailQuote, setSelectedDetailQuote] = useState<DetailQuote | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-  const [rentang, setRentang] = useState<'minggu_ini' | 'bulan_ini' | 'bulan_lalu' | 'custom'>('bulan_ini');
+  const availablePeriods = useMemo(() => getAvailablePeriods(12), []);
+  const [rentang, setRentang] = useState<string>(() => getPeriode().key);
   const [kanal, setKanal] = useState<string>('all');
   const [adminId, setAdminId] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
@@ -119,7 +160,7 @@ export default function DasborPage() {
   const totalStatusCount = summary
     ? summary.dibuat.jumlah + summary.proses.jumlah + summary.deal.jumlah + summary.batal.jumlah
     : 1;
-  const handleOpenDetail = async (nomor: string, fallbackData?: any) => {
+  const handleOpenDetail = async (nomor: string, fallbackData?: FallbackDetail) => {
     setIsLoadingDetail(true);
     try {
       const res = await fetch(`/api/penawaran?search=${encodeURIComponent(nomor)}&include_test=true`);
@@ -190,17 +231,21 @@ export default function DasborPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <select
-            value={rentang}
-            onChange={(e) => setRentang(e.target.value as any)}
-            className="px-3.5 py-2 min-h-[44px] bg-surface border border-line rounded-xl text-xs font-semibold text-ink focus:outline-none"
-          >
-            <option value="minggu_ini">Minggu ini</option>
-            <option value="bulan_ini">Bulan ini</option>
-            <option value="bulan_lalu">Bulan lalu</option>
-            <option value="custom">90 hari terakhir</option>
-          </select>
-
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-muted" />
+            <select
+              value={rentang}
+              onChange={(e) => setRentang(e.target.value)}
+              className="px-3.5 py-2 min-h-[44px] bg-surface border border-line rounded-xl text-xs font-semibold text-ink focus:outline-none cursor-pointer"
+            >
+              {availablePeriods.map((p, idx) => (
+                <option key={p.key} value={p.key}>
+                  {idx === 0 ? `${p.nama} (Berjalan)` : p.nama}
+                </option>
+              ))}
+              <option value="all">Semua Periode</option>
+            </select>
+          </div>
           <select
             value={kanal}
             onChange={(e) => setKanal(e.target.value)}

@@ -10,9 +10,10 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Calendar,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
-
+import { getPeriode } from '@/lib/closing-period';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -20,8 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<'owner' | 'admin' | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [aiUsageCount, setAiUsageCount] = useState<number>(18);
-  const [maxAiQuota, setMaxAiQuota] = useState<number>(300);
+
 
   useEffect(() => {
     async function loadUser() {
@@ -78,7 +78,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           { label: 'Penawaran', href: '/penawaran', icon: FileText },
         ];
 
-  const quotaPercent = Math.min(100, Math.round((aiUsageCount / maxAiQuota) * 100));
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col md:flex-row antialiased">
@@ -141,33 +140,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        {/* Bagian Bawah: Selalu terlihat utuh (shrink-0) */}
+        {/* Bagian Bawah: Widget Periode Closing Bulanan */}
         <div className="shrink-0 space-y-4 pt-4 border-t border-surface/10">
-          {/* Untuk Owner: Tampilkan "Owner — hanya bisa melihat" (sembunyikan meter kuota) */}
-          {userRole === 'owner' ? (
-            <div className="p-3 bg-surface/10 rounded-xl text-center border border-surface/10">
-              <span className="text-xs font-semibold text-rail-ink">
+          <div className="p-3 bg-surface/10 rounded-xl space-y-1.5 border border-surface/10">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white">
+              <Calendar className="w-3.5 h-3.5 text-led shrink-0" />
+              <span className="truncate">{getPeriode().labelSidebar}</span>
+            </div>
+            {userRole === 'owner' && (
+              <p className="text-[10px] text-rail-ink/60 leading-tight">
                 Owner — hanya bisa melihat
-              </span>
-            </div>
-          ) : (
-            /* Untuk Admin: Tampilkan meter kuota AI hari ini */
-            <div className="p-3 bg-surface/10 rounded-xl space-y-2 border border-surface/10">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-rail-ink/80 font-medium">Kuota AI hari ini</span>
-                <span className="tabular-nums font-semibold text-white">
-                  {aiUsageCount} / {maxAiQuota}
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-surface/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-led rounded-full transition-all duration-300 shadow-[0_0_6px_var(--led)]"
-                  style={{ width: `${quotaPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
+              </p>
+            )}
+          </div>
           {/* User Info & Keluar */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2.5 min-w-0">

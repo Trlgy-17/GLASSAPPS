@@ -7,6 +7,7 @@ import { PenawaranDocument } from '@/lib/pdf/PenawaranDocument';
 import { getCompanySettings } from '@/lib/settings/get-settings';
 import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
+import { getPeriode } from '@/lib/closing-period';
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -276,25 +277,72 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { data: userData } = await adminClient
+    .from('users')
+    .select('peran, nama')
+    .eq('id', user.id)
+    .single();
+
+  const userRole = userData?.peran || 'admin';
+
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '20', 10)));
   const search = searchParams.get('search')?.trim() || '';
   const status = searchParams.get('status')?.trim() || '';
+  const periodeParam = searchParams.get('periode')?.trim();
+  const followupOnly = searchParams.get('followup_only') === 'true';
   const includeTest = searchParams.get('include_test') === 'true';
+
+  const currentPeriod = getPeriode();
+  let activePeriod = currentPeriod;
+  if (periodeParam && periodeParam !== 'all') {
+    activePeriod = getPeriode(`${periodeParam}-10`);
+  }
 
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
   let query = adminClient
     .from('penawaran')
-    .select('id, nomor, status, kanal, total_nilai, ringkasan_json, valid_until, created_at, deal_at, alasan_batal, leads!inner(nama, kota, no_wa), users:created_by(nama, email)', { count: 'exact' });
+    .select(
+      'id, nomor, status, kanal, total_nilai, ringkasan_json, valid_until, created_at, updated_at, deal_at, alasan_batal, deleted_at, deleted_by, delete_reason, created_by, leads!inner(nama, kota, no_wa), users:created_by(id, nama, email)',
+      { count: 'exact' }
+    );
+
   if (!includeTest) {
     query = query.not('leads.nama', 'ilike', '[TES]%').not('nomor', 'ilike', '%TEST%');
   }
 
-  if (status && status !== 'all') {
+  // Filter soft delete
+  if (status === 'dihapus') {
+    if (userRole !== 'owner') {
+      return NextResponse.json(
+        { error: 'Hanya owner yang dapat melihat daftar penawaran yang dihapus' },
+        { status: 403 }
+      );
+    }
+    query = query.not('deleted_at', 'is', null);
+  } else {
+    query = query.is('deleted_at', null);
+  }
+
+  // Filter status biasa
+  if (status && status !== 'all' && status !== 'dihapus') {
     query = query.eq('status', status);
+  }
+
+  // Filter follow-up (> 2 hari tanpa update)
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
+  if (followupOnly) {
+    query = query.eq('status', 'terkirim').lte('updated_at', twoDaysAgo);
+  }
+
+  // Filter periode
+  if (periodeParam !== 'all') {
+    query = query
+      .gte('created_at', activePeriod.startDateIso)
+      .lte('created_at', activePeriod.endDateIso);
   }
 
   if (search) {
@@ -304,9 +352,65 @@ export async function GET(req: NextRequest) {
   const { data: list, count, error } = await query
     .order('created_at', { ascending: false })
     .range(from, to);
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Hitung Ringkasan Kartu untuk periode aktif
+  let cardsQuery = adminClient
+    .from('penawaran')
+    .select('id, status, total_nilai, updated_at, created_at, deal_at, valid_until, leads!inner(nama)')
+    .is('deleted_at', null);
+
+  if (!includeTest) {
+    cardsQuery = cardsQuery.not('leads.nama', 'ilike', '[TES]%').not('nomor', 'ilike', '%TEST%');
+  }
+  if (userRole === 'admin') {
+    cardsQuery = cardsQuery.eq('created_by', user.id);
+  }
+  if (periodeParam !== 'all') {
+    cardsQuery = cardsQuery
+      .gte('created_at', activePeriod.startDateIso)
+      .lte('created_at', activePeriod.endDateIso);
+  }
+
+  const { data: cardsData } = await cardsQuery;
+  const cData = cardsData || [];
+
+  let terkirimCount = 0;
+  let dealCount = 0;
+  let dealNilai = 0;
+  let batalCount = 0;
+  let kadaluwarsaCount = 0;
+  let perluFollowupCount = 0;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  for (const item of cData) {
+    const s = item.status;
+    const isKadaluwarsa = s === 'kadaluwarsa' || (['draf', 'terkirim', 'nego'].includes(s) && item.valid_until < todayStr);
+
+    if (s === 'terkirim' || s === 'nego') {
+      terkirimCount += 1;
+    }
+    if (s === 'deal' || s === 'lunas') {
+      dealCount += 1;
+      dealNilai += Number(item.total_nilai || 0);
+    }
+    if (s === 'batal') {
+      batalCount += 1;
+    }
+    if (isKadaluwarsa) {
+      kadaluwarsaCount += 1;
+    }
+    if (s === 'terkirim' && item.updated_at && item.updated_at <= twoDaysAgo) {
+      perluFollowupCount += 1;
+    }
+  }
+
+  const denominator = dealCount + batalCount + kadaluwarsaCount;
+  const closingRate = denominator > 0 ? Math.round((dealCount / denominator) * 1000) / 10 : 0;
 
   return NextResponse.json({
     penawaran: list || [],
@@ -314,5 +418,144 @@ export async function GET(req: NextRequest) {
     page,
     limit,
     total_pages: Math.ceil((count || 0) / limit),
+    periode_aktif: activePeriod.key,
+    periode_nama: activePeriod.nama,
+    ringkasan_kartu: {
+      terkirim_count: terkirimCount,
+      deal_count: dealCount,
+      deal_nilai: dealNilai,
+      closing_rate: closingRate,
+      perlu_followup_count: perluFollowupCount,
+    },
+    user_role: userRole,
+    user_id: user.id,
+    user_nama: userData?.nama || 'Admin',
+  });
+}
+
+export async function DELETE(req: NextRequest) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+  let user = (await supabase.auth.getUser()).data.user;
+  if (!user) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: tokenUser } = await adminClient.auth.getUser(token);
+      user = tokenUser.user;
+    }
+  }
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // 1. Role check: Owner read-only -> 403 Forbidden
+  const { data: userData } = await adminClient
+    .from('users')
+    .select('peran, nama')
+    .eq('id', user.id)
+    .single();
+
+  if (userData?.peran !== 'admin') {
+    return NextResponse.json(
+      { error: 'Owner tidak diizinkan menghapus penawaran (bersifat read-only)' },
+      { status: 403 }
+    );
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const alasan = body.alasan?.trim();
+  const catatan = body.catatan?.trim();
+  const rawIds = body.ids || (body.id ? [body.id] : []);
+  const ids: string[] = Array.isArray(rawIds) ? rawIds.filter(Boolean) : [];
+
+  if (ids.length === 0) {
+    return NextResponse.json({ error: 'ID penawaran belum dipilih' }, { status: 400 });
+  }
+
+  if (alasan !== 'Demo / percobaan' && alasan !== 'Salah input') {
+    return NextResponse.json(
+      { error: 'Alasan hapus wajib dipilih: "Demo / percobaan" atau "Salah input"' },
+      { status: 400 }
+    );
+  }
+
+  const fullReason = catatan ? `${alasan}: ${catatan}` : alasan;
+
+  // 2. Fetch targets to validate ownership and status
+  const { data: targets, error: fetchErr } = await adminClient
+    .from('penawaran')
+    .select('id, nomor, status, created_by, total_nilai, deleted_at')
+    .in('id', ids);
+
+  if (fetchErr || !targets || targets.length === 0) {
+    return NextResponse.json({ error: 'Penawaran tidak ditemukan' }, { status: 404 });
+  }
+
+  // Validasi per baris
+  for (const t of targets) {
+    if (t.created_by !== user.id) {
+      return NextResponse.json(
+        {
+          error: `Penawaran ${t.nomor} dibuat oleh admin lain. Anda hanya dapat menghapus penawaran milik sendiri.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    if (t.status === 'deal' || t.status === 'lunas') {
+      return NextResponse.json(
+        {
+          error: `Penawaran ${t.nomor} berstatus ${t.status} (Deal). Penawaran deal tidak dapat dihapus agar omzet dasbor tidak berubah. Ubah status terlebih dahulu jika salah input.`,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
+  const validIds = targets.filter((t) => !t.deleted_at).map((t) => t.id);
+  const nowIso = new Date().toISOString();
+
+  // 3. Soft Delete: update deleted_at, deleted_by, delete_reason
+  const { error: updErr } = await adminClient
+    .from('penawaran')
+    .update({
+      deleted_at: nowIso,
+      deleted_by: user.id,
+      delete_reason: fullReason,
+    })
+    .in('id', validIds);
+
+  if (updErr) {
+    return NextResponse.json({ error: updErr.message }, { status: 500 });
+  }
+
+  // 4. Catat di audit_log dan penawaran_status_log
+  for (const t of targets) {
+    if (validIds.includes(t.id)) {
+      await adminClient.from('audit_log').insert({
+        aktor: user.id,
+        aksi: 'HAPUS_PENAWARAN',
+        objek: t.nomor,
+        alasan: fullReason,
+        sebelum: { status: t.status, total: t.total_nilai },
+        sesudah: { deleted_at: nowIso, deleted_by: user.id, delete_reason: fullReason },
+      });
+
+      await adminClient.from('penawaran_status_log').insert({
+        penawaran_id: t.id,
+        dari: t.status,
+        ke: 'dihapus',
+        alasan: fullReason,
+        oleh: user.id,
+      });
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    count: validIds.length,
+    message: `${validIds.length} penawaran berhasil dihapus.`,
   });
 }

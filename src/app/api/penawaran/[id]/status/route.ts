@@ -118,5 +118,16 @@ export async function PATCH(
     oleh: user.id,
   });
 
+  if (oldStatus === 'deal' || oldStatus === 'lunas') {
+    await adminClient.from('audit_log').insert({
+      aktor: user.id,
+      aksi: 'UBAH_STATUS_DARI_DEAL',
+      objek: (updated as { nomor?: string })?.nomor || id,
+      alasan: alasan_log || `Koreksi status dari ${oldStatus} ke ${status}`,
+      sebelum: { status: oldStatus },
+      sesudah: { status },
+    });
+  }
+
   return NextResponse.json({ success: true, penawaran: updated });
 }

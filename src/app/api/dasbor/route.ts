@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-
+import { getPeriode } from '@/lib/closing-period';
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -33,12 +33,39 @@ export async function GET(req: NextRequest) {
   const kanal = searchParams.get('kanal') || null;
   const adminId = searchParams.get('admin_id') || null;
 
-  // Tentukan rentang tanggal berbasis zona waktu Asia/Jakarta (WIB, UTC+7)
-  const { startDate, endDate } = getWibDateRange(
-    periode,
-    searchParams.get('start_date'),
-    searchParams.get('end_date')
-  );
+  // Tentukan rentang tanggal berbasis periode closing (tanggal 26 s/d 25 Asia/Jakarta)
+  let startDate: Date;
+  let endDate: Date;
+  let periodeNama = '';
+
+  const customStart = searchParams.get('start_date');
+  const customEnd = searchParams.get('end_date');
+  if (customStart && customEnd) {
+    startDate = new Date(`${customStart}T00:00:00.000+07:00`);
+    endDate = new Date(`${customEnd}T23:59:59.999+07:00`);
+    periodeNama = 'Custom';
+  } else if (periode === 'all') {
+    startDate = new Date('2020-01-01T00:00:00.000Z');
+    endDate = new Date('2030-12-31T23:59:59.999Z');
+    periodeNama = 'Semua Periode';
+  } else if (/^\d{4}-\d{2}$/.test(periode)) {
+    const p = getPeriode(`${periode}-10`);
+    startDate = p.startDate;
+    endDate = p.endDate;
+    periodeNama = p.nama;
+  } else if (periode === 'bulan_lalu') {
+    const cur = getPeriode();
+    const p = getPeriode(new Date(cur.startDate.getTime() - 2 * 86400000));
+    startDate = p.startDate;
+    endDate = p.endDate;
+    periodeNama = p.nama;
+  } else {
+    // Default: periode closing berjalan
+    const p = getPeriode();
+    startDate = p.startDate;
+    endDate = p.endDate;
+    periodeNama = p.nama;
+  }
   // 1. Panggil fungsi database get_owner_dashboard_summary (dihitung di PostgreSQL)
   const { data: summary, error: sumErr } = await adminClient.rpc('get_owner_dashboard_summary', {
     p_start_date: startDate.toISOString(),
@@ -53,7 +80,7 @@ export async function GET(req: NextRequest) {
 
   // 2. Ambil daftar perlu follow-up (terkirim/nego >= 3 hari tanpa perubahan)
   const { data: followUpList, error: fuErr } = await adminClient.rpc('get_quotes_need_followup');
-  const cleanFollowUpList = (followUpList || []).filter((item: any) => {
+  const cleanFollowUpList = (followUpList || []).filter((item: Record<string, unknown>) => {
     const nama = String(item.nama_klien || '').toLowerCase();
     const nomor = String(item.nomor || '').toLowerCase();
     return !nama.startsWith('[tes]') && !nama.includes('test') && !nomor.includes('test');
@@ -71,36 +98,48 @@ export async function GET(req: NextRequest) {
     .gte('created_at', sevenDaysAgo)
     .order('created_at', { ascending: false });
 
-  const cleanPotonganRows = (rawPotonganRows || []).filter((r: any) => {
+  const cleanPotonganRows = (rawPotonganRows || []).filter((r: { alasan?: string; objek?: string }) => {
     const alasan = String(r.alasan || '').toLowerCase();
     const objek = String(r.objek || '').toLowerCase();
     return !alasan.includes('e2e test') && !alasan.includes('test') && !alasan.includes('uji') && !objek.includes('test');
   });
 
   const quoteNumbers = cleanPotonganRows
-    .map((r: any) => r.objek?.split(':')[1])
-    .filter(Boolean);
+    .map((r: { objek?: string }) => r.objek?.split(':')[1])
+    .filter((n): n is string => Boolean(n));
 
-  const quoteMap = new Map<string, any>();
+  const quoteMap = new Map<string, Record<string, unknown>>();
   if (quoteNumbers.length > 0) {
     const { data: linkedQuotes } = await adminClient
       .from('penawaran')
       .select('id, nomor, total_nilai, status, valid_until, created_at, ringkasan_json, items_json, leads!inner(nama, kota), users:created_by(nama)')
       .in('nomor', quoteNumbers);
 
-    for (const q of linkedQuotes || []) {
-      quoteMap.set(q.nomor, q);
+    for (const q of (linkedQuotes || []) as Array<Record<string, unknown>>) {
+      if (typeof q.nomor === 'string') {
+        quoteMap.set(q.nomor, q);
+      }
     }
   }
 
-  const enrichedPotongan = cleanPotonganRows.map((r: any) => {
+  const enrichedPotongan = cleanPotonganRows.map((r) => {
     const quoteNo = r.objek?.split(':')[1] || '';
     const q = quoteMap.get(quoteNo);
-    const namaKlien = q?.leads?.nama || 'Klien';
-    const kota = q?.leads?.kota || '';
+    let namaKlien = 'Klien';
+    let kota = '';
+    if (q && 'leads' in q && q.leads && typeof q.leads === 'object') {
+      if ('nama' in q.leads && typeof q.leads.nama === 'string') namaKlien = q.leads.nama;
+      if ('kota' in q.leads && typeof q.leads.kota === 'string') kota = q.leads.kota;
+    }
     const jenis = r.objek?.includes('ongkir') ? 'Ongkir' : 'Pemasangan';
-    const listVal = Number(r.sebelum?.nilai_list || 0);
-    const dealVal = Number(r.sesudah?.nilai_deal || 0);
+    let listVal = 0;
+    if (r.sebelum && typeof r.sebelum === 'object' && 'nilai_list' in r.sebelum) {
+      listVal = Number(r.sebelum.nilai_list) || 0;
+    }
+    let dealVal = 0;
+    if (r.sesudah && typeof r.sesudah === 'object' && 'nilai_deal' in r.sesudah) {
+      dealVal = Number(r.sesudah.nilai_deal) || 0;
+    }
     const selisih = Math.max(0, listVal - dealVal);
 
     const isBagiDua = listVal > 0 && dealVal === Math.round(listVal * 0.5);
@@ -115,8 +154,14 @@ export async function GET(req: NextRequest) {
       (listVal === 1300000 && dealVal < 1150000) ||
       (listVal === 750000 && dealVal < 500000);
 
-    const adminNama = r.users?.nama || q?.users?.nama || 'Admin';
-
+    let adminNama = 'Admin';
+    if (r.users) {
+      if (Array.isArray(r.users) && r.users.length > 0 && typeof r.users[0] === 'object' && r.users[0] && 'nama' in r.users[0]) {
+        adminNama = String(r.users[0].nama || 'Admin');
+      } else if (typeof r.users === 'object' && 'nama' in r.users) {
+        adminNama = String(r.users.nama || 'Admin');
+      }
+    }
     return {
       id: r.id,
       penawaran_id: q?.id || null,
@@ -156,53 +201,4 @@ export async function GET(req: NextRequest) {
     potongan_minggu_ini: enrichedPotongan,
     admins: admins || [],
   });
-}
-
-function getWibDateRange(
-  periode: string,
-  customStart?: string | null,
-  customEnd?: string | null
-): { startDate: Date; endDate: Date } {
-  const now = new Date();
-  const wibFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jakarta',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour12: false,
-  });
-
-  const parts = wibFormatter.formatToParts(now);
-  const partMap: Record<string, number> = {};
-  for (const p of parts) {
-    partMap[p.type] = Number(p.value);
-  }
-  const curYear = partMap.year || 2026;
-  const curMonth = partMap.month || 10;
-  const curDay = partMap.day || 16;
-
-  if (periode === 'minggu_ini') {
-    const wibDayOfWeek = new Date(`${curYear}-${String(curMonth).padStart(2, '0')}-${String(curDay).padStart(2, '0')}T12:00:00+07:00`).getDay() || 7;
-    const mondayDay = curDay - wibDayOfWeek + 1;
-    const startStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(Math.max(1, mondayDay)).padStart(2, '0')}T00:00:00.000+07:00`;
-    const endStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(curDay).padStart(2, '0')}T23:59:59.999+07:00`;
-    return { startDate: new Date(startStr), endDate: new Date(endStr) };
-  } else if (periode === 'bulan_lalu') {
-    const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
-    const prevYear = curMonth === 1 ? curYear - 1 : curYear;
-    const lastDayPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const startStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
-    const endStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDayPrevMonth).padStart(2, '0')}T23:59:59.999+07:00`;
-    return { startDate: new Date(startStr), endDate: new Date(endStr) };
-  } else if (periode === 'custom' && customStart && customEnd) {
-    const startStr = `${customStart}T00:00:00.000+07:00`;
-    const endStr = `${customEnd}T23:59:59.999+07:00`;
-    return { startDate: new Date(startStr), endDate: new Date(endStr) };
-  } else {
-    // bulan_ini (default)
-    const lastDayThisMonth = new Date(curYear, curMonth, 0).getDate();
-    const startStr = `${curYear}-${String(curMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
-    const endStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(lastDayThisMonth).padStart(2, '0')}T23:59:59.999+07:00`;
-    return { startDate: new Date(startStr), endDate: new Date(endStr) };
-  }
 }

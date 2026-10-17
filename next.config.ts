@@ -17,6 +17,7 @@ const cspDirectives = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

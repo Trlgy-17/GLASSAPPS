@@ -111,12 +111,7 @@ export default function BalasChatPage() {
   const [manualSearchQuery, setManualSearchQuery] = useState('');
   const [manualSearchResults, setManualSearchResults] = useState<KasusTerakhirItem[]>([]);
   const [isSearchingQuotes, setIsSearchingQuotes] = useState(false);
-  const [aiDailySummary, setAiDailySummary] = useState<{
-    tanggal: string;
-    total_draf: number;
-    total_biaya_rp: number;
-    per_model: Record<string, { count: number; cost: number }>;
-  } | null>(null);
+  const [followupCount, setFollowupCount] = useState<number | null>(null);
   // UI Interactive States
   const [isEditingExtraction, setIsEditingExtraction] = useState(false);
   const [editingBubbleIdx, setEditingBubbleIdx] = useState<number | null>(null);
@@ -160,18 +155,17 @@ export default function BalasChatPage() {
       console.warn('Gagal memulihkan draf input:', e);
     }
 
-    async function loadDailyAiUsage() {
+    async function loadFollowupCount() {
       try {
-        const res = await fetch('/api/admin/pemakaian-ai');
+        const res = await fetch('/api/penawaran?followup_only=true&limit=1');
         if (res.ok) {
           const json = await res.json();
-          if (json.ringkasan_harian) {
-            setAiDailySummary(json.ringkasan_harian);
-          }
+          const count = json.ringkasan_kartu?.perlu_followup_count ?? json.total ?? 0;
+          setFollowupCount(count);
         }
       } catch {}
     }
-    loadDailyAiUsage();
+    loadFollowupCount();
   }, []);
   // Pencarian manual penawaran lama saat admin mengetik di kotak cari
   useEffect(() => {
@@ -746,28 +740,38 @@ export default function BalasChatPage() {
       </div>
 
       {/* Ringkasan Harian Pemakaian AI Admin (Zero CLS Skeleton) */}
+      {/* Bar Pengingat Follow-up Penawaran (Menggantikan Pemakaian AI) */}
       <div className="min-h-[44px]">
-        {aiDailySummary ? (
-          <div
-            id="box-admin-daily-ai-usage"
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-raised/80 border border-line rounded-[18px] text-xs text-ink"
+        {followupCount !== null ? (
+          <Link
+            href="/penawaran?followup_only=true"
+            id="bar-followup-reminder"
+            className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-[18px] text-xs font-medium transition-colors border ${
+              followupCount > 0
+                ? 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/30 text-amber-900 dark:text-amber-200'
+                : 'bg-surface border-line text-muted hover:bg-raised'
+            }`}
           >
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="font-bold text-accent">Pemakaian AI Hari Ini:</span>
-              {Object.entries(aiDailySummary.per_model || {}).length > 0 ? (
-                Object.entries(aiDailySummary.per_model).map(([mdl, s]) => (
-                  <span key={mdl} className="px-2 py-0.5 bg-surface border border-line rounded-md font-medium">
-                    {formatModelDisplayName(mdl)}: <strong>{s.count}</strong> draf (Rp{Math.round(s.cost).toLocaleString('id-ID')})
-                  </span>
-                ))
-              ) : (
-                <span className="text-muted font-medium">Gemini aktif (0 draf hari ini)</span>
-              )}
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  followupCount > 0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+                }`}
+              />
+              <span>
+                {followupCount > 0 ? (
+                  <>
+                    <strong className="text-amber-950 dark:text-amber-100">{followupCount}</strong> penawaran menunggu follow-up hari ini &rarr;
+                  </>
+                ) : (
+                  'Semua penawaran telah di-follow up hari ini'
+                )}
+              </span>
             </div>
-            <div className="font-semibold text-muted">
-              Total Biaya: <strong className="text-ink">Rp{Math.round(aiDailySummary.total_biaya_rp).toLocaleString('id-ID')}</strong> ({aiDailySummary.total_draf} draf)
-            </div>
-          </div>
+            <span className="font-semibold text-accent flex items-center gap-1">
+              Buka daftar penawaran &rarr;
+            </span>
+          </Link>
         ) : (
           <div className="h-[44px] rounded-[18px] bg-raised/20 border border-line/30" />
         )}
