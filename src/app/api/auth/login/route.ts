@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,11 @@ export async function POST(req: NextRequest) {
       .eq('id', authData.user.id)
       .single();
 
-    const peran = profile?.peran || 'admin';
+    const peran = toPeran(profile?.peran);
+    if (!peran) {
+      await supabase.auth.signOut();
+      return NextResponse.json({ error: PESAN_AKUN_TIDAK_TERDAFTAR }, { status: 403 });
+    }
     const redirectTo = peran === 'owner' ? '/dasbor' : '/balas';
 
     const response = NextResponse.json({

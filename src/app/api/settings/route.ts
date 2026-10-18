@@ -125,7 +125,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (upsertErr) {
-    return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+    console.error('[api/settings]', upsertErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   revalidateTag('company_settings');

@@ -52,7 +52,8 @@ export async function GET(req: NextRequest) {
       .gte('created_at', todayStartWib);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('[api/admin/pemakaian-ai]', error.message);
+      return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
     }
 
     const rows = logs || [];

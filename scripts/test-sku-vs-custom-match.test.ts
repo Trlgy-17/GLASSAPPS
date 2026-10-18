@@ -26,7 +26,8 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-describe('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PDF)', () => {
+// Tes integrasi: memanggil Gemini sungguhan. Dilewati otomatis bila GEMINI_API_KEY tidak ada.
+describe.skipIf(!process.env.GEMINI_API_KEY)('Uji Pencocokan Angka: Produk Jadi vs Custom (Kalkulator, Draf AI, & PDF)', () => {
   it('1. Penawaran Produk Jadi (Rectangle 40x60 ST Sandblast) angka cocok di semua media', async () => {
     // 1. Kalkulator Mesin Harga
     const calc = hitungPenawaran(

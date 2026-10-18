@@ -7,6 +7,7 @@ import { getCompanySettings } from '@/lib/settings/get-settings';
 import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
 import { getCachedPdf, setCachedPdf } from '@/lib/pdf/pdf-cache';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,7 @@ export async function GET(
     ]);
 
     const userProfile = userProfileRes.data;
-    const userRole = userProfile?.peran || 'admin';
+    const userRole = toPeran(userProfile?.peran);
     const penawaran = penawaranRes.data;
 
     if (!penawaran) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,12 +20,17 @@ export async function GET() {
       .eq('id', user.id)
       .single();
 
+    const peran = toPeran(profile?.peran);
+    if (!peran) {
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
         nama: profile?.nama || user.email?.split('@')[0] || 'Pengguna',
-        peran: profile?.peran || 'admin',
+        peran,
       },
     }, { status: 200 });
   } catch (err) {

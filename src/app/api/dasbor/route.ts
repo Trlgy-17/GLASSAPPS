@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getPeriode } from '@/lib/closing-period';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -26,7 +27,10 @@ export async function GET(req: NextRequest) {
     .eq('id', user.id)
     .single();
 
-  const userRole = userData?.peran || 'admin';
+  const userRole = toPeran(userData?.peran);
+  if (!userRole) {
+    return NextResponse.json({ error: PESAN_AKUN_TIDAK_TERDAFTAR }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const periode = searchParams.get('periode') || 'bulan_ini';
@@ -75,7 +79,8 @@ export async function GET(req: NextRequest) {
   });
 
   if (sumErr) {
-    return NextResponse.json({ error: sumErr.message }, { status: 500 });
+    console.error('[api/dasbor]', sumErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // 2. Ambil daftar perlu follow-up (terkirim/nego >= 3 hari tanpa perubahan)

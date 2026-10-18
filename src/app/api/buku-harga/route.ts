@@ -140,7 +140,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    console.error('[api/buku-harga]', insertErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // Jika langsung diaktifkan, panggil fungsi activate_price_book dalam satu transaksi aman

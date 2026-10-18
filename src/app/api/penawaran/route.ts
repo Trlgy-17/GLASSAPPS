@@ -9,6 +9,7 @@ import { generateQrPngDataUrl } from '@/lib/pdf/qr-helper';
 import { renderToBuffer, DocumentProps } from '@react-pdf/renderer';
 import { getPeriode } from '@/lib/closing-period';
 import { setCachedPdf } from '@/lib/pdf/pdf-cache';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -33,7 +34,10 @@ export async function POST(req: NextRequest) {
     .eq('id', user.id)
     .single();
 
-  const userRole = userData?.peran || 'admin';
+  const userRole = toPeran(userData?.peran);
+  if (!userRole) {
+    return NextResponse.json({ error: PESAN_AKUN_TIDAK_TERDAFTAR }, { status: 403 });
+  }
   if (userRole !== 'admin') {
     return NextResponse.json(
       { error: 'Hanya admin yang boleh membuat penawaran (owner bersifat read-only)' },
@@ -179,7 +183,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (saveErr) {
-    return NextResponse.json({ error: saveErr.message }, { status: 500 });
+    console.error('[api/penawaran]', saveErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // Catat riwayat status log
@@ -284,7 +289,10 @@ export async function GET(req: NextRequest) {
     .eq('id', user.id)
     .single();
 
-  const userRole = userData?.peran || 'admin';
+  const userRole = toPeran(userData?.peran);
+  if (!userRole) {
+    return NextResponse.json({ error: PESAN_AKUN_TIDAK_TERDAFTAR }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
@@ -355,7 +363,8 @@ export async function GET(req: NextRequest) {
     .range(from, to);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[api/penawaran]', error.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // Hitung Ringkasan Kartu untuk periode aktif
@@ -529,7 +538,8 @@ export async function DELETE(req: NextRequest) {
     .in('id', validIds);
 
   if (updErr) {
-    return NextResponse.json({ error: updErr.message }, { status: 500 });
+    console.error('[api/penawaran]', updErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // 4. Catat di audit_log dan penawaran_status_log

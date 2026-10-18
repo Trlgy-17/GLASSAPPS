@@ -3,7 +3,11 @@ import { verifySupabaseJwt } from './jwt-verifier';
 import fs from 'fs';
 import path from 'path';
 
+const ENV_PATH = path.resolve(process.cwd(), '.env.local');
+const HAS_ENV = fs.existsSync(ENV_PATH);
+
 function getEnvCredentials() {
+  if (!HAS_ENV) return {} as Record<string, string>;
   const envContent = fs.readFileSync(path.resolve(process.cwd(), '.env.local'), 'utf8');
   const env: Record<string, string> = {};
   envContent.split('\n').forEach((line) => {
@@ -16,7 +20,8 @@ function getEnvCredentials() {
   return env;
 }
 
-describe('Verifikasi Kriptografis Token JWT Supabase via JWKS', () => {
+// Tes integrasi: butuh .env.local dan koneksi ke Supabase. Dilewati otomatis bila tidak ada.
+describe.skipIf(!HAS_ENV)('Verifikasi Kriptografis Token JWT Supabase via JWKS', () => {
   let validToken = '';
   const env = getEnvCredentials();
 

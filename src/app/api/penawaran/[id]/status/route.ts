@@ -106,7 +106,8 @@ export async function PATCH(
     .single();
 
   if (updErr) {
-    return NextResponse.json({ error: updErr.message }, { status: 500 });
+    console.error('[api/penawaran/[id]/status]', updErr.message);
+    return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
   }
 
   // Catat ke penawaran_status_log

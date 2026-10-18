@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { verifySupabaseJwt, VerifiedJwtClaims } from '@/lib/auth/jwt-verifier';
+import { toPeran, PESAN_AKUN_TIDAK_TERDAFTAR } from '@/lib/auth/peran';
 
 interface JwtClaims {
   exp?: number;
@@ -44,11 +45,13 @@ function extractTokenString(request: NextRequest): string {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Lewati static assets, fonts, gambar, dan favicon
+  // Lewati static assets, fonts, gambar, dan favicon.
+  // Catatan: hanya file ber-ekstensi di luar /api yang dilewati; dulu `includes('.')`
+  // membuat path apa pun yang mengandung titik lolos dari pengecekan login.
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/fonts') ||
-    pathname.includes('.') ||
+    (!pathname.startsWith('/api') && /\.[a-z0-9]{2,5}$/i.test(pathname)) ||
     pathname === '/favicon.ico' ||
     pathname === '/logo-mark.png'
   ) {
@@ -132,7 +135,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // 3. Resolusi peran (Periksa cookie pg_role -> metadata -> database jika belum tersimpan)
-  let peran = request.cookies.get('pg_role')?.value || claims.user_metadata?.peran;
+  // user_metadata TIDAK dipakai: nilainya bisa diubah sendiri oleh pengguna lewat Supabase Auth.
+  // Cookie pg_role hanya untuk mengarahkan halaman; setiap API tetap mengecek peran ke database.
+  let peran: string | null = toPeran(request.cookies.get('pg_role')?.value);
   if (!peran) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -158,7 +163,14 @@ export async function middleware(request: NextRequest) {
       .eq('id', userSub)
       .single();
 
-    const resolvedPeran: string = profile?.peran || 'admin';
+    const resolvedPeran = toPeran(profile?.peran);
+    if (!resolvedPeran) {
+      if (pathname.startsWith('/api')) {
+        return NextResponse.json({ error: PESAN_AKUN_TIDAK_TERDAFTAR }, { status: 403 });
+      }
+      if (pathname === '/login') return response;
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
     peran = resolvedPeran;
     response.cookies.set('pg_role', resolvedPeran, {
       path: '/',

@@ -63,7 +63,8 @@ export async function GET(req: NextRequest) {
 
     const { data: quotes, error } = await dbQuery;
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('[api/balas/kasus-terakhir]', error.message);
+      return NextResponse.json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar lagi.' }, { status: 500 });
     }
 
     const rawRows = (quotes || []) as Array<Record<string, unknown>>;
