@@ -23,6 +23,8 @@ import {
   Square,
   Sparkles,
   ArrowRight,
+  FileSpreadsheet,
+  Loader2,
 } from 'lucide-react';
 
 interface PenawaranRow {
@@ -92,6 +94,10 @@ export default function PenawaranListPage() {
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Ekspor Excel
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   // List of available closing periods for dropdown
   const availablePeriods = useMemo(() => getAvailablePeriods(12), []);
@@ -175,6 +181,41 @@ export default function PenawaranListPage() {
   useEffect(() => {
     loadQuotes();
   }, [loadQuotes]);
+
+  const handleExportExcel = async () => {
+    if (isExporting) return;
+    setExportError('');
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams({ search: searchQuery, status: statusFilter });
+      if (periodeFilter) params.set('periode', periodeFilter);
+      if (followupOnly) params.set('followup_only', 'true');
+      if (includeTest) params.set('include_test', 'true');
+
+      const res = await fetch(`/api/penawaran/export?${params.toString()}`);
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({}));
+        throw new Error(msg.error || 'Gagal membuat file Excel.');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : 'Penawaran-PutraGlass.xlsx';
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Gagal membuat file Excel.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleUpdateStatus = async (
     quoteId: string,
@@ -350,17 +391,41 @@ export default function PenawaranListPage() {
           </p>
         </div>
 
-        {userRole === 'admin' && (
-          <Link
-            href="/penawaran/baru"
-            id="btn-buat-penawaran-baru"
-            className="min-h-[44px] px-5 py-2.5 bg-accent text-accent-ink rounded-xl font-bold text-xs flex items-center gap-2 hover:opacity-95 transition shadow-none cursor-pointer"
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            id="btn-ekspor-excel"
+            title="Unduh daftar penawaran sesuai filter aktif ke file Excel"
+            className="min-h-[44px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer border border-emerald-600/20 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Plus className="w-4 h-4" />
-            <span>Buat Penawaran Baru</span>
-          </Link>
-        )}
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4" />
+            )}
+            <span>{isExporting ? 'Menyiapkan…' : 'Ekspor Excel'}</span>
+          </button>
+
+          {userRole === 'admin' && (
+            <Link
+              href="/penawaran/baru"
+              id="btn-buat-penawaran-baru"
+              className="min-h-[44px] px-5 py-2.5 bg-accent text-accent-ink rounded-xl font-bold text-xs flex items-center gap-2 hover:opacity-95 transition shadow-none cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Penawaran Baru</span>
+            </Link>
+          )}
+        </div>
       </div>
+      {exportError && (
+        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 -mt-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{exportError}</span>
+        </div>
+      )}
 
       {/* 5 KARTU METRIK PERIODE BERJALAN & FOLLOW-UP */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
