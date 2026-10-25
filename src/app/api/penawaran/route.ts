@@ -72,6 +72,9 @@ export async function POST(req: NextRequest) {
       pasang: body.alasan_pasang ? { sudah_dikonfirmasi: true, alasan: body.alasan_pasang } : undefined,
     },
     items: body.items,
+    paket: body.paket,
+    bagi_dua_aktif: body.bagi_dua_aktif,
+    biaya_tambahan: body.biaya_tambahan,
   };
 
   // Resolusi lead_id: buat lead baru jika belum ada
@@ -150,10 +153,18 @@ export async function POST(req: NextRequest) {
         ongkir: {
           list: kalkulasi.ongkir.list,
           deal: kalkulasi.ongkir.deal,
+          final: kalkulasi.ongkir.final,
           potongan: kalkulasi.ongkir.potongan,
           status: kalkulasi.ongkir.status,
           alasan: kalkulasi.ongkir.alasan,
           di_bawah_net: kalkulasi.ongkir.di_bawah_net,
+          berat_aktual: kalkulasi.ongkir.berat_aktual,
+          berat_volumetrik: kalkulasi.ongkir.berat_volumetrik,
+          berat_dikenakan: kalkulasi.ongkir.berat_dikenakan,
+          tarif_per_kg: kalkulasi.ongkir.tarif_per_kg,
+          ongkir_dasar: kalkulasi.ongkir.ongkir_dasar,
+          biaya_tambahan: kalkulasi.ongkir.biaya_tambahan,
+          bagi_dua_aktif: kalkulasi.ongkir.bagi_dua_aktif,
         },
         pasang: {
           list: kalkulasi.pasang.list,

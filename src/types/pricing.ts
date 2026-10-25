@@ -83,6 +83,12 @@ export interface PriceBookData {
     pasang_bandung: BatasLogistik;
     pasang_luar_kota: BatasLogistik;
     kota_dalam_kota: string[];
+    // Sistem Volumetrik ala J&T Cargo (wajib diisi owner)
+    tarif_per_kg_dalam_kota?: number; // Integer Rupiah per kg
+    tarif_per_kg_luar_kota?: number;  // Integer Rupiah per kg
+    divisor_volumetrik?: number;      // Default 5000
+    min_berat_kg?: number;            // Default 1 kg
+    persen_asuransi?: number;         // Default 0.002 (0.2%)
   };
 
   tingkat_b2b: TingkatB2B[];
@@ -115,6 +121,11 @@ export type PriceBookDataAdmin = Omit<PriceBookData, 'tarif_m2' | 'logistik'> & 
     pasang_bandung: { list: number; batas_admin?: number };
     pasang_luar_kota: { list: number; batas_admin?: number };
     kota_dalam_kota: string[];
+    tarif_per_kg_dalam_kota?: number;
+    tarif_per_kg_luar_kota?: number;
+    divisor_volumetrik?: number;
+    min_berat_kg?: number;
+    persen_asuransi?: number;
   };
 };
 export interface CerminItemInput {
@@ -139,6 +150,30 @@ export interface KonfirmasiOwner {
   sudah_dikonfirmasi: boolean;
   alasan: string;
 }
+export interface PaketPengirimanInput {
+  panjang_cm: number;
+  lebar_cm: number;
+  tinggi_cm: number;
+  berat_aktual_kg: number;
+}
+
+export interface BiayaTambahanInput {
+  asuransi_aktif?: boolean;
+  nilai_barang?: number; // Integer Rupiah (default = subtotal cermin)
+  biaya_packing?: number; // Integer Rupiah
+  biaya_handling?: number; // Integer Rupiah (barang oversized)
+}
+
+export interface BiayaTambahanRincian {
+  asuransi_aktif: boolean;
+  nilai_barang: number;
+  persen_asuransi: number;
+  nominal_asuransi: number;
+  biaya_packing: number;
+  biaya_handling: number;
+  total: number;
+}
+
 
 export interface PenawaranInput {
   items: CerminItemInput[];
@@ -156,6 +191,10 @@ export interface PenawaranInput {
     pasang?: KonfirmasiOwner;
     cermin_b2b?: KonfirmasiOwner;
   };
+  // Sistem Volumetrik ala J&T Cargo
+  paket?: PaketPengirimanInput;
+  bagi_dua_aktif?: boolean; // Default: true
+  biaya_tambahan?: BiayaTambahanInput;
 }
 
 export interface HitungItemOutput {
@@ -187,6 +226,7 @@ export interface HitungPenawaranOutput {
   ongkir: {
     list: number;
     deal: number;
+    final: number; // ongkir deal + biaya_tambahan.total
     potongan: number;
     di_bawah_net?: boolean;
     status: 'ok' | 'warning_kuning' | 'error_merah';
@@ -201,6 +241,14 @@ export interface HitungPenawaranOutput {
     batas_net?: number;
     batas_floor?: number;
     batas_owner?: number;
+    // Detail kalkulasi sistem volumetrik & biaya tambahan
+    berat_aktual: number;
+    berat_volumetrik: number;
+    berat_dikenakan: number;
+    tarif_per_kg: number;
+    ongkir_dasar: number;
+    biaya_tambahan: BiayaTambahanRincian;
+    bagi_dua_aktif: boolean;
   };
   pasang: {
     list: number;

@@ -115,6 +115,49 @@ function PenawaranContent() {
   const [ongkirInputText, setOngkirInputText] = useState('');
   const [ongkirKonfirmasiOwner, setOngkirKonfirmasiOwner] = useState(false);
   const [ongkirAlasan, setOngkirAlasan] = useState('');
+  // Paket Pengiriman Volumetrik (J&T Cargo)
+  const [paketPanjang, setPaketPanjang] = useState('');
+  const [paketLebar, setPaketLebar] = useState('');
+  const [paketTinggi, setPaketTinggi] = useState('');
+  const [paketBerat, setPaketBerat] = useState('');
+
+  // Toggle Batasi Minimal 50% (Bagi Dua) - default AKTIF
+  const [bagiDuaAktif, setBagiDuaAktif] = useState(true);
+
+  // Biaya Tambahan Opsional
+  const [asuransiAktif, setAsuransiAktif] = useState(false);
+  const [nilaiBarangInput, setNilaiBarangInput] = useState('');
+  const [packingInput, setPackingInput] = useState('');
+  const [handlingInput, setHandlingInput] = useState('');
+
+  const paketVal = useMemo(() => {
+    const parseNumber = (val: string) => {
+      const clean = val.replace(',', '.').trim();
+      const num = parseFloat(clean);
+      return isNaN(num) || num < 0 ? 0 : num;
+    };
+    const p = parseNumber(paketPanjang);
+    const l = parseNumber(paketLebar);
+    const t = parseNumber(paketTinggi);
+    const b = parseNumber(paketBerat);
+    if (!p && !l && !t && !b) return undefined;
+    return {
+      panjang_cm: p,
+      lebar_cm: l,
+      tinggi_cm: t,
+      berat_aktual_kg: b,
+    };
+  }, [paketPanjang, paketLebar, paketTinggi, paketBerat]);
+
+  const biayaTambahanVal = useMemo(() => {
+    return {
+      asuransi_aktif: asuransiAktif,
+      nilai_barang: nilaiBarangInput.trim() ? parseRupiah(nilaiBarangInput) : undefined,
+      biaya_packing: packingInput.trim() ? parseRupiah(packingInput) : 0,
+      biaya_handling: handlingInput.trim() ? parseRupiah(handlingInput) : 0,
+    };
+  }, [asuransiAktif, nilaiBarangInput, packingInput, handlingInput]);
+
 
   const ongkirDealVal = useMemo(() => {
     if (!ongkirInputText.trim()) return undefined;
@@ -183,6 +226,9 @@ function PenawaranContent() {
         alasan_potongan_ongkir: ongkirAlasan.trim(),
         ongkir_deal: ongkirDealVal,
         pasang_deal: pasangDealVal,
+        paket: paketVal,
+        bagi_dua_aktif: bagiDuaAktif,
+        biaya_tambahan: biayaTambahanVal,
         items: items.map((it) => {
           const rawP = Number(it.panjang_cm);
           const rawL = Number(it.lebar_cm);
@@ -221,9 +267,11 @@ function PenawaranContent() {
     pasangDealVal,
     pasangKonfirmasiOwner,
     pasangAlasan,
+    paketVal,
+    bagiDuaAktif,
+    biayaTambahanVal,
     config,
   ]);
-
   const updateItem = (index: number, fields: Partial<LocalItemState>) => {
     setItems((prev) => {
       const next = [...prev];
@@ -303,6 +351,9 @@ function PenawaranContent() {
             perlu_pasang: perluPasang,
             ongkir_deal: kalkulasi.ongkir.deal,
             pasang_deal: kalkulasi.pasang.deal,
+            paket: paketVal,
+            bagi_dua_aktif: bagiDuaAktif,
+            biaya_tambahan: biayaTambahanVal,
             konfirmasi_owner: {
               pasang: pasangKonfirmasiOwner && pasangAlasan.trim() ? { sudah_dikonfirmasi: true, alasan: pasangAlasan.trim() } : undefined,
             },
@@ -1046,10 +1097,9 @@ function PenawaranContent() {
                       <Lock className="w-3.5 h-3.5 text-accent" /> 1. JASA PENGIRIMAN
                     </span>
                     <span className="font-extrabold text-ink tabular-nums text-sm">
-                      {zona ? formatRupiah(kalkulasi?.ongkir.deal || 0) : 'Rp0'}
+                      {zona ? formatRupiah(kalkulasi?.ongkir.final ?? kalkulasi?.ongkir.deal ?? 0) : 'Rp0'}
                     </span>
                   </div>
-
 
                   {/* Toggle Cepat Zona Pengiriman */}
                   <div className="space-y-1.5">
@@ -1090,7 +1140,11 @@ function PenawaranContent() {
                     {isDalamKota && (
                       <button
                         type="button"
-                        onClick={() => setOngkirInputText('0')}
+                        onClick={() => {
+                          setOngkirInputText('0');
+                          setBagiDuaAktif(false);
+                          if (!ongkirAlasan) setOngkirAlasan('Ambil sendiri di workshop');
+                        }}
                         className={`w-full py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition text-center cursor-pointer ${
                           ongkirDealVal === 0
                             ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
@@ -1101,35 +1155,115 @@ function PenawaranContent() {
                       </button>
                     )}
                   </div>
+
+                  {/* Input Dimensi & Berat Paket (ala J&T Cargo) */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-semibold text-muted block">
+                      Dimensi &amp; Berat Paket:
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <div>
+                        <input
+                          type="text"
+                          id="input-paket-panjang"
+                          value={paketPanjang}
+                          onChange={(e) => setPaketPanjang(e.target.value)}
+                          placeholder="P (cm)"
+                          className="w-full text-xs px-2 py-1.5 min-h-[36px] border border-line rounded-lg bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums text-center font-medium"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          id="input-paket-lebar"
+                          value={paketLebar}
+                          onChange={(e) => setPaketLebar(e.target.value)}
+                          placeholder="L (cm)"
+                          className="w-full text-xs px-2 py-1.5 min-h-[36px] border border-line rounded-lg bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums text-center font-medium"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          id="input-paket-tinggi"
+                          value={paketTinggi}
+                          onChange={(e) => setPaketTinggi(e.target.value)}
+                          placeholder="T (cm)"
+                          className="w-full text-xs px-2 py-1.5 min-h-[36px] border border-line rounded-lg bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums text-center font-medium"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          id="input-paket-berat"
+                          value={paketBerat}
+                          onChange={(e) => setPaketBerat(e.target.value)}
+                          placeholder="Kg aktual"
+                          className="w-full text-xs px-2 py-1.5 min-h-[36px] border border-line rounded-lg bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums text-center font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ringkas Admin: Volumetrik, Berat Dipakai, Ongkir Dasar */}
+                  {zona && kalkulasi && (
+                    <div className="p-2.5 bg-tint/60 rounded-xl border border-line/60 grid grid-cols-3 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-muted block text-[10px]">Volumetrik</span>
+                        <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_volumetrik} kg</span>
+                      </div>
+                      <div>
+                        <span className="text-muted block text-[10px]">Dikenakan</span>
+                        <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_dikenakan} kg</span>
+                      </div>
+                      <div>
+                        <span className="text-muted block text-[10px]">Ongkir Dasar</span>
+                        <span className="font-bold text-accent tabular-nums">{formatRupiah(kalkulasi.ongkir.ongkir_dasar)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Input Deal Ongkir */}
                   <input
                     id="input-ongkir-deal"
                     type="text"
                     value={ongkirInputText}
                     onChange={(e) => setOngkirInputText(e.target.value)}
-                    placeholder={`Ketik nominal deal pengiriman (list: ${formatRupiah(ongkirListPrice)})...`}
+                    placeholder={`Ketik nominal deal pengiriman (dasar: ${formatRupiah(kalkulasi?.ongkir.ongkir_dasar || 0)})...`}
                     className="w-full text-xs px-3 py-2 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none tabular-nums font-semibold"
                   />
 
-                  {zona ? (
-                    <div className="flex items-center justify-between text-[11px] text-muted">
-                      <span>Net: {formatRupiah(isDalamKota ? 500000 : 1150000)}</span>
-                      <span>Minimal (dibagi dua): {formatRupiah(batasOngkirMin)}</span>
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-muted">
-                      Pilih kota tujuan untuk menghitung ongkos kirim resmi.
-                    </div>
-                  )}
+                  {/* Toggle Batasi Minimal 50% (Bagi Dua) */}
+                  <div className="space-y-1 pt-1">
+                    <label className="flex items-center justify-between text-xs text-ink cursor-pointer select-none">
+                      <span className="font-medium">Batasi minimal 50% (bagi dua)</span>
+                      <input
+                        type="checkbox"
+                        id="check-bagi-dua-ongkir"
+                        checked={bagiDuaAktif}
+                        onChange={(e) => setBagiDuaAktif(e.target.checked)}
+                        className="w-4 h-4 rounded text-accent cursor-pointer"
+                      />
+                    </label>
+                    {bagiDuaAktif && zona && (
+                      <div className="text-[11px] text-muted flex justify-between items-center">
+                        <span>Minimal (dibagi dua):</span>
+                        <span className="font-semibold text-ink tabular-nums">
+                          {formatRupiah(kalkulasi?.ongkir.minimal_bayar || 0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Level 3: Ditolak (< 50%) */}
-                  {kalkulasi.ongkir.wewenang === 'ditolak' && (
+                  {kalkulasi?.ongkir.wewenang === 'ditolak' && (
                     <p id="error-ongkir-ditolak" className="text-xs text-warn font-semibold mt-1">
-                      Ongkir maksimal dibagi dua, klien bayar minimal {formatRupiah(batasOngkirMin)}.
+                      {kalkulasi.ongkir.pesan}
                     </p>
                   )}
 
                   {/* Level 2: Di bawah list sampai 50% (Boleh oleh admin, wajib isi alasan singkat) */}
-                  {kalkulasi.ongkir.wewenang === 'perlu_alasan' && (
+                  {kalkulasi?.ongkir.wewenang === 'perlu_alasan' && (
                     <div className="p-3 bg-raised border border-line rounded-xl space-y-1.5 mt-2">
                       <p className="text-xs font-semibold text-ink">
                         Alasan potongan ongkir (wajib diisi):
@@ -1144,6 +1278,80 @@ function PenawaranContent() {
                       />
                     </div>
                   )}
+
+                  {/* Bagian Opsional: Biaya Tambahan (Asuransi, Packing, Handling) */}
+                  <div className="pt-2 border-t border-line/40 space-y-2">
+                    <span className="text-xs font-bold text-ink block">Biaya Tambahan (Opsional)</span>
+
+                    {/* Asuransi 0.2% */}
+                    <div className="space-y-1.5 p-2.5 bg-raised/40 rounded-xl border border-line/60">
+                      <label className="flex items-center justify-between text-xs text-ink cursor-pointer select-none">
+                        <span className="font-medium">
+                          Asuransi Pengiriman ({((config.logistik?.persen_asuransi ?? 0.002) * 100).toFixed(1)}%)
+                        </span>
+                        <input
+                          type="checkbox"
+                          id="check-asuransi-pengiriman"
+                          checked={asuransiAktif}
+                          onChange={(e) => setAsuransiAktif(e.target.checked)}
+                          className="w-4 h-4 rounded text-accent cursor-pointer"
+                        />
+                      </label>
+                      {asuransiAktif && (
+                        <div className="pt-1.5 space-y-1">
+                          <span className="text-[10px] text-muted block">Nilai barang (default subtotal cermin):</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              id="input-nilai-barang-asuransi"
+                              value={nilaiBarangInput}
+                              onChange={(e) => setNilaiBarangInput(e.target.value)}
+                              placeholder={formatRupiah(kalkulasi?.subtotal_cermin || 0)}
+                              className="flex-1 text-xs px-2 py-1 min-h-[32px] border border-line rounded-lg bg-surface text-ink tabular-nums"
+                            />
+                            <span className="text-[11px] font-bold text-accent tabular-nums">
+                              +{formatRupiah(kalkulasi?.ongkir.biaya_tambahan.nominal_asuransi || 0)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Packing & Handling */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] text-muted block mb-0.5">Biaya Packing</span>
+                        <input
+                          type="text"
+                          id="input-biaya-packing"
+                          value={packingInput}
+                          onChange={(e) => setPackingInput(e.target.value)}
+                          placeholder="Rp0"
+                          className="w-full text-xs px-2 py-1 min-h-[32px] border border-line rounded-lg bg-surface text-ink tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-muted block mb-0.5">Biaya Handling</span>
+                        <input
+                          type="text"
+                          id="input-biaya-handling"
+                          value={handlingInput}
+                          onChange={(e) => setHandlingInput(e.target.value)}
+                          placeholder="Rp0 (oversized)"
+                          className="w-full text-xs px-2 py-1 min-h-[32px] border border-line rounded-lg bg-surface text-ink tabular-nums"
+                        />
+                      </div>
+                    </div>
+
+                    {Boolean(kalkulasi?.ongkir.biaya_tambahan.total && kalkulasi.ongkir.biaya_tambahan.total > 0) && (
+                      <div className="flex justify-between items-center text-[11px] text-muted px-1">
+                        <span>Total Biaya Tambahan:</span>
+                        <span className="font-semibold text-accent tabular-nums">
+                          +{formatRupiah(kalkulasi?.ongkir.biaya_tambahan.total || 0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {kalkulasi.pasang.perlu_konfirmasi && (

@@ -901,4 +901,261 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     expect(k14.is_valid_untuk_pdf).toBe(false);
     expect(k14.total).toBe(840_000 + 800_000);
   });
+
+  // =========================================================================
+  // 17. Sistem Volumetrik ala J&T Cargo
+  // =========================================================================
+  it('17. Sistem Volumetrik ala J&T Cargo: Volumetrik, Chargeable, Pembulatan ke Atas, Minimal 1 kg, Tarif Zona', () => {
+    const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
+
+    // 17a. Berat volumetrik > aktual: P=100cm, L=80cm, T=15cm -> (100*80*15)/5000 = 24 kg. Berat aktual = 10 kg -> Chargeable = 24 kg.
+    // Luar kota tarif Rp50.000/kg -> ongkir dasar = 24 * 50.000 = Rp1.200.000
+    const k1 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: { panjang_cm: 100, lebar_cm: 80, tinggi_cm: 15, berat_aktual_kg: 10 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k1.ongkir.berat_volumetrik).toBe(24);
+    expect(k1.ongkir.berat_aktual).toBe(10);
+    expect(k1.ongkir.berat_dikenakan).toBe(24);
+    expect(k1.ongkir.tarif_per_kg).toBe(50_000);
+    expect(k1.ongkir.ongkir_dasar).toBe(1_200_000);
+    expect(k1.ongkir.list).toBe(1_200_000);
+    expect(k1.ongkir.deal).toBe(1_200_000);
+    expect(k1.ongkir.final).toBe(1_200_000);
+
+    // 17b. Berat aktual > volumetrik: P=50cm, L=40cm, T=10cm -> 20000/5000 = 4 kg. Berat aktual = 15 kg -> Chargeable = 15 kg.
+    // Dalam kota tarif Rp25.000/kg -> ongkir dasar = 15 * 25.000 = Rp375.000
+    const k2 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'dalam_kota',
+        paket: { panjang_cm: 50, lebar_cm: 40, tinggi_cm: 10, berat_aktual_kg: 15 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k2.ongkir.berat_volumetrik).toBe(4);
+    expect(k2.ongkir.berat_aktual).toBe(15);
+    expect(k2.ongkir.berat_dikenakan).toBe(15);
+    expect(k2.ongkir.tarif_per_kg).toBe(25_000);
+    expect(k2.ongkir.ongkir_dasar).toBe(375_000);
+    expect(k2.ongkir.deal).toBe(375_000);
+
+    // 17c. Pembulatan ke atas (Math.ceil): contoh 16,2 kg -> 17 kg
+    // P=90, L=60, T=15 -> 81.000 / 5000 = 16.2 kg. Berat aktual = 12 kg -> Chargeable = 17 kg.
+    const k3 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: { panjang_cm: 90, lebar_cm: 60, tinggi_cm: 15, berat_aktual_kg: 12 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k3.ongkir.berat_volumetrik).toBe(16.2);
+    expect(k3.ongkir.berat_dikenakan).toBe(17);
+    expect(k3.ongkir.ongkir_dasar).toBe(17 * 50_000); // 850.000
+
+    // 17d. Pembulatan ke atas dari berat aktual: 4.1 kg -> 5 kg
+    const k4 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'dalam_kota',
+        paket: { panjang_cm: 20, lebar_cm: 20, tinggi_cm: 5, berat_aktual_kg: 4.1 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k4.ongkir.berat_volumetrik).toBe(0.4);
+    expect(k4.ongkir.berat_dikenakan).toBe(5);
+    expect(k4.ongkir.ongkir_dasar).toBe(5 * 25_000); // 125.000
+
+    // 17e. Minimal 1 kg: di bawah 1 kg tetap dihitung 1 kg
+    // P=10, L=10, T=5 -> 500/5000 = 0.1 kg. Berat aktual = 0.3 kg -> Chargeable = 1 kg
+    const k5 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: { panjang_cm: 10, lebar_cm: 10, tinggi_cm: 5, berat_aktual_kg: 0.3 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k5.ongkir.berat_volumetrik).toBe(0.1);
+    expect(k5.ongkir.berat_dikenakan).toBe(1);
+    expect(k5.ongkir.ongkir_dasar).toBe(1 * 50_000); // 50.000
+  });
+
+  // =========================================================================
+  // 18. Fitur "Dibagi Dua" Opsional: Aktif vs Nonaktif
+  // =========================================================================
+  it('18. Fitur "Dibagi Dua" Opsional: Default Aktif (< 50% ditolak) vs Nonaktif (Bebas 0 - 100% wajib alasan)', () => {
+    const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
+    // Paket 20 kg luar kota -> ongkir dasar = 20 * 50.000 = Rp1.000.000. 50% = Rp500.000
+    const paket20kg = { panjang_cm: 100, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 }; // (100*50*20)/5000 = 20 kg
+
+    // 18a. AKTIF (default / bagi_dua_aktif: true): deal Rp400.000 (< 50%) -> Ditolak / error merah
+    const kAktifDitolak = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket20kg,
+        ongkir_deal: 400_000,
+        bagi_dua_aktif: true,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kAktifDitolak.ongkir.wewenang).toBe('ditolak');
+    expect(kAktifDitolak.ongkir.status).toBe('error_merah');
+    expect(kAktifDitolak.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp500.000.');
+    expect(kAktifDitolak.is_valid_untuk_pdf).toBe(false);
+
+    // 18b. AKTIF: deal Rp600.000 (antara 50% - 100%) + alasan -> Lolos
+    const kAktifLolos = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket20kg,
+        ongkir_deal: 600_000,
+        alasan_potongan_ongkir: 'Disetujui diskon kargo',
+        bagi_dua_aktif: true,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kAktifLolos.ongkir.wewenang).toBe('perlu_alasan');
+    expect(kAktifLolos.ongkir.status).toBe('ok');
+    expect(kAktifLolos.is_valid_untuk_pdf).toBe(true);
+
+    // 18c. NONAKTIF (bagi_dua_aktif: false): deal Rp300.000 (< 50%) + alasan -> Lolos tanpa batas 50%
+    const kNonaktifLolos = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket20kg,
+        ongkir_deal: 300_000,
+        alasan_potongan_ongkir: 'Promo subsidi ongkir penuh dari toko',
+        bagi_dua_aktif: false,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kNonaktifLolos.ongkir.wewenang).toBe('perlu_alasan');
+    expect(kNonaktifLolos.ongkir.status).toBe('ok');
+    expect(kNonaktifLolos.is_valid_untuk_pdf).toBe(true);
+    expect(kNonaktifLolos.ongkir.deal).toBe(300_000);
+
+    // 18d. NONAKTIF: deal Rp0 (ambil sendiri / gratis ongkir) + alasan -> Lolos
+    const kNonaktifRp0 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket20kg,
+        ongkir_deal: 0,
+        alasan_potongan_ongkir: 'Gratis ongkir event pameran',
+        bagi_dua_aktif: false,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kNonaktifRp0.ongkir.wewenang).toBe('perlu_alasan');
+    expect(kNonaktifRp0.ongkir.status).toBe('ok');
+    expect(kNonaktifRp0.is_valid_untuk_pdf).toBe(true);
+    expect(kNonaktifRp0.ongkir.deal).toBe(0);
+
+    // 18e. NONAKTIF: deal di bawah dasar tanpa alasan -> warning kuning (tidak boleh simpan PDF)
+    const kNonaktifTanpaAlasan = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket20kg,
+        ongkir_deal: 300_000,
+        bagi_dua_aktif: false,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kNonaktifTanpaAlasan.ongkir.wewenang).toBe('perlu_alasan');
+    expect(kNonaktifTanpaAlasan.ongkir.status).toBe('warning_kuning');
+    expect(kNonaktifTanpaAlasan.is_valid_untuk_pdf).toBe(false);
+  });
+
+  // =========================================================================
+  // 19. Biaya Tambahan: Asuransi 0.2%, Packing, Handling
+  // =========================================================================
+  it('19. Biaya Tambahan: Asuransi 0.2%, Packing, Handling pass-through tidak kena diskon 50%', () => {
+    const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
+    // Cermin custom 60x80 (0.48 m2 * 1.750.000 = Rp840.000)
+    const paket10kg = { panjang_cm: 50, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 5 }; // 10 kg luar kota -> Rp500.000
+
+    // 19a. Asuransi aktif (0.2% dari subtotal cermin 840.000 = 1.680 -> dibulatkan 1.680)
+    // + Packing Rp75.000 + Handling Rp50.000 = Total Biaya Tambahan Rp126.680
+    // Ongkir deal = Rp400.000 (dengan alasan)
+    // Ongkir final = Rp400.000 + Rp126.680 = Rp526.680
+    // Total = subtotal 840.000 + ongkir final 526.680 = Rp1.366.680
+    const k1 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket10kg,
+        ongkir_deal: 400_000,
+        alasan_potongan_ongkir: 'Diskon admin',
+        bagi_dua_aktif: false,
+        biaya_tambahan: {
+          asuransi_aktif: true,
+          biaya_packing: 75_000,
+          biaya_handling: 50_000,
+        },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k1.subtotal_cermin).toBe(840_000);
+    expect(k1.ongkir.biaya_tambahan.asuransi_aktif).toBe(true);
+    expect(k1.ongkir.biaya_tambahan.nilai_barang).toBe(840_000);
+    expect(k1.ongkir.biaya_tambahan.nominal_asuransi).toBe(1_680); // Math.round(840.000 * 0.002)
+    expect(k1.ongkir.biaya_tambahan.biaya_packing).toBe(75_000);
+    expect(k1.ongkir.biaya_tambahan.biaya_handling).toBe(50_000);
+    expect(k1.ongkir.biaya_tambahan.total).toBe(1_680 + 75_000 + 50_000); // 126.680
+    expect(k1.ongkir.deal).toBe(400_000);
+    expect(k1.ongkir.final).toBe(400_000 + 126_680); // 526.680
+    expect(k1.total).toBe(840_000 + 526_680); // 1.366.680
+
+    // 19b. Nilai barang custom diisi manual: misal 2.000.000 -> asuransi = 4.000
+    const k2 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'luar_kota',
+        paket: paket10kg,
+        biaya_tambahan: {
+          asuransi_aktif: true,
+          nilai_barang: 2_000_000,
+          biaya_packing: 50_000,
+        },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(k2.ongkir.biaya_tambahan.nominal_asuransi).toBe(4_000);
+    expect(k2.ongkir.biaya_tambahan.total).toBe(54_000);
+    expect(k2.ongkir.final).toBe(k2.ongkir.deal + 54_000);
+  });
 });

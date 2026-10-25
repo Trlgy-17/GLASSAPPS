@@ -41,34 +41,72 @@ export function hitungPenawaran(
   const errors: string[] = [];
   let isValidUntukPdf = true;
 
-  // 3. Evaluasi Pengiriman (Ongkir)
+  // 3. Evaluasi Pengiriman (Ongkir Sistem Volumetrik ala J&T Cargo)
   const isZonaUnset = !input.zona;
   const isDalamKota = input.zona === 'dalam_kota';
-  const batasKirim = isDalamKota
-    ? config.logistik.kirim_bandung
-    : config.logistik.kirim_luar_kota;
 
-  // Kota jauh / ongkir ekspedisi aktual di atas tarif standar luar kota
-  const isKotaJauh = !isZonaUnset && !isDalamKota && Boolean(input.ongkir_aktual && input.ongkir_aktual > batasKirim.list);
-  const ongkirList = isZonaUnset ? 0 : (isKotaJauh ? input.ongkir_aktual! : batasKirim.list);
+  const logistikCfg = config.logistik || ({} as Partial<typeof config.logistik>);
+  const divisorVolumetrik = logistikCfg.divisor_volumetrik || 5000;
+  const minBeratKg = logistikCfg.min_berat_kg || 1;
+  const persenAsuransiCfg = logistikCfg.persen_asuransi ?? 0.002;
+  const persenAsuransi = persenAsuransiCfg > 1 ? persenAsuransiCfg / 100 : persenAsuransiCfg;
 
-  // Batas Net Admin:
-  // - Kota jauh: tidak ada net otomatis (net = list)
-  // - Dalam kota: Rp500.000
-  // - Luar kota: Rp1.150.000
-  const batasNetAdmin = isZonaUnset
-    ? 0
-    : isKotaJauh
-    ? ongkirList
-    : (isDalamKota ? (batasKirim.batas_admin || 500_000) : (batasKirim.batas_admin || 1_150_000));
+  const tarifPerKg = isDalamKota
+    ? (logistikCfg.tarif_per_kg_dalam_kota ?? 25_000)
+    : (logistikCfg.tarif_per_kg_luar_kota ?? 50_000);
 
-  // Batas 50% Minimal Bayar:
-  const batasMinimal50 = Math.round(ongkirList * 0.5);
+  let beratAktual = 0;
+  let beratVolumetrik = 0;
+  let beratDikenakan = 0;
+  let ongkirDasar = 0;
+
+  if (input.paket) {
+    beratAktual = Math.max(0, input.paket.berat_aktual_kg || 0);
+    const p = Math.max(0, input.paket.panjang_cm || 0);
+    const l = Math.max(0, input.paket.lebar_cm || 0);
+    const t = Math.max(0, input.paket.tinggi_cm || 0);
+    beratVolumetrik = (p * l * t) / divisorVolumetrik;
+    const chargeableRaw = Math.max(beratAktual, beratVolumetrik);
+    beratDikenakan = isZonaUnset ? 0 : Math.max(minBeratKg, Math.ceil(chargeableRaw));
+    ongkirDasar = isZonaUnset ? 0 : (beratDikenakan * tarifPerKg);
+  } else {
+    // Fallback aman untuk pemanggil tanpa paket (legacy/database lama)
+    const batasKirim = isDalamKota ? logistikCfg.kirim_bandung : logistikCfg.kirim_luar_kota;
+    const isKotaJauh = !isZonaUnset && !isDalamKota && Boolean(input.ongkir_aktual && batasKirim?.list && input.ongkir_aktual > batasKirim.list);
+    ongkirDasar = isZonaUnset ? 0 : (isKotaJauh ? input.ongkir_aktual! : (batasKirim?.list || 0));
+    beratDikenakan = tarifPerKg > 0 ? Math.ceil(ongkirDasar / tarifPerKg) : 0;
+  }
+
+  // Fitur "Dibagi Dua" Opsional (default: aktif / true)
+  const bagiDuaAktif = input.bagi_dua_aktif !== undefined ? input.bagi_dua_aktif : true;
+  const batasMinimal50 = Math.round(ongkirDasar * 0.5);
 
   const ongkirDeal = isZonaUnset
     ? 0
-    : (input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirList);
-  const potonganOngkir = Math.max(0, ongkirList - ongkirDeal);
+    : (input.ongkir_deal !== undefined ? input.ongkir_deal : ongkirDasar);
+  const potonganOngkir = Math.max(0, ongkirDasar - ongkirDeal);
+
+  // Biaya Tambahan Opsional (Asuransi 0.2%, Packing, Handling) - Pass-Through tidak kena 50%/diskon
+  const btInput = input.biaya_tambahan;
+  const asuransiAktif = Boolean(btInput?.asuransi_aktif);
+  const nilaiBarang = btInput?.nilai_barang !== undefined ? Math.max(0, btInput.nilai_barang) : subtotalCermin;
+  const nominalAsuransi = asuransiAktif ? Math.round(nilaiBarang * persenAsuransi) : 0;
+  const biayaPacking = Math.max(0, btInput?.biaya_packing || 0);
+  const biayaHandling = Math.max(0, btInput?.biaya_handling || 0);
+  const totalBiayaTambahan = nominalAsuransi + biayaPacking + biayaHandling;
+
+  const rincianBiayaTambahan = {
+    asuransi_aktif: asuransiAktif,
+    nilai_barang: nilaiBarang,
+    persen_asuransi: persenAsuransi,
+    nominal_asuransi: nominalAsuransi,
+    biaya_packing: biayaPacking,
+    biaya_handling: biayaHandling,
+    total: totalBiayaTambahan,
+  };
+
+  const ongkirFinal = isZonaUnset ? 0 : (ongkirDeal + totalBiayaTambahan);
+
   let ongkirStatus: 'ok' | 'warning_kuning' | 'error_merah' = 'ok';
   let ongkirWewenang: 'normal' | 'perlu_alasan' | 'perlu_owner' | 'ditolak' = 'normal';
   let ongkirPesan: string | undefined;
@@ -86,20 +124,25 @@ export function hitungPenawaran(
     ongkirPesan = 'Ongkir dihitung setelah kota dipilih.';
     isValidUntukPdf = false;
     errors.push('Pilih kota tujuan terlebih dahulu.');
-  }
-  // Level 3 (Ditolak): Di bawah 50%
-  else if (ongkirDeal < batasMinimal50) {
+  } else if (ongkirDeal < 0) {
+    ongkirStatus = 'error_merah';
+    ongkirWewenang = 'ditolak';
+    ongkirPesan = 'Nominal ongkir deal tidak boleh bernilai negatif.';
+    isValidUntukPdf = false;
+    errors.push(ongkirPesan);
+  } else if (bagiDuaAktif && ongkirDeal < batasMinimal50) {
+    // Saat AKTIF: Di bawah 50% ditolak (error merah)
     ongkirStatus = 'error_merah';
     ongkirWewenang = 'ditolak';
     ongkirPesan = `Ongkir maksimal dibagi dua, klien bayar minimal Rp${batasMinimal50.toLocaleString('id-ID')}.`;
     isValidUntukPdf = false;
     errors.push(ongkirPesan);
-  }
-  // Level 2 (Boleh oleh admin sampai 50%; wajib alasan singkat): Di bawah list sampai 50%
-  else if (ongkirDeal < ongkirList) {
+  } else if (ongkirDeal < ongkirDasar) {
+    // Di bawah list/dasar (antara 50%-100% jika aktif, atau 0 s/d ongkirDasar jika nonaktif):
+    // Wajib ada alasan singkat
     ongkirWewenang = 'perlu_alasan';
     ongkirPerluAlasan = true;
-    ongkirPerluKonfirmasi = false; // TIDAK PERLU PERSETUJUAN OWNER!
+    ongkirPerluKonfirmasi = false;
 
     if (alasanInput.length > 0) {
       ongkirStatus = 'ok';
@@ -111,9 +154,8 @@ export function hitungPenawaran(
       isValidUntukPdf = false;
       errors.push(ongkirPesan);
     }
-  }
-  // Level 1 (Normal): Ongkir = list (atau di atas list)
-  else {
+  } else {
+    // Normal: ongkir deal >= ongkir dasar
     ongkirStatus = 'ok';
     ongkirWewenang = 'normal';
     ongkirPerluAlasan = false;
@@ -172,7 +214,7 @@ export function hitungPenawaran(
   }
 
   // 5. Total Akhir, DP 50%, dan Pelunasan (Zero-Float)
-  const total = subtotalCermin + ongkirDeal + pasangDeal;
+  const total = subtotalCermin + ongkirFinal + pasangDeal;
 
   const kelipatanDp = config.pembulatan.dp_kelipatan; // 1000
   // Rumus DP: ceil(total / (2 * kelipatan_dp)) * kelipatan_dp
@@ -184,10 +226,11 @@ export function hitungPenawaran(
     total_unit: totalUnit,
     subtotal_cermin: subtotalCermin,
     ongkir: {
-      list: ongkirList,
+      list: ongkirDasar,
       deal: ongkirDeal,
+      final: ongkirFinal,
       potongan: potonganOngkir,
-      di_bawah_net: potonganOngkir > 0 && ongkirDeal < batasNetAdmin,
+      di_bawah_net: potonganOngkir > 0 && ongkirDeal < batasMinimal50,
       status: ongkirStatus,
       wewenang: ongkirWewenang,
       pesan: ongkirPesan,
@@ -195,11 +238,18 @@ export function hitungPenawaran(
       perlu_konfirmasi: false, // Tidak perlu konfirmasi owner ongkir
       dikonfirmasi_owner: false,
       alasan: ongkirAlasan,
-      minimal_bayar: batasMinimal50,
-      batas_net: batasNetAdmin,
-      batas_admin: batasNetAdmin,
-      batas_floor: batasMinimal50,
-      ...(typeof window === 'undefined' ? { batas_owner: batasMinimal50 } : {}),
+      minimal_bayar: bagiDuaAktif ? batasMinimal50 : 0,
+      batas_net: ongkirDasar,
+      batas_admin: ongkirDasar,
+      batas_floor: bagiDuaAktif ? batasMinimal50 : 0,
+      ...(typeof window === 'undefined' ? { batas_owner: bagiDuaAktif ? batasMinimal50 : 0 } : {}),
+      berat_aktual: beratAktual,
+      berat_volumetrik: Math.round(beratVolumetrik * 100) / 100,
+      berat_dikenakan: beratDikenakan,
+      tarif_per_kg: tarifPerKg,
+      ongkir_dasar: ongkirDasar,
+      biaya_tambahan: rincianBiayaTambahan,
+      bagi_dua_aktif: bagiDuaAktif,
     },
     pasang: {
       list: pasangList,

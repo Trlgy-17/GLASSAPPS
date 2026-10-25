@@ -94,3 +94,131 @@ describe('Pengujian Kalkulator CS App: 15 Kasus Referensi', () => {
     expect(hitungItem(800, 600, '1_warna', 'sensor_baterai', true)).toBe(1_195_000);
   });
 });
+
+describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
+  const sampleItem = {
+    bentuk_kode: 'rectangle',
+    panjang_mm: 800,
+    lebar_mm: 600,
+    lampu: '3_warna' as const,
+    kontrol: 'touchscreen' as const,
+    antifog: false,
+    qty: 1,
+  };
+
+  it('16. Menghitung berat volumetrik, chargeable = max(aktual, volumetrik), pembulatan ke atas, dan minimal 1 kg', () => {
+    // P=70cm, L=50cm, T=20cm -> volumetrik = (70*50*20)/5000 = 14 kg. Berat aktual = 8 kg -> chargeable = 14 kg
+    const res1 = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'dalam_kota',
+        paket: { panjang_cm: 70, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 8 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res1.ongkir.berat_volumetrik).toBe(14);
+    expect(res1.ongkir.berat_aktual).toBe(8);
+    expect(res1.ongkir.berat_dikenakan).toBe(14);
+    expect(res1.ongkir.ongkir_dasar).toBe(14 * 25_000); // Rp350.000
+
+    // Desimal dibulatkan ke atas: 14.1 kg -> 15 kg
+    const res2 = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'dalam_kota',
+        paket: { panjang_cm: 70, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 14.1 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res2.ongkir.berat_dikenakan).toBe(15);
+    expect(res2.ongkir.ongkir_dasar).toBe(15 * 25_000);
+
+    // Di bawah 1 kg tetap 1 kg
+    const res3 = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'luar_kota',
+        paket: { panjang_cm: 10, lebar_cm: 10, tinggi_cm: 10, berat_aktual_kg: 0.2 },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(res3.ongkir.berat_dikenakan).toBe(1);
+    expect(res3.ongkir.ongkir_dasar).toBe(1 * 50_000);
+  });
+
+  it('17. Toggle "dibagi dua": aktif (< 50% ditolak) vs nonaktif (0-100% bebas dengan alasan)', () => {
+    const paket10kg = { panjang_cm: 50, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 }; // 10 kg luar kota -> Rp500.000 dasar
+
+    // Aktif: ongkir deal 200.000 (< 250.000) -> error_merah
+    const resAktif = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'luar_kota',
+        paket: paket10kg,
+        ongkir_deal: 200_000,
+        bagi_dua_aktif: true,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resAktif.ongkir.status).toBe('error_merah');
+    expect(resAktif.ongkir.wewenang).toBe('ditolak');
+    expect(resAktif.is_valid_untuk_pdf).toBe(false);
+
+    // Nonaktif: ongkir deal 100.000 (< 50%) dengan alasan -> ok
+    const resNonaktif = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'luar_kota',
+        paket: paket10kg,
+        ongkir_deal: 100_000,
+        alasan_potongan_ongkir: 'Disetujui diskon khusus',
+        bagi_dua_aktif: false,
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(resNonaktif.ongkir.status).toBe('ok');
+    expect(resNonaktif.is_valid_untuk_pdf).toBe(true);
+    expect(resNonaktif.ongkir.deal).toBe(100_000);
+  });
+
+  it('18. Biaya tambahan opsional: asuransi 0.2%, packing, dan handling ditambahkan di atas deal secara terpisah', () => {
+    // Subtotal cermin 60x80 premium custom: Rp840.000
+    const paket10kg = { panjang_cm: 50, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 };
+
+    const res = hitungPenawaran(
+      {
+        items: [sampleItem],
+        zona: 'luar_kota',
+        paket: paket10kg,
+        ongkir_deal: 500_000,
+        biaya_tambahan: {
+          asuransi_aktif: true,
+          biaya_packing: 100_000,
+          biaya_handling: 50_000,
+        },
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+
+    // Asuransi = 0.2% * 840.000 = 1.680
+    // Total biaya tambahan = 1.680 + 100.000 + 50.000 = 151.680
+    // Ongkir final = 500.000 + 151.680 = 651.680
+    // Total penawaran = 840.000 + 651.680 = 1.491.680
+    expect(res.ongkir.biaya_tambahan.nominal_asuransi).toBe(1_680);
+    expect(res.ongkir.biaya_tambahan.total).toBe(151_680);
+    expect(res.ongkir.final).toBe(651_680);
+    expect(res.total).toBe(840_000 + 651_680);
+  });
+});

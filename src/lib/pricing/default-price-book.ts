@@ -227,6 +227,13 @@ export const defaultPriceBookV1: PriceBookData = {
       'cimahi',
       'bandung barat',
     ],
+    // SISTEM VOLUMETRIK ALA J&T CARGO (Wajib diisi & disesuaikan oleh Owner)
+    // Placeholder sementara: tarif per kg untuk dalam dan luar kota
+    tarif_per_kg_dalam_kota: 25_000, // Rp25.000/kg (placeholder owner, wajib diisi owner)
+    tarif_per_kg_luar_kota: 50_000,  // Rp50.000/kg (placeholder owner, wajib diisi owner)
+    divisor_volumetrik: 5000,        // Divisor standar volumetrik kargo (default: 5000)
+    min_berat_kg: 1,                 // Berat minimal penagihan kargo (default: 1 kg)
+    persen_asuransi: 0.002,          // Premi asuransi 0.2% (0.002) dari nilai barang
   },
 
   tingkat_b2b: [],

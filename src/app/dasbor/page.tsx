@@ -177,7 +177,7 @@ export default function DasborPage() {
             status: found.status,
             total_nilai: Number(found.total_nilai || fallbackData?.total_nilai || 0),
             subtotal_cermin: Number(found.ringkasan_json?.subtotal_cermin || 0),
-            ongkir: Number(found.ringkasan_json?.ongkir?.deal || 0),
+            ongkir: Number(found.ringkasan_json?.ongkir?.final ?? found.ringkasan_json?.ongkir?.deal ?? 0),
             pasang: Number(found.ringkasan_json?.pasang?.deal || 0),
             dp_50: Number(found.ringkasan_json?.dp_50 || 0),
             pelunasan: Number(found.ringkasan_json?.pelunasan || 0),

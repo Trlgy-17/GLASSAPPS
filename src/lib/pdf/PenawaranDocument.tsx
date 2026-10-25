@@ -692,8 +692,9 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
   });
 
   // Tentukan label dinamis ongkir sesuai jenis
+  const ongkirBayar = kalkulasi.ongkir.final !== undefined ? kalkulasi.ongkir.final : kalkulasi.ongkir.deal;
   let ongkirLabel = 'Ongkos kirim (dalam kota Bandung)';
-  if (kalkulasi.ongkir.deal === 0 || kalkulasi.ongkir.list === 0) {
+  if (ongkirBayar === 0 || kalkulasi.ongkir.list === 0) {
     ongkirLabel = 'Ongkos kirim (ambil sendiri)';
   } else if (
     kalkulasi.ongkir.dikonfirmasi_owner ||
@@ -801,7 +802,7 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
           <View style={styles.summaryRow}>
             <Text>{ongkirLabel}</Text>
             <Text style={styles.summaryRowBold}>
-              {formatRp(kalkulasi.ongkir.deal)}
+              {formatRp(ongkirBayar)}
             </Text>
           </View>
           <View style={styles.summaryRow}>

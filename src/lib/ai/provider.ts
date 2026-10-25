@@ -1030,11 +1030,12 @@ Petunjuk Khusus: Ini adalah lanjutan percakapan untuk penawaran ${params.klienLa
         calculatedNumbers.push(hitung.subtotal_cermin);
 
         if (sebutOngkir) {
-          ongkirStr = `*${formatRupiah(hitung.ongkir.list)}*${isBandungRaya ? '' : ' (include packing kayu aman)'}`;
+          const ongkirFinalVal = hitung.ongkir.final ?? hitung.ongkir.deal ?? hitung.ongkir.list;
+          ongkirStr = `*${formatRupiah(ongkirFinalVal)}*${isBandungRaya ? '' : ' (include packing kayu aman)'}`;
           totalStr = `*${formatRupiah(hitung.total)}*`;
           dpStr = `*${formatRupiah(hitung.dp_50)}*`;
           pelunasanStr = `*${formatRupiah(hitung.pelunasan)}*`;
-          calculatedNumbers.push(hitung.ongkir.list, hitung.total, hitung.dp_50, hitung.pelunasan);
+          calculatedNumbers.push(ongkirFinalVal, hitung.total, hitung.dp_50, hitung.pelunasan);
         } else {
           ongkirStr = extractedSpec.kota
             ? `akan dicek dan dihitung oleh admin kargo kami untuk area ${extractedSpec.kota}`
