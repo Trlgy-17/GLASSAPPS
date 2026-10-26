@@ -10,6 +10,37 @@ export type VarianCermin = 'premium' | 'basic';
 export type KontrolSku = 'touchscreen' | 'sensor' | 'baterai';
 export type AddOnBasis = 'unit' | 'm2' | 'keliling';
 
+export type ZonaPengirimanId =
+  | 'dalam_kota'
+  | 'jawa_barat'
+  | 'dki_jakarta'
+  | 'banten'
+  | 'jawa_tengah'
+  | 'di_yogyakarta'
+  | 'jawa_timur'
+  | 'bandar_lampung'
+  | 'palembang'
+  | 'denpasar'
+  | 'pekanbaru'
+  | 'medan'
+  | 'makassar'
+  | 'pontianak'
+  | 'banjarmasin'
+  | 'manado'
+  | 'luar_kota';
+
+export interface ZonaPengirimanConfig {
+  id: ZonaPengirimanId;
+  nama: string;
+  sla: string;
+  isPulauJawa: boolean;
+  fastTrackPerKg: number;
+  maxTrack100PerKg?: number;
+  maxTrack300PerKg?: number;
+  maxTrack500PerKg?: number;
+  keterangan?: string;
+}
+
 export interface MasterBentuk {
   kode: string;
   label: string;
@@ -53,6 +84,7 @@ export interface PriceBookData {
 
   tarif_m2: {
     premium_b2c: number;           // Rp1.750.000
+    touchscreen_baterai_m2?: number;// Rp1.850.000
     premium_b2b_list: number;      // Rp1.750.000
     premium_b2b_net_owner: number; // Rp1.350.000 (batas mutlak owner)
     basic_m2: number;              // Rp1.550.000
@@ -177,7 +209,7 @@ export interface BiayaTambahanRincian {
 
 export interface PenawaranInput {
   items: CerminItemInput[];
-  zona?: 'dalam_kota' | 'luar_kota' | '';
+  zona?: ZonaPengirimanId | string;
   perlu_pasang: boolean;
   ongkir_deal?: number;
   ongkir_aktual?: number;
@@ -216,6 +248,9 @@ export interface HitungItemOutput {
   harga_satuan_item: number;
   qty: number;
   subtotal_item: number;
+  kontrol?: string;
+  lampu?: string;
+  frame?: string;
   errors?: string[];
 }
 
@@ -249,6 +284,9 @@ export interface HitungPenawaranOutput {
     ongkir_dasar: number;
     biaya_tambahan: BiayaTambahanRincian;
     bagi_dua_aktif: boolean;
+    layanan?: string;
+    sla?: string;
+    zona_nama?: string;
   };
   pasang: {
     list: number;

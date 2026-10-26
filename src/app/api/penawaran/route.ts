@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         brand_id: 'putraglass',
         nama: clientName,
         kota: clientCity,
-        zona: rawInput.zona || 'dalam_kota',
+        zona: rawInput.zona === 'dalam_kota' ? 'dalam_kota' : 'luar_kota',
         segmen: rawInput.segmen || 'B2C',
         status: 'prospek',
       })
@@ -146,6 +146,7 @@ export async function POST(req: NextRequest) {
       nomor: quoteNumber,
       lead_id: resolvedLeadId,
       price_book_id: priceBookId,
+      revisi_dari: body.revisi_dari || penawaran_input?.revisi_dari || null,
       items_json: kalkulasi.items,
       ringkasan_json: {
         total_unit: kalkulasi.total_unit,

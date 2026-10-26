@@ -8,6 +8,7 @@ import {
   VarianCermin,
   AddOnConfig,
 } from '@/types/pricing';
+import { hitungTarifKargo } from '@/lib/wilayah/zona';
 
 /**
  * Mesin kalkulasi harga Putra Glass (Single Source of Truth)
@@ -47,18 +48,19 @@ export function hitungPenawaran(
 
   const logistikCfg = config.logistik || ({} as Partial<typeof config.logistik>);
   const divisorVolumetrik = logistikCfg.divisor_volumetrik || 5000;
-  const minBeratKg = logistikCfg.min_berat_kg || 1;
+  // Sesuai aturan J&T Cargo FastTrack: Minimal 11 Kg
+  const minBeratKg = logistikCfg.min_berat_kg ?? 11;
   const persenAsuransiCfg = logistikCfg.persen_asuransi ?? 0.002;
   const persenAsuransi = persenAsuransiCfg > 1 ? persenAsuransiCfg / 100 : persenAsuransiCfg;
-
-  const tarifPerKg = isDalamKota
-    ? (logistikCfg.tarif_per_kg_dalam_kota ?? 25_000)
-    : (logistikCfg.tarif_per_kg_luar_kota ?? 50_000);
 
   let beratAktual = 0;
   let beratVolumetrik = 0;
   let beratDikenakan = 0;
   let ongkirDasar = 0;
+  let tarifPerKg = 0;
+  let layananKargo = 'FastTrack';
+  let slaKargo = '1-3 hari';
+  let zonaNamaKargo = isDalamKota ? 'Bandung Raya (Dalam Kota)' : 'Luar Kota';
 
   if (input.paket) {
     beratAktual = Math.max(0, input.paket.berat_aktual_kg || 0);
@@ -68,9 +70,23 @@ export function hitungPenawaran(
     beratVolumetrik = (p * l * t) / divisorVolumetrik;
     const chargeableRaw = Math.max(beratAktual, beratVolumetrik);
     beratDikenakan = isZonaUnset ? 0 : Math.max(minBeratKg, Math.ceil(chargeableRaw));
+
+    // Evaluasi tarif per kg & tier layanan kargo (FastTrack vs MaxTrack)
+    const kargo = hitungTarifKargo(input.zona, beratDikenakan, logistikCfg);
+    tarifPerKg = kargo.tarifPerKg;
+    layananKargo = kargo.layanan;
+    slaKargo = kargo.sla;
+    zonaNamaKargo = kargo.zonaNama;
+
     ongkirDasar = isZonaUnset ? 0 : (beratDikenakan * tarifPerKg);
   } else {
     // Fallback aman untuk pemanggil tanpa paket (legacy/database lama)
+    const kargo = hitungTarifKargo(input.zona, minBeratKg, logistikCfg);
+    tarifPerKg = kargo.tarifPerKg;
+    layananKargo = kargo.layanan;
+    slaKargo = kargo.sla;
+    zonaNamaKargo = kargo.zonaNama;
+
     const batasKirim = isDalamKota ? logistikCfg.kirim_bandung : logistikCfg.kirim_luar_kota;
     const isKotaJauh = !isZonaUnset && !isDalamKota && Boolean(input.ongkir_aktual && batasKirim?.list && input.ongkir_aktual > batasKirim.list);
     ongkirDasar = isZonaUnset ? 0 : (isKotaJauh ? input.ongkir_aktual! : (batasKirim?.list || 0));
@@ -250,6 +266,9 @@ export function hitungPenawaran(
       ongkir_dasar: ongkirDasar,
       biaya_tambahan: rincianBiayaTambahan,
       bagi_dua_aktif: bagiDuaAktif,
+      layanan: layananKargo,
+      sla: slaKargo,
+      zona_nama: zonaNamaKargo,
     },
     pasang: {
       list: pasangList,
@@ -383,6 +402,9 @@ function hitungSingleItem(
 
     if (varian === 'basic') {
       tarifM2Dipakai = config.tarif_m2.basic_m2;
+    } else if (item.kontrol === 'touchscreen_baterai') {
+      const tbRate = (config.tarif_m2 as Record<string, unknown>).touchscreen_baterai_m2;
+      tarifM2Dipakai = typeof tbRate === 'number' ? tbRate : 1_850_000;
     } else {
       if (segmen === 'B2B') {
         if (penawaranInput.tarif_cermin_b2b_deal !== undefined) {
@@ -436,7 +458,7 @@ function hitungSingleItem(
   const addOnBreakdown: HitungItemOutput['add_on_breakdown'] = [];
 
   // Kontrol Add-on
-  if ((item.kontrol === 'touchscreen_baterai' || item.kontrol === 'baterai') && !isSku) {
+  if (item.kontrol === 'baterai' && !isSku) {
     addOnBreakdown.push(resolveAddOn('touchscreen_baterai', panjang_mm, lebar_mm, config));
   } else if (item.kontrol === 'sensor') {
     // Bila SKU sudah meng-cover kontrol, jangan dobel
@@ -486,6 +508,9 @@ function hitungSingleItem(
     harga_satuan_item: hargaSatuanItem,
     qty: item.qty,
     subtotal_item: subtotalItem,
+    kontrol: item.kontrol,
+    lampu: item.lampu,
+    frame: item.frame,
   };
 }
 

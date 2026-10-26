@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { formatRupiah } from '@/lib/pricing/format-rupiah';
+import { formatRupiah, parseRupiah } from '@/lib/pricing/format-rupiah';
 import { getPeriode, getAvailablePeriods, ClosingPeriod } from '@/lib/closing-period';
 import {
   FileText,
@@ -25,7 +25,18 @@ import {
   ArrowRight,
   FileSpreadsheet,
   Loader2,
+  Tag,
+  FileEdit,
 } from 'lucide-react';
+interface NegoRingkasan {
+  nilai_sebelum_nego: number;
+  nilai_nego: number;
+  selisih: number;
+  tipe_nego: string;
+  catatan_nego: string;
+  tanggal_nego: string;
+}
+
 
 interface PenawaranRow {
   id: string;
@@ -85,6 +96,13 @@ export default function PenawaranListPage() {
   const [dealDateInput, setDealDateInput] = useState(new Date().toISOString().split('T')[0]);
   const [batalModalQuoteId, setBatalModalQuoteId] = useState<string | null>(null);
   const [alasanBatalInput, setAlasanBatalInput] = useState('harga');
+  // Modal Dialog for Nego Klien
+  const [negoModalQuote, setNegoModalQuote] = useState<PenawaranRow | null>(null);
+  const [negoNominalInput, setNegoNominalInput] = useState('');
+  const [negoKategoriInput, setNegoKategoriInput] = useState('Penyesuaian Total Akhir');
+  const [negoCatatanInput, setNegoCatatanInput] = useState('');
+  const [isSavingNego, setIsSavingNego] = useState(false);
+
 
   // Modal Dialog for Soft Delete
   const [deleteModalQuote, setDeleteModalQuote] = useState<{ id: string; nomor: string; isBulk?: boolean } | null>(null);
@@ -217,6 +235,81 @@ export default function PenawaranListPage() {
     }
   };
 
+  const handleOpenNego = (q: PenawaranRow) => {
+    setNegoModalQuote(q);
+    const currentTotal = Number(q.total_nilai || q.ringkasan_json?.total || 0);
+    setNegoNominalInput(currentTotal > 0 ? String(currentTotal) : '');
+    const existingNego = q.ringkasan_json?.nego as NegoRingkasan | undefined;
+    setNegoKategoriInput(existingNego?.tipe_nego || 'Penyesuaian Total Akhir');
+    setNegoCatatanInput(existingNego?.catatan_nego || '');
+  };
+
+  const handleConfirmNego = async () => {
+    if (!negoModalQuote) return;
+    const nominalVal = parseRupiah(negoNominalInput);
+    if (!nominalVal || nominalVal <= 0) {
+      alert('Masukkan nominal penawaran nego yang valid (lebih dari Rp0).');
+      return;
+    }
+    if (!negoCatatanInput.trim()) {
+      alert('Alasan atau catatan kesepakatan nego wajib diisi.');
+      return;
+    }
+
+    setIsSavingNego(true);
+    try {
+      const res = await fetch(`/api/penawaran/${negoModalQuote.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'nego',
+          nilai_nego: nominalVal,
+          tipe_nego: negoKategoriInput,
+          catatan_nego: negoCatatanInput.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        alert(`Gagal menyimpan nego: ${json.error || 'Terjadi kesalahan'}`);
+        return;
+      }
+
+      const newDp = Math.ceil(nominalVal / 2000) * 1000;
+      const newPelunasan = nominalVal - newDp;
+      setQuotes((prev) =>
+        prev.map((q) => {
+          if (q.id !== negoModalQuote.id) return q;
+          const ringkasan = (q.ringkasan_json as Record<string, unknown>) || {};
+          const nilaiAwal = Number(q.total_nilai || ringkasan.total || 0);
+          return {
+            ...q,
+            status: 'nego' as const,
+            total_nilai: nominalVal,
+            ringkasan_json: {
+              ...ringkasan,
+              total: nominalVal,
+              dp_50: newDp,
+              pelunasan: newPelunasan,
+              nego: {
+                nilai_sebelum_nego: nilaiAwal,
+                nilai_nego: nominalVal,
+                selisih: nilaiAwal - nominalVal,
+                tipe_nego: negoKategoriInput,
+                catatan_nego: negoCatatanInput.trim(),
+                tanggal_nego: new Date().toISOString(),
+              },
+            },
+          };
+        })
+      );
+      setNegoModalQuote(null);
+    } catch {
+      alert('Gagal menghubungi server');
+    } finally {
+      setIsSavingNego(false);
+    }
+  };
   const handleUpdateStatus = async (
     quoteId: string,
     newStatus: string,
@@ -230,6 +323,14 @@ export default function PenawaranListPage() {
       setBatalModalQuoteId(quoteId);
       return;
     }
+    if (newStatus === 'nego') {
+      const targetQuote = quotes.find((q) => q.id === quoteId);
+      if (targetQuote) {
+        handleOpenNego(targetQuote);
+        return;
+      }
+    }
+
 
     // Optimistic UI: perbarui tampilan seketika (≤ 50ms)
     const prevQuotes = quotes;
@@ -720,7 +821,12 @@ export default function PenawaranListPage() {
                       </td>
 
                       <td className="py-4 px-4 text-right tabular-nums font-bold text-ink">
-                        {formatRupiah(Number(q.total_nilai || q.ringkasan_json?.total || 0))}
+                        <span>{formatRupiah(Number(q.total_nilai || q.ringkasan_json?.total || 0))}</span>
+                        {Boolean(q.ringkasan_json?.nego) && (
+                          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold block mt-0.5">
+                            Nego (dari {formatRupiah((q.ringkasan_json?.nego as NegoRingkasan)?.nilai_sebelum_nego || 0)})
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-4 px-4 text-center">
@@ -766,6 +872,29 @@ export default function PenawaranListPage() {
                             <Download className="w-4 h-4" />
                           </a>
 
+                          {/* Tombol Input Nego Klien (Hanya untuk Admin, Bukan Owner) */}
+                          {userRole === 'admin' && !q.deleted_at && !isDealOrLunas && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenNego(q)}
+                              data-testid={`btn-nego-${q.nomor}`}
+                              className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
+                              title="Input Penawaran Nego Klien"
+                            >
+                              <Tag className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Tombol Buka di Kalkulator (Revisi) */}
+                          {userRole === 'admin' && !q.deleted_at && !isDealOrLunas && (
+                            <Link
+                              href={`/penawaran/baru?revisi_id=${q.id}`}
+                              className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center p-2 text-muted hover:text-accent rounded-lg hover:bg-raised transition cursor-pointer"
+                              title="Buka Revisi di Kalkulator"
+                            >
+                              <FileEdit className="w-4 h-4" />
+                            </Link>
+                          )}
                           {/* Tombol Hapus (Hanya untuk Admin, Bukan Owner) */}
                           {userRole === 'admin' && !q.deleted_at && (
                             <button
@@ -987,6 +1116,239 @@ export default function PenawaranListPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Dialog: Input Penawaran Nego Klien */}
+      {negoModalQuote && (() => {
+        const originalTotal = Number(
+          negoModalQuote.total_nilai || (negoModalQuote.ringkasan_json?.total as number) || 0
+        );
+        const originalDp50 = Number(
+          negoModalQuote.ringkasan_json?.dp_50 || Math.ceil(originalTotal / 2000) * 1000
+        );
+        const originalPelunasan = Number(
+          negoModalQuote.ringkasan_json?.pelunasan || (originalTotal - originalDp50)
+        );
+        const nominalVal = parseRupiah(negoNominalInput) || 0;
+        const selisih = originalTotal - nominalVal;
+        const persenDiskon = originalTotal > 0 && selisih > 0 ? Math.round((selisih / originalTotal) * 100) : 0;
+        const newDp50 = Math.ceil(nominalVal / 2000) * 1000;
+        const newPelunasan = nominalVal - newDp50;
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-100">
+            <div className="bg-surface border border-line rounded-[22px] max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between border-b border-line pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-full bg-amber-500/10 text-amber-600 shrink-0">
+                    <Tag className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-ink text-base">Input Penawaran Nego Klien</h3>
+                    <p className="text-xs text-muted">
+                      {negoModalQuote.nomor} · {negoModalQuote.leads?.nama || 'Klien'} ({negoModalQuote.leads?.kota || '-'})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNegoModalQuote(null)}
+                  className="text-muted hover:text-ink p-1 rounded-lg hover:bg-raised transition cursor-pointer"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Rincian Penawaran Saat Ini */}
+              <div className="p-3.5 bg-raised rounded-xl border border-line grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-muted block text-[10px]">Nilai Awal</span>
+                  <span className="font-bold text-ink tabular-nums">{formatRupiah(originalTotal)}</span>
+                </div>
+                <div>
+                  <span className="text-muted block text-[10px]">DP 50% Awal</span>
+                  <span className="font-semibold text-ink tabular-nums">{formatRupiah(originalDp50)}</span>
+                </div>
+                <div>
+                  <span className="text-muted block text-[10px]">Pelunasan Awal</span>
+                  <span className="font-semibold text-ink tabular-nums">{formatRupiah(originalPelunasan)}</span>
+                </div>
+              </div>
+
+              {/* Input Nominal Nego */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-ink block">
+                    Nominal Penawaran Nego (Rp) <span className="text-rose-500">*</span>
+                  </label>
+                  {nominalVal > 0 && (
+                    <span className="text-xs font-bold text-accent tabular-nums">
+                      {formatRupiah(nominalVal)}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={negoNominalInput}
+                  onChange={(e) => setNegoNominalInput(e.target.value)}
+                  placeholder="Ketik nominal penawaran nego, misal: 2.300.000..."
+                  className="w-full text-sm font-semibold p-3 border border-line rounded-xl bg-surface text-ink focus:outline-none focus:border-accent tabular-nums"
+                />
+
+                {/* Tombol Pintasan Cepat Diskon */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[10px] text-muted self-center mr-1">Pintasan:</span>
+                  <button
+                    type="button"
+                    onClick={() => setNegoNominalInput(String(Math.floor(originalTotal / 50000) * 50000))}
+                    className="px-2 py-1 bg-raised hover:bg-tint rounded-lg text-[10px] font-medium border border-line transition cursor-pointer"
+                  >
+                    Bulatkan 50rb
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNegoNominalInput(String(Math.floor(originalTotal / 100000) * 100000))}
+                    className="px-2 py-1 bg-raised hover:bg-tint rounded-lg text-[10px] font-medium border border-line transition cursor-pointer"
+                  >
+                    Bulatkan 100rb
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNegoNominalInput(String(Math.round((originalTotal * 0.95) / 1000) * 1000))}
+                    className="px-2 py-1 bg-raised hover:bg-tint rounded-lg text-[10px] font-medium border border-line transition cursor-pointer"
+                  >
+                    Diskon 5%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNegoNominalInput(String(Math.round((originalTotal * 0.9) / 1000) * 1000))}
+                    className="px-2 py-1 bg-raised hover:bg-tint rounded-lg text-[10px] font-medium border border-line transition cursor-pointer"
+                  >
+                    Diskon 10%
+                  </button>
+                </div>
+              </div>
+
+              {/* Kategori Negosiasi */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-ink block">Kategori Negosiasi</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {[
+                    'Penyesuaian Total Akhir',
+                    'Potongan Ongkir',
+                    'Diskon Proyek B2B',
+                    'Diskon Pelanggan Setia',
+                    'Subsidi Pemasangan',
+                    'Penyesuaian Spesifikasi',
+                  ].map((kat) => (
+                    <button
+                      key={kat}
+                      type="button"
+                      onClick={() => setNegoKategoriInput(kat)}
+                      className={`py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold text-center transition cursor-pointer ${
+                        negoKategoriInput === kat
+                          ? 'border-accent bg-accent/10 text-accent font-bold'
+                          : 'border-line bg-raised text-muted hover:text-ink'
+                      }`}
+                    >
+                      {kat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Catatan Kesepakatan / Alasan Nego */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-ink block">
+                  Catatan Kesepakatan Nego <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={negoCatatanInput}
+                  onChange={(e) => setNegoCatatanInput(e.target.value)}
+                  placeholder="Contoh: Klien setuju deal dengan komitmen transfer DP 50% hari ini..."
+                  className="w-full text-xs p-3 border border-line rounded-xl bg-raised text-ink focus:bg-surface focus:outline-none focus:border-accent"
+                />
+                <div className="flex flex-wrap gap-1 text-[10px] text-muted">
+                  <span>Pilihan cepat:</span>
+                  {[
+                    'Klien komitmen DP hari ini',
+                    'Pembulatan harga disetujui',
+                    'Subsidi ongkir disetujui',
+                    'Diskon proyek interior B2B',
+                  ].map((phrase) => (
+                    <button
+                      key={phrase}
+                      type="button"
+                      onClick={() => setNegoCatatanInput(phrase)}
+                      className="underline hover:text-ink cursor-pointer"
+                    >
+                      {phrase}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live Preview Kalkulasi */}
+              {nominalVal > 0 && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-bold text-emerald-800 dark:text-emerald-300">
+                    <span>Hasil Setelah Nego:</span>
+                    <span className="text-sm tabular-nums">{formatRupiah(nominalVal)}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px] pt-1 border-t border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                    <div>
+                      <span className="block opacity-80 text-[10px]">Selisih Diskon</span>
+                      <span className="font-semibold tabular-nums">
+                        {selisih > 0 ? `-${formatRupiah(selisih)} (${persenDiskon}%)` : formatRupiah(selisih)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block opacity-80 text-[10px]">DP 50% Baru</span>
+                      <span className="font-semibold tabular-nums">{formatRupiah(newDp50)}</span>
+                    </div>
+                    <div>
+                      <span className="block opacity-80 text-[10px]">Pelunasan Baru</span>
+                      <span className="font-semibold tabular-nums">{formatRupiah(newPelunasan)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tombol Aksi */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-line">
+                <Link
+                  href={`/penawaran/baru?revisi_id=${negoModalQuote.id}`}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-line bg-raised hover:bg-surface text-ink transition cursor-pointer"
+                  title="Buka rincian lengkap di kalkulator untuk merevisi ukuran atau add-on cermin"
+                >
+                  <FileEdit className="w-3.5 h-3.5 text-accent" />
+                  <span>Revisi Spesifikasi Penuh</span>
+                </Link>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setNegoModalQuote(null)}
+                    disabled={isSavingNego}
+                    className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl border border-line bg-raised hover:bg-surface text-ink cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmNego}
+                    disabled={isSavingNego}
+                    className="min-h-[40px] px-5 py-2 text-xs font-bold rounded-xl bg-accent text-accent-ink hover:opacity-95 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isSavingNego ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    <span>Simpan Penawaran Nego</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

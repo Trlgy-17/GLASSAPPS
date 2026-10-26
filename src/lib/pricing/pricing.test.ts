@@ -255,8 +255,26 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     expect(resSaklar.items[0].varian).toBe('basic');
     expect(resSaklar.items[0].tarif_m2_dipakai).toBe(1_550_000);
     expect(resSaklar.items[0].harga_cermin).toBe(1_550_000);
+    // 6c. Touchscreen + Baterai -> tarif Rp1.850.000/m2
+    const inputTouchscreenBaterai: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 1000,
+          lebar_mm: 1000,
+          lampu: '3_warna',
+          kontrol: 'touchscreen_baterai',
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+    };
+    const resTB = hitungPenawaran(inputTouchscreenBaterai, defaultPriceBookV1);
+    expect(resTB.items[0].tarif_m2_dipakai).toBe(1_850_000);
+    expect(resTB.items[0].harga_cermin).toBe(1_850_000);
   });
-
   // =========================================================================
   // 7. Multi-Item & Total Unit Dihitung per Penawaran
   // =========================================================================
@@ -905,11 +923,11 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
   // =========================================================================
   // 17. Sistem Volumetrik ala J&T Cargo
   // =========================================================================
-  it('17. Sistem Volumetrik ala J&T Cargo: Volumetrik, Chargeable, Pembulatan ke Atas, Minimal 1 kg, Tarif Zona', () => {
+  it('17. Sistem Volumetrik ala J&T Cargo: Volumetrik, Chargeable, Pembulatan ke Atas, Minimal 11 kg, Tarif Zona FastTrack & MaxTrack', () => {
     const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
 
     // 17a. Berat volumetrik > aktual: P=100cm, L=80cm, T=15cm -> (100*80*15)/5000 = 24 kg. Berat aktual = 10 kg -> Chargeable = 24 kg.
-    // Luar kota tarif Rp50.000/kg -> ongkir dasar = 24 * 50.000 = Rp1.200.000
+    // Luar kota tarif Rp4.000/kg -> ongkir dasar = 24 * 4.000 = Rp96.000
     const k1 = hitungPenawaran(
       {
         items: [item],
@@ -923,14 +941,14 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     expect(k1.ongkir.berat_volumetrik).toBe(24);
     expect(k1.ongkir.berat_aktual).toBe(10);
     expect(k1.ongkir.berat_dikenakan).toBe(24);
-    expect(k1.ongkir.tarif_per_kg).toBe(50_000);
-    expect(k1.ongkir.ongkir_dasar).toBe(1_200_000);
-    expect(k1.ongkir.list).toBe(1_200_000);
-    expect(k1.ongkir.deal).toBe(1_200_000);
-    expect(k1.ongkir.final).toBe(1_200_000);
+    expect(k1.ongkir.tarif_per_kg).toBe(4_000);
+    expect(k1.ongkir.ongkir_dasar).toBe(96_000);
+    expect(k1.ongkir.list).toBe(96_000);
+    expect(k1.ongkir.deal).toBe(96_000);
+    expect(k1.ongkir.final).toBe(96_000);
 
     // 17b. Berat aktual > volumetrik: P=50cm, L=40cm, T=10cm -> 20000/5000 = 4 kg. Berat aktual = 15 kg -> Chargeable = 15 kg.
-    // Dalam kota tarif Rp25.000/kg -> ongkir dasar = 15 * 25.000 = Rp375.000
+    // Dalam kota (Bandung Raya) tarif Rp2.500/kg -> ongkir dasar = 15 * 2.500 = Rp37.500
     const k2 = hitungPenawaran(
       {
         items: [item],
@@ -944,9 +962,9 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     expect(k2.ongkir.berat_volumetrik).toBe(4);
     expect(k2.ongkir.berat_aktual).toBe(15);
     expect(k2.ongkir.berat_dikenakan).toBe(15);
-    expect(k2.ongkir.tarif_per_kg).toBe(25_000);
-    expect(k2.ongkir.ongkir_dasar).toBe(375_000);
-    expect(k2.ongkir.deal).toBe(375_000);
+    expect(k2.ongkir.tarif_per_kg).toBe(2_500);
+    expect(k2.ongkir.ongkir_dasar).toBe(37_500);
+    expect(k2.ongkir.deal).toBe(37_500);
 
     // 17c. Pembulatan ke atas (Math.ceil): contoh 16,2 kg -> 17 kg
     // P=90, L=60, T=15 -> 81.000 / 5000 = 16.2 kg. Berat aktual = 12 kg -> Chargeable = 17 kg.
@@ -962,9 +980,9 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     );
     expect(k3.ongkir.berat_volumetrik).toBe(16.2);
     expect(k3.ongkir.berat_dikenakan).toBe(17);
-    expect(k3.ongkir.ongkir_dasar).toBe(17 * 50_000); // 850.000
+    expect(k3.ongkir.ongkir_dasar).toBe(17 * 4_000); // 68.000
 
-    // 17d. Pembulatan ke atas dari berat aktual: 4.1 kg -> 5 kg
+    // 17d. Pembulatan ke atas & aturan FastTrack minimal 11 kg
     const k4 = hitungPenawaran(
       {
         items: [item],
@@ -976,24 +994,65 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
       defaultPriceBookV1
     );
     expect(k4.ongkir.berat_volumetrik).toBe(0.4);
-    expect(k4.ongkir.berat_dikenakan).toBe(5);
-    expect(k4.ongkir.ongkir_dasar).toBe(5 * 25_000); // 125.000
+    expect(k4.ongkir.berat_dikenakan).toBe(11); // Minimal 11 kg FastTrack
+    expect(k4.ongkir.ongkir_dasar).toBe(11 * 2_500); // 27.500
 
-    // 17e. Minimal 1 kg: di bawah 1 kg tetap dihitung 1 kg
-    // P=10, L=10, T=5 -> 500/5000 = 0.1 kg. Berat aktual = 0.3 kg -> Chargeable = 1 kg
-    const k5 = hitungPenawaran(
+    // 17e. Sesuai Image #1: Dalam Kota, input berat aktual 20 kg -> Chargeable 20 kg -> Dasar Rp50.000
+    const kImage1 = hitungPenawaran(
       {
         items: [item],
-        zona: 'luar_kota',
-        paket: { panjang_cm: 10, lebar_cm: 10, tinggi_cm: 5, berat_aktual_kg: 0.3 },
+        zona: 'dalam_kota',
+        paket: { panjang_cm: 0, lebar_cm: 0, tinggi_cm: 0, berat_aktual_kg: 20 },
         perlu_pasang: false,
         segmen: 'B2C',
       },
       defaultPriceBookV1
     );
-    expect(k5.ongkir.berat_volumetrik).toBe(0.1);
-    expect(k5.ongkir.berat_dikenakan).toBe(1);
-    expect(k5.ongkir.ongkir_dasar).toBe(1 * 50_000); // 50.000
+    expect(kImage1.ongkir.berat_volumetrik).toBe(0);
+    expect(kImage1.ongkir.berat_dikenakan).toBe(20);
+    expect(kImage1.ongkir.tarif_per_kg).toBe(2_500);
+    expect(kImage1.ongkir.ongkir_dasar).toBe(50_000);
+
+    // 17f. MaxTrack Khusus Pulau Jawa (>100 kg, >300 kg, >500 kg)
+    const kMax100 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'dki_jakarta',
+        paket: { panjang_cm: 100, lebar_cm: 100, tinggi_cm: 60, berat_aktual_kg: 120 }, // 120 kg
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kMax100.ongkir.berat_dikenakan).toBe(120);
+    expect(kMax100.ongkir.tarif_per_kg).toBe(1_875); // >100 kg DKI Jakarta Rp1.875/kg
+    expect(kMax100.ongkir.ongkir_dasar).toBe(120 * 1_875); // 225.000
+
+    const kMax300 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'dki_jakarta',
+        paket: { panjang_cm: 0, lebar_cm: 0, tinggi_cm: 0, berat_aktual_kg: 350 }, // 350 kg
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kMax300.ongkir.tarif_per_kg).toBe(1_750); // >300 kg DKI Jakarta Rp1.750/kg
+    expect(kMax300.ongkir.ongkir_dasar).toBe(350 * 1_750);
+
+    const kMax500 = hitungPenawaran(
+      {
+        items: [item],
+        zona: 'dki_jakarta',
+        paket: { panjang_cm: 0, lebar_cm: 0, tinggi_cm: 0, berat_aktual_kg: 600 }, // 600 kg
+        perlu_pasang: false,
+        segmen: 'B2C',
+      },
+      defaultPriceBookV1
+    );
+    expect(kMax500.ongkir.tarif_per_kg).toBe(1_500); // >500 kg DKI Jakarta Rp1.500/kg
+    expect(kMax500.ongkir.ongkir_dasar).toBe(600 * 1_500);
   });
 
   // =========================================================================
@@ -1001,16 +1060,16 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
   // =========================================================================
   it('18. Fitur "Dibagi Dua" Opsional: Default Aktif (< 50% ditolak) vs Nonaktif (Bebas 0 - 100% wajib alasan)', () => {
     const item = { bentuk_kode: 'rectangle', panjang_mm: 600, lebar_mm: 800, qty: 1 };
-    // Paket 20 kg luar kota -> ongkir dasar = 20 * 50.000 = Rp1.000.000. 50% = Rp500.000
+    // Paket 20 kg luar kota -> ongkir dasar = 20 * 4.000 = Rp80.000. 50% = Rp40.000
     const paket20kg = { panjang_cm: 100, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 }; // (100*50*20)/5000 = 20 kg
 
-    // 18a. AKTIF (default / bagi_dua_aktif: true): deal Rp400.000 (< 50%) -> Ditolak / error merah
+    // 18a. AKTIF (default / bagi_dua_aktif: true): deal Rp30.000 (< 50% dari 80.000 = 40.000) -> Ditolak / error merah
     const kAktifDitolak = hitungPenawaran(
       {
         items: [item],
         zona: 'luar_kota',
         paket: paket20kg,
-        ongkir_deal: 400_000,
+        ongkir_deal: 30_000,
         bagi_dua_aktif: true,
         perlu_pasang: false,
         segmen: 'B2C',
@@ -1019,16 +1078,16 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     );
     expect(kAktifDitolak.ongkir.wewenang).toBe('ditolak');
     expect(kAktifDitolak.ongkir.status).toBe('error_merah');
-    expect(kAktifDitolak.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp500.000.');
+    expect(kAktifDitolak.ongkir.pesan).toContain('Ongkir maksimal dibagi dua, klien bayar minimal Rp40.000.');
     expect(kAktifDitolak.is_valid_untuk_pdf).toBe(false);
 
-    // 18b. AKTIF: deal Rp600.000 (antara 50% - 100%) + alasan -> Lolos
+    // 18b. AKTIF: deal Rp50.000 (antara 50% - 100%) + alasan -> Lolos
     const kAktifLolos = hitungPenawaran(
       {
         items: [item],
         zona: 'luar_kota',
         paket: paket20kg,
-        ongkir_deal: 600_000,
+        ongkir_deal: 50_000,
         alasan_potongan_ongkir: 'Disetujui diskon kargo',
         bagi_dua_aktif: true,
         perlu_pasang: false,
@@ -1036,17 +1095,17 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
       },
       defaultPriceBookV1
     );
-    expect(kAktifLolos.ongkir.wewenang).toBe('perlu_alasan');
+    expect(kAktifLolos.ongkir.deal).toBe(50_000);
     expect(kAktifLolos.ongkir.status).toBe('ok');
     expect(kAktifLolos.is_valid_untuk_pdf).toBe(true);
 
-    // 18c. NONAKTIF (bagi_dua_aktif: false): deal Rp300.000 (< 50%) + alasan -> Lolos tanpa batas 50%
+    // 18c. NONAKTIF (bagi_dua_aktif: false): deal Rp20.000 (< 50% dari 80.000) + alasan -> Lolos tanpa batas 50%
     const kNonaktifLolos = hitungPenawaran(
       {
         items: [item],
         zona: 'luar_kota',
         paket: paket20kg,
-        ongkir_deal: 300_000,
+        ongkir_deal: 20_000,
         alasan_potongan_ongkir: 'Promo subsidi ongkir penuh dari toko',
         bagi_dua_aktif: false,
         perlu_pasang: false,
@@ -1057,8 +1116,7 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
     expect(kNonaktifLolos.ongkir.wewenang).toBe('perlu_alasan');
     expect(kNonaktifLolos.ongkir.status).toBe('ok');
     expect(kNonaktifLolos.is_valid_untuk_pdf).toBe(true);
-    expect(kNonaktifLolos.ongkir.deal).toBe(300_000);
-
+    expect(kNonaktifLolos.ongkir.deal).toBe(20_000);
     // 18d. NONAKTIF: deal Rp0 (ambil sendiri / gratis ongkir) + alasan -> Lolos
     const kNonaktifRp0 = hitungPenawaran(
       {
@@ -1084,7 +1142,7 @@ describe('Mesin Harga Putra Glass (pricing.ts)', () => {
         items: [item],
         zona: 'luar_kota',
         paket: paket20kg,
-        ongkir_deal: 300_000,
+        ongkir_deal: 20_000,
         bagi_dua_aktif: false,
         perlu_pasang: false,
         segmen: 'B2C',

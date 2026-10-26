@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-
+import { deleteCachedPdf } from '@/lib/pdf/pdf-cache';
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -40,7 +40,7 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { status, alasan_batal, deal_at, alasan_log } = body;
+  const { status, alasan_batal, deal_at, alasan_log, nilai_nego, catatan_nego, tipe_nego } = body;
 
   const validStatuses = ['draf', 'terkirim', 'nego', 'deal', 'lunas', 'batal', 'kadaluwarsa'];
   if (!status || !validStatuses.includes(status)) {
@@ -74,7 +74,7 @@ export async function PATCH(
   // Ambil penawaran saat ini untuk mencatat 'dari'
   const { data: currentQuote, error: fetchErr } = await adminClient
     .from('penawaran')
-    .select('status, terkirim_at')
+    .select('status, terkirim_at, total_nilai, ringkasan_json, nomor')
     .eq('id', id)
     .single();
 
@@ -97,6 +97,34 @@ export async function PATCH(
   if (status === 'batal') {
     updatePayload.alasan_batal = alasan_batal;
   }
+  if (status === 'nego' && typeof nilai_nego === 'number' && nilai_nego > 0) {
+    const nilaiLama = Number(currentQuote.total_nilai || 0);
+    const newDp50 = Math.ceil(nilai_nego / 2000) * 1000;
+    const newPelunasan = nilai_nego - newDp50;
+    const currentRingkasan = (currentQuote.ringkasan_json as Record<string, unknown>) || {};
+
+    updatePayload.total_nilai = nilai_nego;
+    updatePayload.ringkasan_json = {
+      ...currentRingkasan,
+      total: nilai_nego,
+      dp_50: newDp50,
+      pelunasan: newPelunasan,
+      nego: {
+        nilai_sebelum_nego: nilaiLama,
+        nilai_nego,
+        selisih: nilaiLama - nilai_nego,
+        tipe_nego: tipe_nego || 'total',
+        catatan_nego: catatan_nego || '',
+        tanggal_nego: new Date().toISOString(),
+      },
+    };
+
+    deleteCachedPdf(id);
+    if (currentQuote.nomor) {
+      deleteCachedPdf(currentQuote.nomor);
+      await adminClient.storage.from('penawaran-pdf').remove([`${currentQuote.nomor}.pdf`]).catch(() => {});
+    }
+  }
 
   const { data: updated, error: updErr } = await adminClient
     .from('penawaran')
@@ -115,7 +143,14 @@ export async function PATCH(
     penawaran_id: id,
     dari: oldStatus,
     ke: status,
-    alasan: alasan_log || (status === 'batal' ? `Batal: ${alasan_batal}` : `Perubahan status ke ${status}`),
+    alasan:
+      catatan_nego ||
+      alasan_log ||
+      (status === 'batal'
+        ? `Batal: ${alasan_batal}`
+        : status === 'nego'
+        ? `Nego: ${nilai_nego ? `Penyesuaian nilai ke Rp${Number(nilai_nego).toLocaleString('id-ID')}` : 'Negosiasi klien'}`
+        : `Perubahan status ke ${status}`),
     oleh: user.id,
   });
 

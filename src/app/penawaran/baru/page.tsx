@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { defaultAdminPriceBookV1 } from '@/lib/pricing/admin-price-book';
 import { hitungPenawaran } from '@/lib/pricing/pricing';
 import { parseRupiah, formatRupiah } from '@/lib/pricing/format-rupiah';
-import { detectZonaByKota } from '@/lib/wilayah/zona';
+import { detectZonaByKota, detectZonaPengiriman, DAFTAR_ZONA_PENGIRIMAN } from '@/lib/wilayah/zona';
 import { CerminItemInput, PenawaranInput, PriceBookData, PriceBookDataAdmin } from '@/types/pricing';
 
 // Lazy load CityCombobox agar bundle JS awal tetap kecil (<= 200 KB)
@@ -64,7 +65,7 @@ function PenawaranContent() {
   const [kodeWilayah, setKodeWilayah] = useState<string | undefined>(undefined);
   const [isCustomKota, setIsCustomKota] = useState(false);
   const [segmen, setSegmen] = useState<'B2C' | 'B2B'>('B2C');
-  const [zona, setZona] = useState<'dalam_kota' | 'luar_kota' | ''>('');
+  const [zona, setZona] = useState<string>('');
   const [perluPasang, setPerluPasang] = useState(false);
 
   // Pulihkan data hanya jika ada query param (misal dari Balas chat 'Buat penawaran')
@@ -82,7 +83,7 @@ function PenawaranContent() {
     if (qNama) setNamaKlien(qNama);
     if (qKota) {
       setKotaKlien(qKota);
-      const autoZ = detectZonaByKota(qKota);
+      const autoZ = detectZonaPengiriman(qKota);
       setZona(autoZ);
     }
     if (qBentuk || qPanjang || qLebar) {
@@ -99,6 +100,73 @@ function PenawaranContent() {
         },
       ]);
     }
+  }, [searchParams]);
+  // Pulihkan data penawaran untuk revisi nego jika ada parameter revisi_id
+  const [revisiInfo, setRevisiInfo] = useState<{ id: string; nomor: string } | null>(null);
+
+  useEffect(() => {
+    const qRevisiId = searchParams.get('revisi_id');
+    if (!qRevisiId) return;
+
+    async function loadRevisiData() {
+      try {
+        const res = await fetch(`/api/penawaran/${qRevisiId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const p = json.penawaran;
+        if (!p) return;
+
+        setRevisiInfo({ id: p.id, nomor: p.nomor });
+        if (p.leads?.nama) setNamaKlien(p.leads.nama);
+        if (p.leads?.kota) setKotaKlien(p.leads.kota);
+        if (p.ringkasan_json?.kode_wilayah) setKodeWilayah(p.ringkasan_json.kode_wilayah as string);
+        if (p.leads?.segmen) setSegmen(p.leads.segmen);
+        if (p.ringkasan_json?.zona) setZona(p.ringkasan_json.zona as string);
+        else if (p.leads?.kota) setZona(detectZonaPengiriman(p.leads.kota));
+
+        if (Array.isArray(p.items_json) && p.items_json.length > 0) {
+          setItems(
+            p.items_json.map((it: Record<string, unknown>) => ({
+              mode: it.is_sku ? 'produk_jadi' : 'custom',
+              sku_kode: (it.sku_kode as string) || undefined,
+              bentuk_kode: (it.bentuk_kode as string) || 'rectangle',
+              panjang_cm: Math.round(Number(it.panjang_mm || 600) / 10),
+              lebar_cm: Math.round(Number(it.lebar_mm || 800) / 10),
+              lampu: (it.lampu as LocalItemState['lampu']) || '3_warna',
+              kontrol: (it.kontrol as LocalItemState['kontrol']) || 'touchscreen',
+              frame: (it.frame as LocalItemState['frame']) || 'tanpa',
+              antifog: Boolean(it.antifog),
+              sandblast_pakai: Boolean((it.sandblast as Record<string, unknown>)?.pakai),
+              sandblast_lebar_cm: Math.round(Number((it.sandblast as Record<string, unknown>)?.lebar_mm || 30) / 10),
+              sandblast_tepi_cm: Math.round(Number((it.sandblast as Record<string, unknown>)?.jarak_tepi_mm || 20) / 10),
+              qty: Number(it.qty) || 1,
+            }))
+          );
+        }
+
+        const ringkasan = p.ringkasan_json as Record<string, unknown> | undefined;
+        const ongkirObj = ringkasan?.ongkir as Record<string, unknown> | undefined;
+        const pasangObj = ringkasan?.pasang as Record<string, unknown> | undefined;
+        if (ongkirObj?.deal !== undefined) {
+          setOngkirInputText(String(ongkirObj.deal));
+        }
+        if (pasangObj?.deal !== undefined) {
+          setPerluPasang(Number(pasangObj.deal) > 0);
+          setPasangInputText(String(pasangObj.deal));
+        }
+        const paketObj = ringkasan?.paket as Record<string, unknown> | undefined;
+        if (paketObj) {
+          setPaketPanjang(String(paketObj.panjang_cm || ''));
+          setPaketLebar(String(paketObj.lebar_cm || ''));
+          setPaketTinggi(String(paketObj.tinggi_cm || ''));
+          setPaketBerat(String(paketObj.berat_aktual_kg || ''));
+        }
+      } catch (e) {
+        console.error('Gagal memuat data revisi penawaran:', e);
+      }
+    }
+
+    loadRevisiData();
   }, [searchParams]);
   // Batas dari Buku Harga
   const isDalamKota = zona === 'dalam_kota';
@@ -344,6 +412,7 @@ function PenawaranContent() {
           kode_wilayah: kodeWilayah,
           kanal: 'whatsapp',
           is_unduh_pdf: isUnduh,
+          revisi_dari: revisiInfo?.id || undefined,
           penawaran_input: {
             segmen,
             zona,
@@ -486,6 +555,21 @@ function PenawaranContent() {
         </div>
       )}
 
+      {/* Banner Mode Revisi Penawaran Nego */}
+      {revisiInfo && (
+        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Mode Revisi Nego untuk Penawaran <strong>{revisiInfo.nomor}</strong>. Sesuaikan spesifikasi atau harga di kalkulator, lalu simpan sebagai penawaran revisi baru.
+            </span>
+          </div>
+          <Link href="/penawaran" className="text-[11px] font-semibold underline hover:opacity-80">
+            Kembali ke Daftar
+          </Link>
+        </div>
+      )}
+
       {/* Grid Layout 2 Kolom */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Kolom Kiri: Form Input (7 / 12) */}
@@ -527,7 +611,7 @@ function PenawaranContent() {
                       setZona('luar_kota');
                       setOngkirInputText('');
                     } else {
-                      const autoZona = detectZonaByKota(kode || nama);
+                      const autoZona = detectZonaPengiriman(kode || nama);
                       setZona(autoZona);
                       setOngkirInputText('');
                     }
@@ -549,15 +633,18 @@ function PenawaranContent() {
                   id="select-zona-pengiriman"
                   value={zona}
                   onChange={(e) => {
-                    const newZona = e.target.value as 'dalam_kota' | 'luar_kota' | '';
+                    const newZona = e.target.value;
                     setZona(newZona);
                     setOngkirInputText('');
                   }}
                   className="w-full text-sm px-3.5 py-2.5 min-h-[44px] border border-line rounded-xl bg-raised text-ink focus:bg-surface"
                 >
                   <option value="">-- Pilih Zona Pengiriman --</option>
-                  <option value="dalam_kota">Bandung Raya (List: Rp750.000)</option>
-                  <option value="luar_kota">Luar Kota (Packing Kayu - List: Rp1.300.000)</option>
+                  {DAFTAR_ZONA_PENGIRIMAN.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.nama} (Rp{z.fastTrackPerKg.toLocaleString('id-ID')}/kg · SLA {z.sla})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -893,12 +980,12 @@ function PenawaranContent() {
                         </div>
                       </div>
 
-                      {/* KONTROL CUSTOM: 3 Pilihan Kartu Paket dari Buku Harga */}
+                      {/* KONTROL CUSTOM: 4 Pilihan Kartu Paket dari Buku Harga */}
                       <div className="space-y-2 pt-1">
                         <label className="block text-xs font-semibold text-muted">
                           Pilihan Paket Kontrol Custom:
                         </label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                           {/* Paket 1: LED 3 Warna Premium */}
                           <button
                             type="button"
@@ -923,19 +1010,43 @@ function PenawaranContent() {
                             </span>
                           </button>
 
-                          {/* Paket 2: Sensor Tangan + Baterai */}
+                          {/* Paket 2: Touchscreen + Baterai (1.850.000) */}
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'touchscreen_baterai' })}
+                            className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
+                              item.kontrol === 'touchscreen_baterai'
+                                ? 'border-accent bg-tint text-ink'
+                                : 'border-line bg-raised text-muted hover:bg-surface'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="font-bold text-ink text-sm">Touchscreen + Baterai</p>
+                              {item.kontrol === 'touchscreen_baterai' && (
+                                <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-1 leading-snug">
+                              Touchscreen tombol + modul baterai cas Type-C tanpa kabel
+                            </p>
+                            <span className="block text-xs font-bold text-accent mt-2 tabular-nums">
+                              Tarif {formatRupiah(config.tarif_m2.touchscreen_baterai_m2 || 1850000)}/m²
+                            </span>
+                          </button>
+
+                          {/* Paket 3: Sensor Tangan + Baterai */}
                           <button
                             type="button"
                             onClick={() => updateItem(idx, { lampu: '3_warna', kontrol: 'sensor_baterai' })}
                             className={`p-3.5 rounded-xl border text-left transition cursor-pointer min-h-[44px] ${
-                              item.kontrol === 'sensor_baterai' || item.kontrol === 'touchscreen_baterai'
+                              item.kontrol === 'sensor_baterai'
                                 ? 'border-accent bg-tint text-ink'
                                 : 'border-line bg-raised text-muted hover:bg-surface'
                             }`}
                           >
                             <div className="flex items-center justify-between">
                               <p className="font-bold text-ink text-sm">Sensor Tangan + Baterai</p>
-                              {(item.kontrol === 'sensor_baterai' || item.kontrol === 'touchscreen_baterai') && (
+                              {item.kontrol === 'sensor_baterai' && (
                                 <span className="w-2 h-2 rounded-full bg-led shadow-[0_0_6px_var(--led)]" />
                               )}
                             </div>
@@ -947,7 +1058,7 @@ function PenawaranContent() {
                             </span>
                           </button>
 
-                          {/* Paket 3: LED 1 Warna Basic */}
+                          {/* Paket 4: LED 1 Warna Basic */}
                           <button
                             type="button"
                             onClick={() => updateItem(idx, { lampu: '1_warna', kontrol: 'saklar' })}
@@ -1123,11 +1234,11 @@ function PenawaranContent() {
                         type="button"
                         id="btn-zona-luar-kota"
                         onClick={() => {
-                          setZona('luar_kota');
+                          setZona((prev) => (!prev || prev === 'dalam_kota' ? 'dki_jakarta' : prev));
                           setOngkirInputText('');
                         }}
                         className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer text-center text-xs ${
-                          !isDalamKota
+                          !isDalamKota && Boolean(zona)
                             ? 'bg-surface text-accent font-bold shadow-xs'
                             : 'text-muted hover:text-ink'
                         }`}
@@ -1207,19 +1318,31 @@ function PenawaranContent() {
 
                   {/* Ringkas Admin: Volumetrik, Berat Dipakai, Ongkir Dasar */}
                   {zona && kalkulasi && (
-                    <div className="p-2.5 bg-tint/60 rounded-xl border border-line/60 grid grid-cols-3 gap-2 text-[11px]">
-                      <div>
-                        <span className="text-muted block text-[10px]">Volumetrik</span>
-                        <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_volumetrik} kg</span>
+                    <div className="p-2.5 bg-tint/60 rounded-xl border border-line/60 space-y-2 text-[11px]">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <span className="text-muted block text-[10px]">Volumetrik</span>
+                          <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_volumetrik} kg</span>
+                        </div>
+                        <div>
+                          <span className="text-muted block text-[10px]">Dikenakan</span>
+                          <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_dikenakan} kg</span>
+                        </div>
+                        <div>
+                          <span className="text-muted block text-[10px]">Ongkir Dasar</span>
+                          <span className="font-bold text-accent tabular-nums">{formatRupiah(kalkulasi.ongkir.ongkir_dasar)}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-muted block text-[10px]">Dikenakan</span>
-                        <span className="font-bold text-ink tabular-nums">{kalkulasi.ongkir.berat_dikenakan} kg</span>
-                      </div>
-                      <div>
-                        <span className="text-muted block text-[10px]">Ongkir Dasar</span>
-                        <span className="font-bold text-accent tabular-nums">{formatRupiah(kalkulasi.ongkir.ongkir_dasar)}</span>
-                      </div>
+                      {kalkulasi.ongkir.layanan && (
+                        <div className="flex items-center justify-between pt-1 border-t border-line/40 text-[10px]">
+                          <span className="text-muted font-medium">
+                            {kalkulasi.ongkir.layanan} · {kalkulasi.ongkir.sla}
+                          </span>
+                          <span className="font-semibold text-accent">
+                            {formatRupiah(kalkulasi.ongkir.tarif_per_kg)}/kg
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 

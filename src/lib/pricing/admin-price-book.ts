@@ -71,6 +71,7 @@ export const defaultAdminPriceBookV1: PriceBookDataAdmin = {
   catatan_perubahan: 'Buku harga awal V1 (Admin Safe)',
   tarif_m2: {
     premium_b2c: 1_750_000,
+    touchscreen_baterai_m2: 1_850_000,
     premium_b2b_list: 1_750_000,
     basic_m2: 1_550_000,
   },
@@ -120,11 +121,11 @@ export const defaultAdminPriceBookV1: PriceBookDataAdmin = {
     pasang_bandung: { list: 800_000 },
     pasang_luar_kota: { list: 1_300_000 },
     kota_dalam_kota: ['bandung', 'kota bandung', 'kabupaten bandung', 'kab. bandung', 'cimahi', 'bandung barat'],
-    // SISTEM VOLUMETRIK ALA J&T CARGO (Wajib diisi & disesuaikan oleh Owner)
-    tarif_per_kg_dalam_kota: 25_000,
-    tarif_per_kg_luar_kota: 50_000,
+    // SISTEM VOLUMETRIK & TARIF J&T CARGO JAWA BARAT (FastTrack & MaxTrack)
+    tarif_per_kg_dalam_kota: 2500,
+    tarif_per_kg_luar_kota: 3000,
     divisor_volumetrik: 5000,
-    min_berat_kg: 1,
+    min_berat_kg: 11,
     persen_asuransi: 0.002,
   },
   tingkat_b2b: [],

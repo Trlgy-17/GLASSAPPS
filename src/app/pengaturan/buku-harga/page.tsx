@@ -14,7 +14,9 @@ import {
   CreditCard,
   Phone,
   Share2,
+  Truck,
 } from 'lucide-react';
+import { DAFTAR_ZONA_PENGIRIMAN } from '@/lib/wilayah/zona';
 
 interface PotonganLogItem {
   id: string;
@@ -517,6 +519,58 @@ export default function PengaturanBukuHargaPage() {
                   />
                 </div>
                 <p className="text-[11px] text-muted">DALAM KOTA = 750.000 NET DI 500 AJA</p>
+              </div>
+
+              {/* Tabel Tarif Pengiriman Kargo (J&T Cargo FastTrack & MaxTrack) */}
+              <div className="col-span-1 sm:col-span-2 pt-2">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="font-bold text-xs text-ink flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-accent" />
+                    Tabel Tarif Pengiriman Kargo Resmi (J&T Cargo)
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    FastTrack Minimal 11 Kg · MaxTrack Khusus Pulau Jawa Minimal 100 Kg
+                  </span>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-raised/70 border-b border-line text-muted font-semibold">
+                        <th className="py-2.5 px-3">Zona / Kota Tujuan</th>
+                        <th className="py-2.5 px-3">SLA</th>
+                        <th className="py-2.5 px-3 text-right">FastTrack (&lt;100 Kg)</th>
+                        <th className="py-2.5 px-3 text-right">MaxTrack (&gt;100 Kg)</th>
+                        <th className="py-2.5 px-3 text-right">MaxTrack (&gt;300 Kg)</th>
+                        <th className="py-2.5 px-3 text-right">MaxTrack (&gt;500 Kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line/60">
+                      {DAFTAR_ZONA_PENGIRIMAN.map((item) => (
+                        <tr key={item.id} className="hover:bg-raised/40 transition">
+                          <td className="py-2 px-3 font-medium text-ink">
+                            {item.nama}
+                            {item.keterangan && (
+                              <span className="block text-[10px] text-muted">{item.keterangan}</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-muted tabular-nums">{item.sla}</td>
+                          <td className="py-2 px-3 text-right font-semibold text-ink tabular-nums">
+                            Rp{item.fastTrackPerKg.toLocaleString('id-ID')}/kg
+                          </td>
+                          <td className="py-2 px-3 text-right text-muted tabular-nums">
+                            {item.maxTrack100PerKg ? `Rp${item.maxTrack100PerKg.toLocaleString('id-ID')}/kg` : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right text-muted tabular-nums">
+                            {item.maxTrack300PerKg ? `Rp${item.maxTrack300PerKg.toLocaleString('id-ID')}/kg` : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right text-muted tabular-nums">
+                            {item.maxTrack500PerKg ? `Rp${item.maxTrack500PerKg.toLocaleString('id-ID')}/kg` : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>

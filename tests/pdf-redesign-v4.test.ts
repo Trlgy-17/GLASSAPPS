@@ -437,4 +437,64 @@ describe('Pengujian Redesign PDF Penawaran (PenawaranDocument.tsx) & Kontak QR',
     expect(textData.text).toContain('+62 899-1234-5678');
     expect(textData.text).not.toContain('812-3753-3173');
   });
+
+  it('Kasus (g): PDF penawaran sesudah nego memuat angka negosiasi, subtotal sebelum nego, dan selisih diskon', async () => {
+    const input: PenawaranInput = {
+      items: [
+        {
+          bentuk_kode: 'rectangle',
+          panjang_mm: 800,
+          lebar_mm: 600,
+          lampu: '3_warna',
+          kontrol: 'touchscreen',
+          antifog: false,
+          sandblast: { pakai: false },
+          qty: 1,
+        },
+      ],
+      zona: 'dalam_kota',
+      perlu_pasang: false,
+      segmen: 'B2C',
+      user_role: 'admin',
+    };
+
+    const kalkulasi = hitungPenawaran(input, defaultPriceBookV1);
+    // Simulasi penawaran setelah nego disetujui
+    const nilaiSebelumNego = kalkulasi.total; // e.g. 840.000 + 750.000 = 1.590.000
+    const nilaiNego = 1_450_000;
+    const kalkulasiNego = {
+      ...kalkulasi,
+      total: nilaiNego,
+      dp_50: Math.ceil(nilaiNego / 2000) * 1000,
+      pelunasan: nilaiNego - Math.ceil(nilaiNego / 2000) * 1000,
+    };
+
+    const doc = React.createElement(PenawaranDocument, {
+      nomor: 'PG-Q-2610-0664',
+      tanggal: '26 Oktober 2026',
+      berlakuSampai: '2 November 2026',
+      namaKlien: 'Ibu Riri',
+      kotaKlien: 'Bandung',
+      kalkulasi: kalkulasiNego,
+      config: defaultPriceBookV1,
+      kanal: 'whatsapp',
+      namaAdmin: 'Admin Putra Glass',
+      nego: {
+        nilai_sebelum_nego: nilaiSebelumNego,
+        nilai_nego: nilaiNego,
+        selisih: nilaiSebelumNego - nilaiNego,
+        tipe_nego: 'Kesepakatan',
+        catatan_nego: 'Diskon deal DP hari ini disetujui',
+      },
+    });
+
+    const buffer = await renderToBuffer(doc as unknown as React.ReactElement<DocumentProps>);
+    const textData = await extractTextFromPdfBuffer(buffer);
+
+    // Memastikan angka negosiasi dan catatan tampil di teks PDF
+    expect(textData.text).toContain('TOTAL SETELAH NEGO');
+    expect(textData.text).toContain('Subtotal sebelum nego');
+    expect(textData.text).toContain('Penyesuaian nego');
+    expect(textData.text).toContain('Diskon deal DP hari ini disetujui');
+  });
 });

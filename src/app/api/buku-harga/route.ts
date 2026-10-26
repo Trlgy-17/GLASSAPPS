@@ -67,6 +67,11 @@ export async function GET() {
       list: priceBook.logistik.pasang_luar_kota.list,
     },
     kota_dalam_kota: priceBook.logistik.kota_dalam_kota,
+    tarif_per_kg_dalam_kota: priceBook.logistik?.tarif_per_kg_dalam_kota ?? 2500,
+    tarif_per_kg_luar_kota: priceBook.logistik?.tarif_per_kg_luar_kota ?? 3000,
+    divisor_volumetrik: priceBook.logistik?.divisor_volumetrik ?? 5000,
+    min_berat_kg: priceBook.logistik?.min_berat_kg ?? 11,
+    persen_asuransi: priceBook.logistik?.persen_asuransi ?? 0.002,
   };
 
   const adminPriceBook: PriceBookDataAdmin = {

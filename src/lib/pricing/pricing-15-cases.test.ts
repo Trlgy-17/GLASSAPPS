@@ -106,7 +106,7 @@ describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
     qty: 1,
   };
 
-  it('16. Menghitung berat volumetrik, chargeable = max(aktual, volumetrik), pembulatan ke atas, dan minimal 1 kg', () => {
+  it('16. Menghitung berat volumetrik, chargeable = max(aktual, volumetrik), pembulatan ke atas, dan minimal 11 kg (J&T FastTrack)', () => {
     // P=70cm, L=50cm, T=20cm -> volumetrik = (70*50*20)/5000 = 14 kg. Berat aktual = 8 kg -> chargeable = 14 kg
     const res1 = hitungPenawaran(
       {
@@ -121,7 +121,8 @@ describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
     expect(res1.ongkir.berat_volumetrik).toBe(14);
     expect(res1.ongkir.berat_aktual).toBe(8);
     expect(res1.ongkir.berat_dikenakan).toBe(14);
-    expect(res1.ongkir.ongkir_dasar).toBe(14 * 25_000); // Rp350.000
+    expect(res1.ongkir.tarif_per_kg).toBe(2_500); // Rp2.500/kg (Bandung Raya FastTrack)
+    expect(res1.ongkir.ongkir_dasar).toBe(14 * 2_500); // Rp35.000
 
     // Desimal dibulatkan ke atas: 14.1 kg -> 15 kg
     const res2 = hitungPenawaran(
@@ -135,33 +136,34 @@ describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
       defaultPriceBookV1
     );
     expect(res2.ongkir.berat_dikenakan).toBe(15);
-    expect(res2.ongkir.ongkir_dasar).toBe(15 * 25_000);
+    expect(res2.ongkir.ongkir_dasar).toBe(15 * 2_500); // Rp37.500
 
-    // Di bawah 1 kg tetap 1 kg
+    // Sesuai flyer J&T: FastTrack minimal 11 kg (di bawah 11 kg tetap dikenakan 11 kg)
     const res3 = hitungPenawaran(
       {
         items: [sampleItem],
-        zona: 'luar_kota',
+        zona: 'dki_jakarta',
         paket: { panjang_cm: 10, lebar_cm: 10, tinggi_cm: 10, berat_aktual_kg: 0.2 },
         perlu_pasang: false,
         segmen: 'B2C',
       },
       defaultPriceBookV1
     );
-    expect(res3.ongkir.berat_dikenakan).toBe(1);
-    expect(res3.ongkir.ongkir_dasar).toBe(1 * 50_000);
+    expect(res3.ongkir.berat_dikenakan).toBe(11);
+    expect(res3.ongkir.tarif_per_kg).toBe(3_000); // Rp3.000/kg DKI Jakarta
+    expect(res3.ongkir.ongkir_dasar).toBe(11 * 3_000); // Rp33.000
   });
 
   it('17. Toggle "dibagi dua": aktif (< 50% ditolak) vs nonaktif (0-100% bebas dengan alasan)', () => {
-    const paket10kg = { panjang_cm: 50, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 }; // 10 kg luar kota -> Rp500.000 dasar
+    const paket10kg = { panjang_cm: 50, lebar_cm: 50, tinggi_cm: 20, berat_aktual_kg: 10 }; // 10 kg -> minimal 11 kg luar kota (Rp4.000/kg) -> Rp44.000 dasar
 
-    // Aktif: ongkir deal 200.000 (< 250.000) -> error_merah
+    // Aktif: ongkir deal 20.000 (< 50% dari 44.000 = 22.000) -> error_merah
     const resAktif = hitungPenawaran(
       {
         items: [sampleItem],
         zona: 'luar_kota',
         paket: paket10kg,
-        ongkir_deal: 200_000,
+        ongkir_deal: 20_000,
         bagi_dua_aktif: true,
         perlu_pasang: false,
         segmen: 'B2C',
@@ -172,13 +174,13 @@ describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
     expect(resAktif.ongkir.wewenang).toBe('ditolak');
     expect(resAktif.is_valid_untuk_pdf).toBe(false);
 
-    // Nonaktif: ongkir deal 100.000 (< 50%) dengan alasan -> ok
+    // Nonaktif: ongkir deal 10.000 (< 50%) dengan alasan -> ok
     const resNonaktif = hitungPenawaran(
       {
         items: [sampleItem],
         zona: 'luar_kota',
         paket: paket10kg,
-        ongkir_deal: 100_000,
+        ongkir_deal: 10_000,
         alasan_potongan_ongkir: 'Disetujui diskon khusus',
         bagi_dua_aktif: false,
         perlu_pasang: false,
@@ -187,8 +189,8 @@ describe('Sistem Ongkos Kirim Volumetrik ala J&T Cargo', () => {
       defaultPriceBookV1
     );
     expect(resNonaktif.ongkir.status).toBe('ok');
+    expect(resNonaktif.ongkir.wewenang).toBe('perlu_alasan');
     expect(resNonaktif.is_valid_untuk_pdf).toBe(true);
-    expect(resNonaktif.ongkir.deal).toBe(100_000);
   });
 
   it('18. Biaya tambahan opsional: asuransi 0.2%, packing, dan handling ditambahkan di atas deal secara terpisah', () => {

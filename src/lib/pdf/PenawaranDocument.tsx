@@ -568,6 +568,13 @@ export interface PenawaranPdfProps {
   qrDataUrl?: string;
   kanal?: string;
   namaAdmin?: string;
+  nego?: {
+    nilai_sebelum_nego: number;
+    nilai_nego: number;
+    selisih: number;
+    tipe_nego?: string;
+    catatan_nego?: string;
+  };
 }
 
 export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
@@ -582,9 +589,10 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
   qrDataUrl,
   kanal = 'whatsapp',
   namaAdmin,
+  nego,
 }) => {
   const formatRp = (val: number) => `Rp${val.toLocaleString('id-ID')}`;
-
+  const negoData = nego || ((kalkulasi as unknown as Record<string, unknown>)?.nego as PenawaranPdfProps['nego']);
   // Ambil data settings kontak (fallback ke config.dokumen_pdf jika propSettings tidak ada)
   const settings: CompanySettings = propSettings || {
     alamat_workshop:
@@ -635,7 +643,7 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
     );
     const bentukLabel = item.is_sku
       ? `Cermin LED Katalog (${item.sku_kode}) · ${bentukDef?.label || 'Standar'} ${pCm} × ${lCm} cm`
-      : `Cermin LED ${item.varian === 'premium' ? 'Premium' : 'Basic'} · ${pCm} × ${lCm} cm`;
+      : `Cermin LED ${item.kontrol === 'touchscreen_baterai' ? 'Touchscreen + Baterai' : item.varian === 'premium' ? 'Premium' : 'Basic'} · ${pCm} × ${lCm} cm`;
 
     const cerminChips: string[] = [];
     if (item.is_sku) {
@@ -645,7 +653,14 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
       if (item.sku_kode?.includes('-SB-')) cerminChips.push('Sandblast');
     } else {
       if (item.varian === 'premium') {
-        cerminChips.push('LED 3 warna', 'Touchscreen');
+        cerminChips.push('LED 3 warna');
+        if (item.kontrol === 'touchscreen_baterai') {
+          cerminChips.push('Touchscreen + Baterai');
+        } else if (item.kontrol === 'sensor_baterai') {
+          cerminChips.push('Sensor + Baterai');
+        } else {
+          cerminChips.push('Touchscreen');
+        }
       } else {
         cerminChips.push('LED 1 warna / Saklar');
       }
@@ -814,8 +829,29 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
             </Text>
           </View>
 
+          {negoData && (
+            <View style={{ marginTop: 2.5, paddingTop: 2.5, borderTopWidth: 0.6, borderTopColor: COLORS.line }}>
+              <View style={styles.summaryRow}>
+                <Text style={{ color: COLORS.muted }}>Subtotal sebelum nego</Text>
+                <Text style={{ fontSize: 7.8, color: COLORS.muted, textDecoration: 'line-through' }}>
+                  {formatRp(negoData.nilai_sebelum_nego)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={{ color: '#047857', fontWeight: 600 }}>
+                  Penyesuaian nego {negoData.tipe_nego ? `(${negoData.tipe_nego})` : ''}
+                </Text>
+                <Text style={{ fontSize: 7.8, color: '#047857', fontWeight: 700 }}>
+                  -{formatRp(negoData.selisih)}
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>TOTAL</Text>
+            <Text style={styles.totalLabel}>
+              {negoData ? 'TOTAL SETELAH NEGO' : 'TOTAL'}
+            </Text>
             <Text style={styles.totalValue}>{formatRp(kalkulasi.total)}</Text>
           </View>
 
@@ -834,6 +870,11 @@ export const PenawaranDocument: React.FC<PenawaranPdfProps> = ({
               <Text style={styles.splitSubLunas}>sebelum barang dikirim</Text>
             </View>
           </View>
+          {negoData?.catatan_nego ? (
+            <Text style={{ fontSize: 6.4, color: '#047857', marginTop: 3.5, fontWeight: 500, lineHeight: 1.25 }}>
+              *Catatan kesepakatan: {negoData.catatan_nego}
+            </Text>
+          ) : null}
         </View>
       </View>
 

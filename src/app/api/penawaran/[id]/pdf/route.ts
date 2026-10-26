@@ -75,7 +75,8 @@ export async function GET(
     }
 
     // 2. Jika belum ada di memory cache, coba unduh dari private bucket Storage
-    if (!pdfBuffer && penawaran.pdf_path) {
+    const hasNego = Boolean(penawaran.ringkasan_json?.nego);
+    if (!hasNego && !pdfBuffer && penawaran.pdf_path) {
       const { data: storageBlob, error: downloadErr } = await adminClient.storage
         .from('penawaran-pdf')
         .download(penawaran.pdf_path);
@@ -95,6 +96,7 @@ export async function GET(
 
       const items = penawaran.items_json || [];
       const ringkasan = penawaran.ringkasan_json || {};
+      const negoData = ringkasan.nego;
 
       const kalkulasiObj = {
         items: items,
@@ -102,9 +104,9 @@ export async function GET(
         subtotal_cermin: ringkasan.subtotal_cermin || penawaran.total_nilai || 0,
         ongkir: ringkasan.ongkir || { list: 0, deal: 0, potongan: 0, status: 'ok', perlu_alasan: false, perlu_konfirmasi: false, dikonfirmasi_owner: false },
         pasang: ringkasan.pasang || { list: 0, deal: 0, potongan: 0, status: 'ok', batas_admin: 0, perlu_konfirmasi: false, dikonfirmasi_owner: false },
-        total: penawaran.total_nilai || 0,
-        dp_50: penawaran.dp_50 || Math.ceil((penawaran.total_nilai || 0) / 2000) * 1000,
-        pelunasan: penawaran.pelunasan || (penawaran.total_nilai || 0) - (penawaran.dp_50 || 0),
+        total: Number(penawaran.total_nilai || ringkasan.total || 0),
+        dp_50: Number(ringkasan.dp_50 || Math.ceil((penawaran.total_nilai || 0) / 2000) * 1000),
+        pelunasan: Number(ringkasan.pelunasan || ((penawaran.total_nilai || 0) - (ringkasan.dp_50 || 0))),
         perlu_konfirmasi_owner: false,
         is_valid_untuk_pdf: true,
         errors: [],
@@ -125,6 +127,7 @@ export async function GET(
         qrDataUrl,
         kanal: penawaran.kanal || 'whatsapp',
         namaAdmin: penawaran.users?.nama || 'Admin Putra Glass',
+        nego: negoData,
       });
 
       pdfBuffer = Buffer.from(await renderToBuffer(pdfDoc as unknown as React.ReactElement<DocumentProps>));

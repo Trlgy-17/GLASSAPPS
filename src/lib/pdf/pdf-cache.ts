@@ -30,3 +30,10 @@ export function getCachedPdf(idOrNumber: string): Buffer | null {
   }
   return item.buffer;
 }
+
+/**
+ * Hapus buffer PDF dari memori server jika data penawaran diubah/dinego
+ */
+export function deleteCachedPdf(idOrNumber: string): void {
+  _cache.delete(idOrNumber);
+}
